@@ -1,0 +1,28 @@
+{
+  "name": "optivolt",
+  "version": "0.1.0",
+  "description": "Optivolt is a linear and mixed-integer optimizer for home energy systems.",
+  "homepage": "https://github.com/bmesuere/optivolt#readme",
+  "bugs": {
+    "url": "https://github.com/bmesuere/optivolt/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bmesuere/optivolt.git"
+  },
+  "license": "MIT",
+  "author": "Bart Mesuere",
+  "type": "module",
+  "main": "src/solve.js",
+  "scripts": {
+    "dev": "node src/solve.js examples/demo.lp",
+    "solve": "node src/solve.js",
+    "lint": "echo \"(add eslint later)\""
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "dependencies": {
+    "highs": "^1.6.0"
+  }
+}
