@@ -15,7 +15,7 @@
   "type": "module",
   "main": "src/solve.js",
   "scripts": {
-    "dev": "node src/solve.js examples/demo.lp",
+    "dev": "node src/solve.js",
     "solve": "node src/solve.js",
     "lint": "echo \"(add eslint later)\""
   },

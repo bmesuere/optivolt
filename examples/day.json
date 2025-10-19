@@ -1,0 +1,17 @@
+{
+  "stepSize_m": 15,
+  "load_W":       [1800, 1500, 1200, 2000, 2500, 2200, 1600, 1400],
+  "importPrice":  [30,   28,   55,   22,   20,   18,   20,   24],
+  "exportPrice":  [5,     5,   45,    7,    8,    9,    7,    6],
+
+  "batteryCapacity_Wh": 20480,
+  "minSoc_percent": 20,
+  "maxSoc_percent": 100,
+  "maxChargePower_W": 3600,
+  "maxDischargePower_W": 4000,
+  "maxGridImport_W": 2500,
+  "maxGridExport_W": 5000,
+  "initialSoc_percent": 20,
+  "charge_efficiency_percent": 90,
+  "discharge_efficiency_percent": 90
+}
