@@ -1,6 +1,7 @@
 export function buildLP({
   // time series data of length T
   load_W, // expected house load in W
+  pv_W, // expected PV production in W
   importPrice, // import price in c€/kWh
   exportPrice, // export price in c€/kWh
 
@@ -13,18 +14,18 @@ export function buildLP({
   maxDischargePower_W = 4000,
   maxGridImport_W = 2500,
   maxGridExport_W = 5000,
-  charge_efficiency_percent = 90,
-  discharge_efficiency_percent = 90,
+  charge_efficiency_percent = 95,
+  discharge_efficiency_percent = 95,
 
   // variable parameters
   initialSoc_percent = 20,
 } = {}) {
-  if (!Array.isArray(load_W) || !Array.isArray(importPrice) || !Array.isArray(exportPrice)) {
+  if (!Array.isArray(load_W) || !Array.isArray(pv_W) || !Array.isArray(importPrice) || !Array.isArray(exportPrice)) {
     throw new Error("Array params must be arrays.");
   }
 
   const T = load_W.length;
-  if (importPrice.length !== T || exportPrice.length !== T) {
+  if (pv_W.length !== T || importPrice.length !== T || exportPrice.length !== T) {
     throw new Error("Arrays must have same length");
   }
 
@@ -40,26 +41,35 @@ export function buildLP({
   const initialSoc_Wh = (initialSoc_percent / 100) * batteryCapacity_Wh;
 
   // Variable name helpers
-  const gridImport = (t) => `grid_import_${t}`;
-  const gridExport = (t) => `grid_export_${t}`;
-  const batCharge = (t) => `bat_charge_${t}`;
-  const batDischarge = (t) => `bat_discharge_${t}`;
-  const socEnd = (t) => `soc_${t}`;
+  const gridToLoad = (t) => `grid_to_load_${t}`;
+  const gridToBattery = (t) => `grid_to_battery_${t}`;
+  const pvToLoad = (t) => `pv_to_load_${t}`;
+  const pvToBattery = (t) => `pv_to_battery_${t}`;
+  const pvToGrid = (t) => `pv_to_grid_${t}`;
+  const batteryToLoad = (t) => `battery_to_load_${t}`;
+  const batteryToGrid = (t) => `battery_to_grid_${t}`;
+  const soc = (t) => `soc_${t}`;
 
   const lines = [];
 
   // ===============
   // Objective
   // ===============
-
   lines.push("Minimize");
   const objTerms = [" obj:"];
   for (let t = 0; t < T; t++) {
+    const importCoeff_cents = importPrice[t] * priceCoeff; // c€
+    const exportCoeff_cents = exportPrice[t] * priceCoeff; // c€
     // cost: + import - export
-    objTerms.push(
-      ` + ${toNum(importPrice[t] * priceCoeff)} ${gridImport(t)}`,
-      ` - ${toNum(exportPrice[t] * priceCoeff)} ${gridExport(t)}`
-    );
+    // import is gridToLoad + gridToBattery
+    objTerms.push(` + ${toNum(importCoeff_cents)} ${gridToLoad(t)}`);
+    objTerms.push(` + ${toNum(importCoeff_cents)} ${gridToBattery(t)}`);
+    // export is pvToGrid + batteryToGrid
+    objTerms.push(` - ${toNum(exportCoeff_cents)} ${pvToGrid(t)}`);
+    objTerms.push(` - ${toNum(exportCoeff_cents)} ${batteryToGrid(t)}`);
+
+    // prefer to use PV over exporting it (small cost)
+    objTerms.push(` + ${toNum(1e-6)} ${pvToGrid(t)}`);
   }
   lines.push(objTerms.join(""));
   lines.push("");
@@ -69,27 +79,34 @@ export function buildLP({
   // ===============
   lines.push("Subject To");
 
-  // Power balance per slot
-  // grid_import - grid_export + bat_discharge - bat_charge = load
+  // Load must be met
   for (let t = 0; t < T; t++) {
-    lines.push(` c_power_balance_${t}: ${gridImport(t)} - ${gridExport(t)} + ${batDischarge(t)} - ${batCharge(t)} = ${load_W[t]}`
+    lines.push(` c_load_${t}: ${gridToLoad(t)} + ${pvToLoad(t)} + ${batteryToLoad(t)} = ${load_W[t]}`
+    );
+  }
+
+  // PV split
+  for (let t = 0; t < T; t++) {
+    lines.push(` c_pv_split_${t}: ${pvToLoad(t)} + ${pvToBattery(t)} + ${pvToGrid(t)} = ${pv_W[t]}`
     );
   }
 
   // SOC evolution
-  // soc_0 = initialSoc_Wh + (ηc * Δh) * charge_0 - (Δh / ηd) * discharge_0
-  lines.push(` soc_0: ${socEnd(0)} - ${chargeWhPerW} ${batCharge(0)} + ${dischargeWhPerW} ${batDischarge(0)} = ${toNum(initialSoc_Wh)}`);
+  // soc_0 = initialSoc_Wh + (ηc * Δh) * (grid_to_battery_0 + pv_to_battery_0) - (Δh / ηd) * (battery_to_load_0 + battery_to_grid_0)
+  lines.push(` c_soc_0: ${soc(0)} - ${toNum(chargeWhPerW)} ${gridToBattery(0)} - ${toNum(chargeWhPerW)} ${pvToBattery(0)} + ${toNum(dischargeWhPerW)} ${batteryToLoad(0)} + ${toNum(dischargeWhPerW)} ${batteryToGrid(0)} = ${toNum(initialSoc_Wh)}`);
   for (let t = 1; t < T; t++) {
-    // soc_t - soc_{t-1} - (ηc * Δh) * charge_t + (Δh / ηd) * discharge_t = 0
-    lines.push(` soc_${t}: ${socEnd(t)} - ${socEnd(t - 1)} - ${chargeWhPerW} ${batCharge(t)} + ${dischargeWhPerW} ${batDischarge(t)} = 0`);
+    lines.push(` c_soc_${t}: ${soc(t)} - ${soc(t - 1)} - ${toNum(chargeWhPerW)} ${gridToBattery(t)} - ${toNum(chargeWhPerW)} ${pvToBattery(t)} + ${toNum(dischargeWhPerW)} ${batteryToLoad(t)} + ${toNum(dischargeWhPerW)} ${batteryToGrid(t)} = 0`);
   }
 
   // Limits per slot
   for (let t = 0; t < T; t++) {
-    lines.push(` import_cap_${t}: ${gridImport(t)} <= ${maxGridImport_W}`);
-    lines.push(` export_cap_${t}: ${gridExport(t)} <= ${maxGridExport_W}`);
-    lines.push(` charge_cap_${t}: ${batCharge(t)} <= ${maxChargePower_W}`);
-    lines.push(` discharge_cap_${t}: ${batDischarge(t)} <= ${maxDischargePower_W}`);
+    // Charge/discharge limits
+    lines.push(` c_charge_cap_${t}: ${gridToBattery(t)} + ${pvToBattery(t)} <= ${maxChargePower_W}`);
+    lines.push(` c_discharge_cap_${t}: ${batteryToLoad(t)} + ${batteryToGrid(t)} <= ${maxDischargePower_W}`);
+
+    // Grid import/export limits
+    lines.push(` c_grid_import_cap_${t}: ${gridToLoad(t)} + ${gridToBattery(t)} <= ${maxGridImport_W}`);
+    lines.push(` c_grid_export_cap_${t}: ${pvToGrid(t)} + ${batteryToGrid(t)} <= ${maxGridExport_W}`);
   }
   lines.push("");
 
@@ -98,11 +115,21 @@ export function buildLP({
   // ===============
   lines.push("Bounds");
   for (let t = 0; t < T; t++) {
-    lines.push(` 0 <= ${gridImport(t)} <= ${maxGridImport_W}`);
-    lines.push(` 0 <= ${gridExport(t)} <= ${maxGridExport_W}`);
-    lines.push(` 0 <= ${batCharge(t)} <= ${maxChargePower_W}`);
-    lines.push(` 0 <= ${batDischarge(t)} <= ${maxDischargePower_W}`);
-    lines.push(` ${minSoc_Wh} <= ${socEnd(t)} <= ${maxSoc_Wh}`);
+    // Grid → load/battery (cannot exceed import limit; load cap for the load branch)
+    lines.push(` 0 <= ${gridToLoad(t)} <= ${toNum(Math.min(maxGridImport_W, +load_W[t]))}`);
+    lines.push(` 0 <= ${gridToBattery(t)} <= ${toNum(Math.min(maxGridImport_W, maxChargePower_W))}`);
+
+    // PV splits (no curtailment overall; per-branch caps keep things sane)
+    lines.push(` 0 <= ${pvToLoad(t)} <= ${toNum(+load_W[t])}`);
+    lines.push(` 0 <= ${pvToBattery(t)} <= ${toNum(Math.min(+pv_W[t], maxChargePower_W))}`);
+    lines.push(` 0 <= ${pvToGrid(t)} <= ${toNum(Math.min(+pv_W[t], maxGridExport_W))}`);
+
+    // Battery → load/grid (cannot exceed discharge or respective sinks)
+    lines.push(` 0 <= ${batteryToLoad(t)} <= ${toNum(Math.min(maxDischargePower_W, +load_W[t]))}`);
+    lines.push(` 0 <= ${batteryToGrid(t)} <= ${toNum(Math.min(maxDischargePower_W, maxGridExport_W))}`);
+
+    // SOC bounds
+    lines.push(` ${toNum(minSoc_Wh)} <= ${soc(t)} <= ${toNum(maxSoc_Wh)}`);
   }
   lines.push("");
 

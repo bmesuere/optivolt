@@ -26,57 +26,95 @@ async function main() {
   printScheduleTable(result, cfg)
 }
 
-function valueOf(col) {
-  return (typeof col === "number") ? col : (col?.Value ?? col?.Primal ?? col?.PrimalValue ?? 0);
-}
-
 function printScheduleTable(result, cfg) {
   const T = cfg.load_W.length;
 
-  // Buckets for decision variables (fill with zeros)
-  const gridImport = Array(T).fill(0);
-  const gridExport = Array(T).fill(0);
-  const batteryCharge = Array(T).fill(0);
-  const batteryDischarge = Array(T).fill(0);
-  const soc = Array(T).fill(0);
+  // Per-slot arrays (W or Wh)
+  const g2l = Array(T).fill(0); // grid_to_load
+  const g2b = Array(T).fill(0); // grid_to_battery
+  const pv2l = Array(T).fill(0); // pv_to_load
+  const pv2b = Array(T).fill(0); // pv_to_battery
+  const pv2g = Array(T).fill(0); // pv_to_grid
+  const b2l = Array(T).fill(0); // battery_to_load
+  const b2g = Array(T).fill(0); // battery_to_grid
+  const soc = Array(T).fill(0); // state of charge (Wh)
 
-  // Parse the Columns map (only map/object format supported)
-  for (const [varName, col] of Object.entries(result.Columns || {})) {
-    const m = /(grid_import|grid_export|bat_charge|bat_discharge|soc)_(\d+)$/.exec(varName);
-    if (!m) continue;
-    const kind = m[1];
-    const t = Number(m[2]);
-    if (Number.isNaN(t) || t < 0 || t >= T) continue;
+  // Support both [{Name,Value}] and {name:{Value}} result formats
+  const cols = result.Columns || [];
+  const entries = Array.isArray(cols) ? cols.map(c => [c.Name, c]) : Object.entries(cols);
 
-    const val = valueOf(col);
-    switch (kind) {
-      case "grid_import": gridImport[t] = val; break;
-      case "grid_export": gridExport[t] = val; break;
-      case "bat_charge": batteryCharge[t] = val; break;
-      case "bat_discharge": batteryDischarge[t] = val; break;
-      case "soc": soc[t] = val; break;
-    }
+  for (const [name, col] of entries) {
+    const t = parseIndex(name);
+    if (t == null || t < 0 || t >= T) continue;
+    const v = valueOf(col);
+
+    if (name.startsWith("grid_to_load_")) g2l[t] = v;
+    else if (name.startsWith("grid_to_battery_")) g2b[t] = v;
+    else if (name.startsWith("pv_to_load_")) pv2l[t] = v;
+    else if (name.startsWith("pv_to_battery_")) pv2b[t] = v;
+    else if (name.startsWith("pv_to_grid_")) pv2g[t] = v;
+    else if (name.startsWith("battery_to_load_")) b2l[t] = v;
+    else if (name.startsWith("battery_to_grid_")) b2g[t] = v;
+    else if (name.startsWith("soc_")) soc[t] = v;
+
+    // Back-compat with early variable names (optional)
+    else if (name.startsWith("grid_import_")) g2l[t] += v;
+    else if (name.startsWith("grid_export_")) pv2g[t] += v;
+    else if (name.startsWith("bat_charge_")) g2b[t] += v;
+    else if (name.startsWith("bat_discharge_")) b2l[t] += v;
   }
 
-  // Build rows: label + t0..t{T-1}
+  // Build transposed table: one row per slot
   const rows = [];
-  const addRow = (label, arr) => {
-    const row = { Metric: label };
-    for (let t = 0; t < T; t++) row[`t${t}`] = arr[t] ?? 0;
-    rows.push(row);
-  };
+  for (let t = 0; t < T; t++) {
+    const ic = cfg.importPrice?.[t] ?? null; // c€/kWh
+    const ec = cfg.exportPrice?.[t] ?? null; // c€/kWh
+    const pv = cfg.pv_W?.[t] ?? 0;           // expected PV (W)
 
-  addRow("load (W)", cfg.load_W);
-  addRow("import price (c€/kWh)", cfg.importPrice);
-  addRow("export price (c€/kWh)", cfg.exportPrice);
-  addRow("grid import (W)", gridImport);
-  addRow("grid export (W)", gridExport);
-  addRow("battery charge (W)", batteryCharge);
-  addRow("battery discharge (W)", batteryDischarge);
-  addRow("state of charge (Wh)", soc);
+    const imp = g2l[t] + g2b[t];       // total import (W)
+    const exp = pv2g[t] + b2g[t];      // total export (W)
+
+    rows.push({
+      t,
+      load: round(cfg.load_W[t]),
+      pv: round(pv),
+      ic,
+      ec,
+      g2l: round(g2l[t]),
+      g2b: round(g2b[t]),
+      pv2l: round(pv2l[t]),
+      pv2b: round(pv2b[t]),
+      pv2g: round(pv2g[t]),
+      b2l: round(b2l[t]),
+      b2g: round(b2g[t]),
+      imp: round(imp),
+      exp: round(exp),
+      soc: round(soc[t])
+    });
+  }
 
   console.table(rows);
 }
+
+// -------- helpers --------
+function parseIndex(varName) {
+  const m = /_(\d+)$/.exec(varName);
+  return m ? Number(m[1]) : null;
+}
+
+function valueOf(col) {
+  if (col == null) return 0;
+  if (typeof col === "number") return col;
+  if (typeof col.Value === "number") return col.Value;
+  if (typeof col.Primal === "number") return col.Primal;
+  if (typeof col.value === "number") return col.value;
+  return Number(col) || 0;
+}
+
+function round(x) {
+  return Math.abs(x) < 1e-9 ? 0 : Math.round(x * 1000) / 1000;
+}
+
 
 main().catch((err) => {
   console.error(err);
