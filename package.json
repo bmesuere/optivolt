@@ -13,10 +13,10 @@
   "license": "MIT",
   "author": "Bart Mesuere",
   "type": "module",
-  "main": "src/solve.js",
+  "main": "cli/index.js",
   "scripts": {
-    "dev": "node src/solve.js",
-    "solve": "node src/solve.js",
+    "dev": "node cli/index.js",
+    "solve": "node cli/index.js",
     "lint": "echo \"(add eslint later)\""
   },
   "engines": {
