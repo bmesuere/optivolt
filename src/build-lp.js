@@ -14,8 +14,10 @@ export function buildLP({
   maxDischargePower_W = 4000,
   maxGridImport_W = 2500,
   maxGridExport_W = 5000,
-  charge_efficiency_percent = 95,
-  discharge_efficiency_percent = 95,
+  chargeEfficiency_percent = 95,
+  dischargeEfficiency_percent = 95,
+  batteryCost_cent_per_kWh = 2,
+  terminalSocValuation = "zero", // zero, min, avg or max
 
   // variable parameters
   initialSoc_percent = 20,
@@ -32,8 +34,11 @@ export function buildLP({
   // Unit helpers
   const stepHours = stepSize_m / 60; // hours per slot
   const priceCoeff = stepHours / 1000; // converts c€/kWh * W  →  c€ over the slot: € * (W * h / 1000 kWh/W) = €
-  const chargeWhPerW = stepHours * (charge_efficiency_percent / 100); // Wh gained in battery per W charged
-  const dischargeWhPerW = stepHours / (discharge_efficiency_percent / 100); // Wh lost from battery per W discharged
+  const chargeWhPerW = stepHours * (chargeEfficiency_percent / 100); // Wh gained in battery per W charged
+  const dischargeWhPerW = stepHours / (dischargeEfficiency_percent / 100); // Wh lost from battery per W discharged
+  const batteryCost_cents = 0.5 * batteryCost_cent_per_kWh * priceCoeff; // c€ cost per W throughput (charge+discharge)
+
+  const terminalPrice_cents_per_Wh = selectTerminalPriceCentsPerKWh(terminalSocValuation, importPrice) / 1000 * (dischargeEfficiency_percent / 100); // c€/Wh
 
   // Convert soc percentages to Wh
   const minSoc_Wh = (minSoc_percent / 100) * batteryCapacity_Wh;
@@ -60,16 +65,26 @@ export function buildLP({
   for (let t = 0; t < T; t++) {
     const importCoeff_cents = importPrice[t] * priceCoeff; // c€
     const exportCoeff_cents = exportPrice[t] * priceCoeff; // c€
-    // cost: + import - export
-    // import is gridToLoad + gridToBattery
-    objTerms.push(` + ${toNum(importCoeff_cents)} ${gridToLoad(t)}`);
-    objTerms.push(` + ${toNum(importCoeff_cents)} ${gridToBattery(t)}`);
-    // export is pvToGrid + batteryToGrid
-    objTerms.push(` - ${toNum(exportCoeff_cents)} ${pvToGrid(t)}`);
-    objTerms.push(` - ${toNum(exportCoeff_cents)} ${batteryToGrid(t)}`);
 
-    // prefer to use PV over exporting it (small cost)
-    objTerms.push(` + ${toNum(1e-6)} ${pvToGrid(t)}`);
+    // Aggregate coefficients for each variable
+    const gridToLoadCoeff = importCoeff_cents; // import cost
+    const gridToBatteryCoeff = importCoeff_cents + batteryCost_cents; // import cost + battery cost
+    const pvToGridCoeff = -exportCoeff_cents + 1e-6; // export revenue + slight penalty to prefer using PV locally
+    const batteryToGridCoeff = -exportCoeff_cents + batteryCost_cents; // export revenue + battery cost
+    const batteryToLoadCoeff = batteryCost_cents; // battery cost
+    const pvToBatteryCoeff = batteryCost_cents; // battery cost
+
+    // Add each variable to the objective once with its final coefficient
+    if (gridToLoadCoeff !== 0) objTerms.push(` + ${toNum(gridToLoadCoeff)} ${gridToLoad(t)}`);
+    if (gridToBatteryCoeff !== 0) objTerms.push(` + ${toNum(gridToBatteryCoeff)} ${gridToBattery(t)}`);
+    if (pvToGridCoeff !== 0) objTerms.push(` + ${toNum(pvToGridCoeff)} ${pvToGrid(t)}`);
+    if (batteryToGridCoeff !== 0) objTerms.push(` + ${toNum(batteryToGridCoeff)} ${batteryToGrid(t)}`);
+    if (batteryToLoadCoeff !== 0) objTerms.push(` + ${toNum(batteryToLoadCoeff)} ${batteryToLoad(t)}`);
+    if (pvToBatteryCoeff !== 0) objTerms.push(` + ${toNum(pvToBatteryCoeff)} ${pvToBattery(t)}`);
+  }
+  // Terminal SOC valuation
+  if (terminalPrice_cents_per_Wh > 0) {
+    objTerms.push(` - ${toNum(terminalPrice_cents_per_Wh)} ${soc(T - 1)}`);
   }
   lines.push(objTerms.join(""));
   lines.push("");
@@ -136,6 +151,13 @@ export function buildLP({
   lines.push("End");
 
   return lines.join("\n");
+}
+
+function selectTerminalPriceCentsPerKWh(mode, prices) {
+  if (mode === "min") return Math.min(...prices);
+  if (mode === "avg") return prices.reduce((a, b) => a + b, 0) / prices.length;
+  if (mode === "max") return Math.max(...prices);
+  return 0; // "zero"
 }
 
 // Pretty numeric printing; avoids scientific notation and ensures pure numbers.

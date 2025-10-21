@@ -13,6 +13,8 @@
   "maxGridImport_W": 2500,
   "maxGridExport_W": 5000,
   "initialSoc_percent": 20,
-  "charge_efficiency_percent": 95,
-  "discharge_efficiency_percent": 95
+  "chargeEfficiency_percent": 95,
+  "dischargeEfficiency_percent": 95,
+  "batteryCost_cent_per_kWh": 2,
+  "terminalSocValuation": "zero"
 }
