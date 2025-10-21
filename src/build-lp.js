@@ -16,7 +16,7 @@ export function buildLP({
   maxGridExport_W = 5000,
   chargeEfficiency_percent = 95,
   dischargeEfficiency_percent = 95,
-  batteryCostCent_per_kWh = 2,
+  batteryCost_cent_per_kWh = 2,
   terminalSocValuation = "zero", // zero, min, avg or max
 
   // variable parameters
@@ -36,7 +36,7 @@ export function buildLP({
   const priceCoeff = stepHours / 1000; // converts c€/kWh * W  →  c€ over the slot: € * (W * h / 1000 kWh/W) = €
   const chargeWhPerW = stepHours * (chargeEfficiency_percent / 100); // Wh gained in battery per W charged
   const dischargeWhPerW = stepHours / (dischargeEfficiency_percent / 100); // Wh lost from battery per W discharged
-  const batteryCost_cents = 0.5 * batteryCostCent_per_kWh * priceCoeff; // c€ cost per W throughput (charge+discharge)
+  const batteryCost_cents = 0.5 * batteryCost_cent_per_kWh * priceCoeff; // c€ cost per W throughput (charge+discharge)
 
   const terminalPrice_cents_per_Wh = selectTerminalPriceCentsPerKWh(terminalSocValuation, importPrice) / 1000 * (dischargeEfficiency_percent / 100); // c€/Wh
 
