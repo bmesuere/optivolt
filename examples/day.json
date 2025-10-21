@@ -15,5 +15,6 @@
   "initialSoc_percent": 20,
   "chargeEfficiency_percent": 95,
   "dischargeEfficiency_percent": 95,
-  "batteryCostCent_per_kWh": 2
+  "batteryCostCent_per_kWh": 2,
+  "terminalSocValuation": "zero"
 }

@@ -17,6 +17,7 @@ export function buildLP({
   chargeEfficiency_percent = 95,
   dischargeEfficiency_percent = 95,
   batteryCostCent_per_kWh = 2,
+  terminalSocValuation = "zero", // zero, min, avg or max
 
   // variable parameters
   initialSoc_percent = 20,
@@ -36,6 +37,8 @@ export function buildLP({
   const chargeWhPerW = stepHours * (chargeEfficiency_percent / 100); // Wh gained in battery per W charged
   const dischargeWhPerW = stepHours / (dischargeEfficiency_percent / 100); // Wh lost from battery per W discharged
   const batteryCost_cents = 0.5 * batteryCostCent_per_kWh * priceCoeff; // c€ cost per W throughput (charge+discharge)
+
+  const terminalPrice_cents_per_Wh = selectTerminalPriceCentsPerKWh(terminalSocValuation, importPrice) / 1000 * (dischargeEfficiency_percent / 100); // c€/Wh
 
   // Convert soc percentages to Wh
   const minSoc_Wh = (minSoc_percent / 100) * batteryCapacity_Wh;
@@ -78,6 +81,10 @@ export function buildLP({
     if (batteryToGridCoeff !== 0) objTerms.push(` ${toNum(batteryToGridCoeff)} ${batteryToGrid(t)}`);
     if (batteryToLoadCoeff !== 0) objTerms.push(` + ${toNum(batteryToLoadCoeff)} ${batteryToLoad(t)}`);
     if (pvToBatteryCoeff !== 0) objTerms.push(` + ${toNum(pvToBatteryCoeff)} ${pvToBattery(t)}`);
+  }
+  // Terminal SOC valuation
+  if (terminalPrice_cents_per_Wh > 0) {
+    objTerms.push(` - ${toNum(terminalPrice_cents_per_Wh)} ${soc(T - 1)}`);
   }
   lines.push(objTerms.join(""));
   lines.push("");
@@ -144,6 +151,13 @@ export function buildLP({
   lines.push("End");
 
   return lines.join("\n");
+}
+
+function selectTerminalPriceCentsPerKWh(mode, prices) {
+  if (mode === "min") return Math.min(...prices);
+  if (mode === "avg") return prices.reduce((a, b) => a + b, 0) / prices.length;
+  if (mode === "max") return Math.max(...prices);
+  return 0; // "zero"
 }
 
 // Pretty numeric printing; avoids scientific notation and ensures pure numbers.
