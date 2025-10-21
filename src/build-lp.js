@@ -77,8 +77,8 @@ export function buildLP({
     // Add each variable to the objective once with its final coefficient
     if (gridToLoadCoeff !== 0) objTerms.push(` + ${toNum(gridToLoadCoeff)} ${gridToLoad(t)}`);
     if (gridToBatteryCoeff !== 0) objTerms.push(` + ${toNum(gridToBatteryCoeff)} ${gridToBattery(t)}`);
-    if (pvToGridCoeff !== 0) objTerms.push(` ${toNum(pvToGridCoeff)} ${pvToGrid(t)}`);
-    if (batteryToGridCoeff !== 0) objTerms.push(` ${toNum(batteryToGridCoeff)} ${batteryToGrid(t)}`);
+    if (pvToGridCoeff !== 0) objTerms.push(` + ${toNum(pvToGridCoeff)} ${pvToGrid(t)}`);
+    if (batteryToGridCoeff !== 0) objTerms.push(` + ${toNum(batteryToGridCoeff)} ${batteryToGrid(t)}`);
     if (batteryToLoadCoeff !== 0) objTerms.push(` + ${toNum(batteryToLoadCoeff)} ${batteryToLoad(t)}`);
     if (pvToBatteryCoeff !== 0) objTerms.push(` + ${toNum(pvToBatteryCoeff)} ${pvToBattery(t)}`);
   }
