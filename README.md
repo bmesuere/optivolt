@@ -16,7 +16,7 @@ Feed it your load, solar forecast, and tariffs, and it returns a day-long schedu
 - [x] Basic battery model
 - [x] Time-of-use tariffs
 - [x] Solar PV support
-- [ ] Battery cost
+- [x] Battery cost
 - [ ] Terminal state of charge
 - [ ] html frontend
 - [ ] Fetch predictions from Victron

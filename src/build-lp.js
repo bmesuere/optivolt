@@ -16,6 +16,7 @@ export function buildLP({
   maxGridExport_W = 5000,
   charge_efficiency_percent = 95,
   discharge_efficiency_percent = 95,
+  batteryCostCent_per_kWh = 2,
 
   // variable parameters
   initialSoc_percent = 20,
@@ -34,6 +35,7 @@ export function buildLP({
   const priceCoeff = stepHours / 1000; // converts c€/kWh * W  →  c€ over the slot: € * (W * h / 1000 kWh/W) = €
   const chargeWhPerW = stepHours * (charge_efficiency_percent / 100); // Wh gained in battery per W charged
   const dischargeWhPerW = stepHours / (discharge_efficiency_percent / 100); // Wh lost from battery per W discharged
+  const batteryCost_cents = 0.5 * batteryCostCent_per_kWh * priceCoeff; // c€ cost per W throughput (charge+discharge)
 
   // Convert soc percentages to Wh
   const minSoc_Wh = (minSoc_percent / 100) * batteryCapacity_Wh;
@@ -60,16 +62,22 @@ export function buildLP({
   for (let t = 0; t < T; t++) {
     const importCoeff_cents = importPrice[t] * priceCoeff; // c€
     const exportCoeff_cents = exportPrice[t] * priceCoeff; // c€
-    // cost: + import - export
-    // import is gridToLoad + gridToBattery
-    objTerms.push(` + ${toNum(importCoeff_cents)} ${gridToLoad(t)}`);
-    objTerms.push(` + ${toNum(importCoeff_cents)} ${gridToBattery(t)}`);
-    // export is pvToGrid + batteryToGrid
-    objTerms.push(` - ${toNum(exportCoeff_cents)} ${pvToGrid(t)}`);
-    objTerms.push(` - ${toNum(exportCoeff_cents)} ${batteryToGrid(t)}`);
 
-    // prefer to use PV over exporting it (small cost)
-    objTerms.push(` + ${toNum(1e-6)} ${pvToGrid(t)}`);
+    // Aggregate coefficients for each variable
+    const gridToLoadCoeff = importCoeff_cents; // import cost
+    const gridToBatteryCoeff = importCoeff_cents + batteryCost_cents; // import cost + battery cost
+    const pvToGridCoeff = -exportCoeff_cents + 1e-6; // export revenue + slight penalty to prefer using PV locally
+    const batteryToGridCoeff = -exportCoeff_cents + batteryCost_cents; // export revenue + battery cost
+    const batteryToLoadCoeff = batteryCost_cents; // battery cost
+    const pvToBatteryCoeff = batteryCost_cents; // battery cost
+
+    // Add each variable to the objective once with its final coefficient
+    if (gridToLoadCoeff !== 0) objTerms.push(` + ${toNum(gridToLoadCoeff)} ${gridToLoad(t)}`);
+    if (gridToBatteryCoeff !== 0) objTerms.push(` + ${toNum(gridToBatteryCoeff)} ${gridToBattery(t)}`);
+    if (pvToGridCoeff !== 0) objTerms.push(` ${toNum(pvToGridCoeff)} ${pvToGrid(t)}`);
+    if (batteryToGridCoeff !== 0) objTerms.push(` ${toNum(batteryToGridCoeff)} ${batteryToGrid(t)}`);
+    if (batteryToLoadCoeff !== 0) objTerms.push(` + ${toNum(batteryToLoadCoeff)} ${batteryToLoad(t)}`);
+    if (pvToBatteryCoeff !== 0) objTerms.push(` + ${toNum(pvToBatteryCoeff)} ${pvToBattery(t)}`);
   }
   lines.push(objTerms.join(""));
   lines.push("");
