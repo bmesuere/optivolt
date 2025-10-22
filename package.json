@@ -15,9 +15,9 @@
   "type": "module",
   "main": "cli/index.js",
   "scripts": {
-    "dev": "node cli/index.js",
-    "solve": "node cli/index.js",
-    "lint": "echo \"(add eslint later)\""
+    "dev": "node ./cli/index.js",
+    "solve": "node ./cli/index.js",
+    "prepare": "node ./scripts/prepare-site.mjs"
   },
   "engines": {
     "node": ">=24 <25"
