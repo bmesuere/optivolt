@@ -127,11 +127,13 @@ async function onRun() {
     const lpText = buildLP(cfg);
     const result = highs.solve(lpText);
 
-    els.objective.textContent = `${fmtNum(result.ObjectiveValue)}`;
+    els.objective.textContent = Number.isFinite(result.ObjectiveValue)
+      ? String(Number.parseFloat(result.ObjectiveValue).toFixed(2))  // round to whole c€
+      : "—";
     els.status.textContent = `Status: ${result.Status}`;
 
     const { rows } = parseSolution(result, cfg);
-    renderTable(rows);
+    renderTable(rows, cfg);
 
     // Charts
     drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m);                   // kWh stacks (no SoC overlay)
@@ -154,11 +156,85 @@ function parseSeries(s) {
 function num(val, fallback) { const n = Number(val); return Number.isFinite(n) ? n : fallback; }
 function fmtNum(x) { if (x == null || !isFinite(x)) return "—"; const f = Number(x); return Math.abs(f) < 1e-6 ? "0" : f.toFixed(4); }
 
-function renderTable(rows) {
-  const headers = ["t", "load", "pv", "ic", "ec", "g2l", "g2b", "pv2l", "pv2b", "pv2g", "b2l", "b2g", "imp", "exp", "soc"];
-  const thead = `<thead><tr class="text-left">${headers.map(h => `<th class="px-2 py-1 border-b">${h}</th>`).join("")}</tr></thead>`;
-  const tbody = `<tbody>${rows.map(r =>
-    `<tr>${headers.map(h => `<td class="px-2 py-1 border-b">${r[h] ?? ""}</td>`).join("")}</tr>`
-  ).join("")}</tbody>`;
+function renderTable(rows, cfg) {
+  const cap = Math.max(1e-9, Number(cfg?.batteryCapacity_Wh ?? 20480));
+
+  // columns: key, header, formatter
+  const cols = [
+    { key: "t", header: "t", fmt: v => v },
+    { key: "load", header: "load", fmt: intThin },
+    { key: "pv", header: "pv", fmt: intThin },
+
+    { key: "ic", header: "ic", fmt: dec2Thin },
+    { key: "ec", header: "ec", fmt: dec2Thin },
+
+    { key: "g2l", header: "g2l", fmt: intThin },
+    { key: "g2b", header: "g2b", fmt: intThin },
+    { key: "pv2l", header: "pv2l", fmt: intThin },
+    { key: "pv2b", header: "pv2b", fmt: intThin },
+    { key: "pv2g", header: "pv2g", fmt: intThin },
+    { key: "b2l", header: "b2l", fmt: intThin },
+    { key: "b2g", header: "b2g", fmt: intThin },
+
+    { key: "imp", header: "imp", fmt: intThin },
+    { key: "exp", header: "exp", fmt: intThin },
+
+    { key: "soc", header: "soc", fmt: (w) => pct0(w / cap) + "%" },
+  ];
+
+  const thead = `
+    <thead>
+      <tr>
+        ${cols.map(c => `<th class="px-2 py-1 border-b font-medium text-right">${escapeHtml(c.header)}</th>`).join("")}
+      </tr>
+    </thead>`;
+
+  const tbody = `
+    <tbody>
+      ${rows.map(r => `
+        <tr>
+          ${cols.map(c => `<td class="px-2 py-1 border-b text-right font-mono tabular-nums">${c.fmt(r[c.key])}</td>`).join("")}
+        </tr>`).join("")}
+    </tbody>`;
+
   document.querySelector("#table").innerHTML = thead + tbody;
+
+  // --- helpers ---
+
+  // thin-space thousands for integers
+  function intThin(x) {
+    const n = Math.round(Number(x) || 0);
+    return groupThin(n);
+  }
+
+  // thin-space thousands with exactly 2 decimals
+  function dec2Thin(x) {
+    const n = Number(x);
+    if (!Number.isFinite(n)) return "";
+    const s = n.toFixed(2);
+    const [i, f] = s.split(".");
+    return `${groupThin(i)}.${f}`;
+  }
+
+  // % with 0 decimals
+  function pct0(x) {
+    const n = (Number(x) || 0) * 100;
+    return groupThin(Math.round(n));
+  }
+
+  // insert thin spaces as thousands separators
+  function groupThin(numOrStr) {
+    const s = String(numOrStr);
+    // support negative numbers
+    const neg = s.startsWith("-") ? "-" : "";
+    const body = neg ? s.slice(1) : s;
+    // split integer/decimal if present
+    const parts = body.split(".");
+    const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, "\u2009"); // U+2009 thin space
+    return parts.length > 1 ? `${neg}${intPart}.${parts[1]}` : `${neg}${intPart}`;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]));
+  }
 }

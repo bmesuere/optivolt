@@ -52,6 +52,7 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15) {
     type: "bar",
     data: { labels, datasets },
     options: {
+      maintainAspectRatio: false,
       responsive: true,
       interaction: { mode: "index", intersect: false },
       plugins: { legend: legendSquare },
@@ -106,14 +107,15 @@ export function drawPricesStepLines(canvas, rows) {
     data: {
       labels,
       datasets: [
-        { label: "Buy price", data: rows.map(r => r.ic), stepped: true, borderColor: "#ef4444" /* red */ },
-        { label: "Sell price", data: rows.map(r => r.ec), stepped: true, borderColor: "#22c55e" /* green */ }
+        { label: "Buy price", data: rows.map(r => r.ic), stepped: true, borderColor: "#ef4444", pointRadius: 0, pointHitRadius: 8 },
+        { label: "Sell price", data: rows.map(r => r.ec), stepped: true, borderColor: "#22c55e", pointRadius: 0, pointHitRadius: 8 }
       ]
     },
     options: {
+      maintainAspectRatio: false,
       responsive: true,
       interaction: { mode: "index", intersect: false },
-      plugins: { legend: legendSquare },
+      plugins: { legend: { position: "bottom", labels: { usePointStyle: true, pointStyle: "rect", boxWidth: 10, padding: 12 } } },
       scales: {
         x: { title: { display: true, text: "Time slot" } },
         y: { beginAtZero: true, title: { display: true, text: "c€/kWh" } }
@@ -121,6 +123,7 @@ export function drawPricesStepLines(canvas, rows) {
     }
   });
 }
+
 
 // 3) Forecast grouped bars in kWh with stripes (unchanged except axis label)
 export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
@@ -157,6 +160,7 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
       ]
     },
     options: {
+      maintainAspectRatio: false,
       responsive: true,
       interaction: { mode: "index", intersect: false },
       plugins: { legend: legendSquare },
