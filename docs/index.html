@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Battery Optimizer</title>
+
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            card: { DEFAULT: "#ffffff", dark: "#111827" },
+            ink: { DEFAULT: "#0f172a", soft: "#475569" }
+          },
+          boxShadow: {
+            soft: "0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06)"
+          },
+          borderRadius: { pill: "9999px" }
+        }
+      },
+      darkMode: "class"
+    };
+  </script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <!-- Pattern fills for striped forecast bars -->
+  <script src="https://cdn.jsdelivr.net/npm/patternomaly@1.3.2/dist/patternomaly.min.js"></script>
+  <!-- HiGHS UMD (defines global `Module`) -->
+  <script src="https://lovasoa.github.io/highs-js/highs.js"></script>
+
+  <meta name="color-scheme" content="light dark">
+</head>
+
+<body class="min-h-full overflow-x-hidden bg-fixed bg-gradient-to-b from-slate-50 to-slate-100 text-ink dark:from-slate-900 dark:to-slate-950 dark:text-slate-100">
+  <!-- Header -->
+  <header class="border-b border-white/60 dark:border-white/5 bg-white/70 dark:bg-slate-900/60 backdrop-blur">
+    <div class="mx-auto max-w-7xl px-4 py-5 flex items-center justify-between">
+      <h1 class="text-2xl font-semibold tracking-tight">Battery Optimizer</h1>
+      <div class="flex items-center gap-2">
+        <!-- Appearance icon button -->
+        <button id="themeToggle" class="rounded-full border border-slate-200 bg-white p-2 text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700" title="Toggle theme" aria-label="Toggle theme">
+          <!-- Sun/Moon SVG duo; we’ll toggle via CSS class -->
+          <svg id="sunIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 block dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.5v-3m0 21v-3M4.5 12h-3m21 0h-3M5.636 5.636l-2.121-2.122m16.97 16.972-2.122-2.122M5.636 18.364l-2.121 2.122m16.97-16.97-2.122 2.121M12 8a4 4 0 100 8 4 4 0 000-8z"/>
+          </svg>
+          <svg id="moonIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+          </svg>
+        </button>
+        <a href="https://github.com/bmesuere/optivolt" target="_blank" rel="noopener"
+           class="rounded-pill border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+          GitHub
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="mx-auto max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3">
+    <!-- Settings (sticky on large) -->
+    <aside class="lg:col-span-1">
+      <div class="lg:sticky lg:top-6 space-y-6">
+        <section class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-base font-semibold">Configuration</h2>
+          </div>
+
+          <!-- Form grid: single column on small, two columns on md+ -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <!-- Capacity / SoC -->
+            <label class="text-sm">Battery capacity (Wh)
+              <input id="cap" type="number" value="20480" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <label class="text-sm">Initial SoC (%)
+              <input id="initsoc" type="number" value="20" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+
+            <label class="text-sm">Min SoC (%)
+              <input id="minsoc" type="number" value="20" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <label class="text-sm">Max SoC (%)
+              <input id="maxsoc" type="number" value="100" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+
+            <!-- Power limits -->
+            <label class="text-sm">Maximum charge speed (W)
+              <input id="pchg" type="number" value="3600" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <label class="text-sm">Maximum discharge speed (W)
+              <input id="pdis" type="number" value="4000" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <label class="text-sm">Max grid import (W)
+              <input id="gimp" type="number" value="2500" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <label class="text-sm">Max grid export (W)
+              <input id="gexp" type="number" value="5000" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+
+            <!-- Efficiencies -->
+            <label class="text-sm">Charge efficiency (%)
+              <input id="etaC" type="number" value="95" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <label class="text-sm">Discharge efficiency (%)
+              <input id="etaD" type="number" value="95" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+
+            <!-- Economics (nowrap titles to keep alignment) -->
+            <label class="text-sm">
+              <span class="whitespace-nowrap">Battery cost (c€/kWh)</span>
+              <input id="bwear" type="number" value="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <label class="text-sm">
+              <span class="whitespace-nowrap">Terminal SoC valuation</span>
+              <select id="terminal" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800">
+                <option value="zero" selected>zero</option>
+                <option value="min">min</option>
+                <option value="avg">avg</option>
+                <option value="max">max</option>
+              </select>
+            </label>
+          </div>
+
+          <!-- Time series (Step moved here to the top of this block) -->
+          <div class="mt-6 space-y-3">
+            <div class="flex items-end justify-between gap-3">
+              <p class="text-xs font-medium text-ink-soft">Time series (comma or whitespace separated)</p>
+            </div>
+            <label class="block text-sm">Step (min)
+              <input id="step" type="number" value="60"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+
+            <label class="block text-sm">Load (W)
+              <textarea id="ts-load" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800">280,250,360,420,1230,190,190,490,490,360,670,1750,340,640,360,880,650,900,540,500,480,480,480,290</textarea>
+            </label>
+            <label class="block text-sm">PV (W)
+              <textarea id="ts-pv" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800">0,0,0,0,0,0,0,0,40,120,480,700,920,910,940,670,520,290,60,0,0,0,0,0</textarea>
+            </label>
+            <label class="block text-sm">Import price (c€/kWh)
+              <textarea id="ts-ic" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800">22.258065600000002,21.642862800000003,21.0892884,21.10875,20.760603600000003,20.515171200000005,22.302394800000002,23.395488,23.527394400000006,29.488050000000005,27.600274800000005,24.1653024,23.696061600000004,23.5122576,22.264552800000004,22.5337716,21.789906000000002,22.3391556,29.704290000000004,44.90920560000001,33.8550168,28.9160952,25.5719436,23.5284756</textarea>
+            </label>
+            <label class="block text-sm">Export price (c€/kWh)
+              <textarea id="ts-ec" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800">6.45074,5.893119999999999,5.391359999999999,5.409,5.09344,4.870979999999999,6.49092,7.481700000000001,7.60126,13.004,11.292919999999999,8.179459999999999,7.754140000000001,7.58754,6.456619999999999,6.700640000000001,6.0264,6.524239999999999,13.200000000000001,26.98174,16.96222,12.48558,9.45444,7.602239999999999</textarea>
+            </label>
+          </div>
+
+          <div class="mt-5 flex flex-wrap items-center gap-3">
+            <button id="run"
+              class="rounded-pill bg-sky-600 px-4 py-2 text-white shadow-soft hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+              Recompute
+            </button>
+
+            <button id="restore" type="button"
+              class="inline-flex items-center gap-1.5 text-sm text-sky-700 underline-offset-4 hover:underline dark:text-sky-300">
+              <span aria-hidden="true">↺</span>
+              <span>Restore defaults</span>
+            </button>
+
+            <button id="share" type="button"
+              class="inline-flex items-center gap-1.5 text-sm text-sky-700 underline-offset-4 hover:underline dark:text-sky-300">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" stroke-width="2"
+                  class="h-4 w-4" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M13.5 6h2.25A2.25 2.25 0 0 1 18 8.25v2.25m-9 9H6.75A2.25 2.25 0 0 1 4.5 17.25V15m9-9L7.5 12m0 0 6 6" />
+              </svg>
+              <span>Share</span>
+            </button>
+
+            <span class="text-xs text-ink-soft">Auto-runs on change</span>
+          </div>
+
+          <div class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-ink-soft dark:bg-slate-800/60">
+            <div>Total cost: <span id="objective" class="font-medium text-ink">—</span> c€</div>
+            <div class="mt-0.5">Status: <span id="status" class="font-medium text-ink">Initializing…</span></div>
+          </div>
+        </section>
+      </div>
+    </aside>
+
+    <!-- Results (stacked vertically, no side-by-side charts) -->
+    <section class="lg:col-span-2 space-y-6 min-w-0">
+      <div class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
+        <h3 class="mb-3 text-base font-semibold">Power flows (kWh)</h3>
+        <div class="h-72 w-full">
+          <canvas id="flows" class="h-full w-full"></canvas>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
+        <h3 class="mb-3 text-base font-semibold">State of charge</h3>
+        <div class="h-40 w-full">
+          <canvas id="soc" class="h-full w-full"></canvas>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
+        <h3 class="mb-3 text-base font-semibold">Prices (Buy/Sell)</h3>
+        <div class="h-56 w-full">
+          <canvas id="prices" class="h-full w-full"></canvas>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
+        <h3 class="mb-3 text-base font-semibold">Predicted load and solar</h3>
+        <div class="h-56 w-full">
+          <canvas id="loadpv" class="h-full w-full"></canvas>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark overflow-auto">
+        <h3 class="mb-3 text-base font-semibold">Schedule table</h3>
+        <div class="mb-2 flex items-center justify-between gap-3">
+          <label class="inline-flex items-center gap-2 text-sm">
+            <input id="table-kwh" type="checkbox" class="rounded border-slate-300">
+            <span>Show kWh in table</span>
+          </label>
+          <!-- dynamic unit badge -->
+          <span id="table-unit"
+            class="inline-flex items-center rounded-full border border-slate-200 px-2 py-0.5 text-xs text-slate-700 dark:border-white/10 dark:text-slate-200">
+            Units: W
+          </span>
+        </div>
+        <table id="table" class="min-w-full text-sm"></table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="mx-auto max-w-7xl px-4 py-8 text-center text-xs text-ink-soft">
+    Built with HiGHS (WASM) + Chart.js + Tailwind. Changes run instantly.
+  </footer>
+
+  <!-- App -->
+  <script type="module" src="./app.js"></script>
+  <script>
+    // Appearance toggle (persists)
+    const btn = document.getElementById('themeToggle');
+    const root = document.documentElement;
+    const key = 'battery-ui-theme';
+    const saved = localStorage.getItem(key);
+    if (saved === 'dark') root.classList.add('dark');
+    btn?.addEventListener('click', () => {
+      root.classList.toggle('dark');
+      localStorage.setItem(key, root.classList.contains('dark') ? 'dark' : 'light');
+    });
+  </script>
+</body>
+</html>
