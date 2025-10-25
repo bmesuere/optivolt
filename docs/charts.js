@@ -8,7 +8,7 @@ const SOLUTION_COLORS = {
   b2l: "rgb(71, 144, 208)",   // Battery to Consumption (blue)
   g2l: "rgb(233, 122, 131)",  // Grid to Consumption (red)
   g2b: "rgb(225, 142, 233)",  // Grid to Battery (purple)
-  soc: "rgb(71, 144, 208)"
+  soc: "rgb(71, 144, 208)"    // SoC line color = battery-ish blue
 };
 
 const toRGBA = (rgb, alpha = 1) => {
@@ -31,7 +31,7 @@ const legendSquare = {
   }
 };
 
-// ---- time formatting helpers ----
+// ---------------------- time formatting helpers ----------------------
 
 function fmtHHMM(dt) {
   const HH = String(dt.getHours()).padStart(2, "0");
@@ -39,10 +39,10 @@ function fmtHHMM(dt) {
   return `${HH}:${MM}`;
 }
 
-// For tick text on axis: show only hours, and at midnight show DD/MM.
+// On the axis: at midnight, show "DD/MM". Otherwise "HH:00".
 function fmtTickHourOrDate(dt) {
   const mins = dt.getMinutes();
-  if (mins !== 0) return ""; // hide :15/:30/:45
+  if (mins !== 0) return "";
 
   const hrs = dt.getHours();
   if (hrs === 0) {
@@ -54,31 +54,67 @@ function fmtTickHourOrDate(dt) {
   return `${String(hrs).padStart(2, "0")}:00`;
 }
 
-function isAnchorTick(dt) {
-  return dt.getMinutes() === 0;
-}
-
 /**
- * Build the time axis helpers given an explicit timestamps array.
- * timestampsMs: [msSinceEpoch0, msSinceEpoch1, ...]
+ * Build x-axis helpers shared by all charts.
  *
- * Returns:
- * - labels: ["HH:MM", ...] (one per slot, always full HH:MM; used as category labels)
- * - ticksCb(index): draws either "", "HH:00", or "DD/MM" depending on slot
- * - tooltipTitleCb(items): always "HH:MM" for hovered slot
- * - gridCb(ctx): "transparent" except on hour boundaries (inc. midnight)
+ * Input: timestampsMs[] for each plotted data point (slot or bucket).
+ *
+ * Output:
+ *   labels[]:     human-ish fallback labels (HH:MM per point, used internally)
+ *   ticksCb():    axis tick formatter (decides which ticks get text)
+ *   tooltipTitleCb(): tooltip title (HH:MM precise)
+ *   gridCb():     grid line color per tick (midnight emphasized)
+ *
+ * This function also does dynamic thinning:
+ * - If total span <= 12h, label *every* hour tick.
+ * - If span > 12h, label only midnight and every 3rd hour.
  */
 function buildTimeAxisFromTimestamps(timestampsMs) {
   const times = timestampsMs.map(ms => new Date(ms));
 
+  // rough horizon size in hours
+  let hoursSpan = 0;
+  if (times.length > 1) {
+    const spanMs = times[times.length - 1] - times[0];
+    hoursSpan = spanMs / (60 * 60 * 1000);
+  }
+
+  const sparseMode = hoursSpan > 12;
+  const labelEveryH = 3; // in sparse mode, show 0:00, 3:00, 6:00, 9:00, ...
+
+  function isFullMinute(dt) {
+    return dt.getMinutes() === 0;
+  }
+
+  function isMidnight(dt) {
+    return dt.getHours() === 0 && dt.getMinutes() === 0;
+  }
+
+  function isLabeledHour(dt) {
+    // Always show midnight
+    if (isMidnight(dt)) return true;
+    if (!isFullMinute(dt)) return false;
+
+    if (!sparseMode) {
+      // Dense mode: label every hour
+      return true;
+    }
+    // Sparse mode: only every 3 hours
+    return (dt.getHours() % labelEveryH) === 0;
+  }
+
+  // labels array: HH:MM for each point
   const labels = times.map(dt => fmtHHMM(dt));
 
+  // Tick labels for the axis
   function ticksCb(value, index) {
     const dt = times[index];
     if (!dt) return "";
+    if (!isLabeledHour(dt)) return "";
     return fmtTickHourOrDate(dt);
   }
 
+  // Tooltip title always shows true HH:MM for that exact point
   function tooltipTitleCb(items) {
     if (!items || !items.length) return "";
     const idx = items[0].dataIndex;
@@ -87,28 +123,37 @@ function buildTimeAxisFromTimestamps(timestampsMs) {
     return fmtHHMM(dt);
   }
 
+  // Grid line color per tick index
+  // We want:
+  // - A visible/darker line at midnight.
+  // - A lighter vertical line at other labeled hour ticks (3:00, 6:00, 9:00, etc.).
+  // - Transparent everywhere else.
   function gridCb(ctx) {
-    // Chart.js sometimes calls us with weird contexts; be defensive
+    // Chart.js callback contexts are... creative.
     let idx = ctx.index;
-    if (idx == null && ctx.tick && ctx.tick.index != null) {
-      idx = ctx.tick.index;
-    }
-    if (idx == null && ctx.tick && ctx.tick.value != null) {
-      idx = ctx.tick.value;
-    }
+    if (idx == null && ctx.tick && ctx.tick.index != null) idx = ctx.tick.index;
+    if (idx == null && ctx.tick && ctx.tick.value != null) idx = ctx.tick.value;
     if (idx == null) return "transparent";
 
     const dt = times[idx];
     if (!dt) return "transparent";
 
-    return isAnchorTick(dt) ? undefined : "transparent";
+    if (isMidnight(dt)) {
+      // Stronger line at midnight
+      return "rgba(0,0,0,0.25)";
+    }
+
+    if (isLabeledHour(dt) && isFullMinute(dt)) {
+      return "rgba(0,0,0,0.08)";
+    }
+
+    return "transparent";
   }
 
   return { labels, ticksCb, tooltipTitleCb, gridCb };
 }
 
-// ---- small helper for stacked bars ----
-
+// simple helper for signed stacked bars
 function dsBar(label, data, color, stack) {
   return {
     label,
@@ -123,11 +168,9 @@ function dsBar(label, data, color, stack) {
 }
 
 // -----------------------------------------------------------------------------
-// 1) Power flows stacked bar (signed kWh)
+// 1) Power flows bar chart (signed kWh, stacked)
 // -----------------------------------------------------------------------------
 
-// rows: [{... flows ...}], stepSize_m: minutes per slot (for W→kWh)
-// timestampsMs: array of ms timestamps aligned with rows
 export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, timestampsMs = []) {
   const { labels, ticksCb, tooltipTitleCb, gridCb } =
     buildTimeAxisFromTimestamps(timestampsMs);
@@ -135,6 +178,7 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, timestamp
   const h = Math.max(0.000001, Number(stepSize_m) / 60);
   const W2kWh = (x) => (x || 0) * h / 1000;
 
+  // Order stacks so closest-to-axis = most "local" flows
   const posOrder = [
     { key: "pv2l", color: SOLUTION_COLORS.pv2l, label: "Solar to Consumption" },
     { key: "pv2b", color: SOLUTION_COLORS.pv2b, label: "Solar to Battery" },
@@ -282,6 +326,10 @@ export function drawPricesStepLines(canvas, rows, stepSize_m = 15, timestampsMs 
   const { labels, ticksCb, tooltipTitleCb, gridCb } =
     buildTimeAxisFromTimestamps(timestampsMs);
 
+  // adapt line width based on density
+  const N = labels.length;
+  const strokeW = (N > 48) ? 1 : 2;
+
   if (canvas._chart) canvas._chart.destroy();
   canvas._chart = new Chart(canvas.getContext("2d"), {
     type: "line",
@@ -293,6 +341,7 @@ export function drawPricesStepLines(canvas, rows, stepSize_m = 15, timestampsMs 
           data: rows.map(r => r.ic),
           stepped: true,
           borderColor: "#ef4444",
+          borderWidth: strokeW,
           pointRadius: 0,
           pointHitRadius: 8
         },
@@ -301,6 +350,7 @@ export function drawPricesStepLines(canvas, rows, stepSize_m = 15, timestampsMs 
           data: rows.map(r => r.ec),
           stepped: true,
           borderColor: "#22c55e",
+          borderWidth: strokeW,
           pointRadius: 0,
           pointHitRadius: 8
         }
@@ -341,19 +391,57 @@ export function drawPricesStepLines(canvas, rows, stepSize_m = 15, timestampsMs 
 }
 
 // -----------------------------------------------------------------------------
-// 4) Forecast grouped bars (kWh) with stripes
+// 4) Forecast grouped bars (hourly aggregation, shared axis style)
 // -----------------------------------------------------------------------------
 
 export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15, timestampsMs = []) {
+  // We aggregate 4×15min slots into hourly buckets for display.
+  // Internally: convert each slot load/pv from W to kWh, then SUM per hour.
+
+  const stepHours = Math.max(0.000001, Number(stepSize_m) / 60);
+  const W2kWh = (x) => (x || 0) * stepHours / 1000;
+
+  // Group by local hour
+  // Key is millis for that hour start (local time),
+  // Value accumulates loadKWh and pvKWh for that hour.
+  const hourMap = new Map();
+
+  for (let i = 0; i < rows.length; i++) {
+    const ms = timestampsMs[i];
+    const dt = new Date(ms);
+    const hourStartLocal = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), dt.getHours(), 0, 0, 0);
+    const hourMs = hourStartLocal.getTime();
+
+    if (!hourMap.has(hourMs)) {
+      hourMap.set(hourMs, {
+        dtHour: hourStartLocal,
+        loadKWh: 0,
+        pvKWh: 0
+      });
+    }
+    const bucket = hourMap.get(hourMs);
+    bucket.loadKWh += W2kWh(rows[i].load);
+    bucket.pvKWh += W2kWh(rows[i].pv);
+  }
+
+  // Sort buckets chronologically
+  const bucketsSorted = [...hourMap.values()].sort((a, b) => a.dtHour - b.dtHour);
+
+  // Rebuild timestamps for the bucketed series from each hour start.
+  // We'll feed these hour-start timestamps into buildTimeAxisFromTimestamps
+  const bucketTimestampsMs = bucketsSorted.map(b => b.dtHour.getTime());
+
+  // Axis/ticks/grid use the same logic now:
   const { labels, ticksCb, tooltipTitleCb, gridCb } =
-    buildTimeAxisFromTimestamps(timestampsMs);
+    buildTimeAxisFromTimestamps(bucketTimestampsMs);
 
-  const h = Math.max(0.000001, Number(stepSize_m) / 60);
-  const W2kWh = (x) => (x || 0) * h / 1000;
+  // Data arrays for the bars
+  const loadData = bucketsSorted.map(b => b.loadKWh);
+  const pvData = bucketsSorted.map(b => b.pvKWh);
 
-  const red = SOLUTION_COLORS.g2l;   // consumption forecast color
-  const amber = SOLUTION_COLORS.pv2g;  // solar forecast color
-
+  // Colors: consumption forecast (red-ish), solar forecast (amber)
+  const red = SOLUTION_COLORS.g2l;
+  const amber = SOLUTION_COLORS.pv2g;
   const stripe = (color) => window.pattern?.draw("diagonal", color) || color;
 
   if (canvas._chart) canvas._chart.destroy();
@@ -364,7 +452,7 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15, timestampsMs = 
       datasets: [
         {
           label: "Consumption forecast",
-          data: rows.map(r => W2kWh(r.load)),
+          data: loadData,
           backgroundColor: stripe(red),
           borderColor: red,
           borderWidth: 1,
@@ -372,7 +460,7 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15, timestampsMs = 
         },
         {
           label: "Solar forecast",
-          data: rows.map(r => W2kWh(r.pv)),
+          data: pvData,
           backgroundColor: stripe(amber),
           borderColor: amber,
           borderWidth: 1,
@@ -389,7 +477,10 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15, timestampsMs = 
         tooltip: {
           mode: "index",
           intersect: false,
-          callbacks: { title: tooltipTitleCb }
+          callbacks: {
+            // use the shared tooltip title (HH:MM)
+            title: (items) => tooltipTitleCb(items)
+          }
         }
       },
       scales: {

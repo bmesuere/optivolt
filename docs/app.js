@@ -595,17 +595,28 @@ function renderTable(rows, cfg, timestampsMs) {
     </thead>`;
 
   const tbody = `
-    <tbody>
-      ${rows.map((r, ri) => `
-        <tr>
-          ${cols.map(c => {
-    const displayVal = c.key === "time"
-      ? c.fmt(null, ri)
-      : c.fmt(r[c.key], ri);
-    return `<td class="px-2 py-1 border-b text-right font-mono tabular-nums">${displayVal}</td>`;
+  <tbody>
+    ${rows.map((r, ri) => {
+    // Determine if this row is a midnight boundary.
+    // We call the time formatter once here.
+    const timeLabel = cols[0].fmt(null, ri); // assuming cols[0] is the "time" column
+    const isMidnightRow = /^\d{2}\/\d{2}$/.test(timeLabel);
+
+    // Build the row's <td> cells, all bold if midnight.
+    const tds = cols.map(c => {
+      let displayVal;
+      if (c.key === "time") {
+        displayVal = timeLabel;
+      } else {
+        displayVal = c.fmt(r[c.key], ri);
+      }
+
+      return `<td class="px-2 py-1 border-b text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${displayVal}</td>`;
+    }).join("");
+
+    return `<tr>${tds}</tr>`;
   }).join("")}
-        </tr>`).join("")}
-    </tbody>`;
+  </tbody>`;
 
   els.table.innerHTML = thead + tbody;
 
