@@ -309,7 +309,7 @@ function safeMul(a, b) {
 function boolish(v) { return v === true || v === 1 || v === '1'; }
 
 /**
- * Ensure a valid start/end window, defaulting to last full hour → next midnight UTC.
+ * Ensure a valid start/end window, defaulting to last full hour → next midnight local time.
  */
 function ensureWindow({ startSec, endSec, startMs, endMs } = {}) {
   if (startMs != null && endMs != null) {
