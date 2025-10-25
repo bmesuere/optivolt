@@ -197,7 +197,6 @@
             </label>
           </div>
 
-          <!-- Time series (Step moved here to the top of this block) -->
           <div class="mt-6 space-y-3">
             <div class="flex items-end justify-between gap-3">
               <p class="text-xs font-medium text-ink-soft">Time series (comma or whitespace separated)</p>
@@ -205,6 +204,16 @@
             <label class="block text-sm">Step (min)
               <input id="step" type="number" value="60"
                 class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <label class="block text-sm">
+              Start time
+              <input id="ts-start"
+                type="datetime-local"
+                class="mt-1 w-full rounded border p-2 text-sm"
+              />
+              <p class="mt-1 text-[11px] text-slate-500">
+                First slot timestamp. Filled automatically when loading from VRM.
+              </p>
             </label>
 
             <label class="block text-sm">Load (W)
