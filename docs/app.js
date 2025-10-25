@@ -1,9 +1,11 @@
 // Import shared logic
 import { buildLP } from "./lib/build-lp.js";
 import { parseSolution } from "./lib/parse-solution.js";
+import { VRMClient } from "./lib/vrm-api.js";
 import { drawFlowsBarStackSigned, drawSocChart, drawPricesStepLines, drawLoadPvGrouped } from "./charts.js";
 
 const STORAGE_KEY = "optivolt-config-v1";
+const STORAGE_VRM_KEY = "optivolt-vrm-cred-v1";
 
 // ---- Defaults (match your latest example) ----
 const DEFAULTS = {
@@ -51,9 +53,17 @@ const els = {
   tableKwh: $("#table-kwh"),
   tableUnit: $("#table-unit"),
   status: $("#status"), objective: $("#objective"),
+
+  // VRM section
+  vrmSite: $("#vrm-site"),
+  vrmToken: $("#vrm-token"),
+  vrmFetchSettings: $("#vrm-fetch-settings"),
+  vrmFetchForecasts: $("#vrm-fetch-forecasts"),
+  vrmClear: $("#vrm-clear"),
 };
 
 let highs = null;
+let vrm = new VRMClient();
 
 // --- simple debounce for auto-run ---
 let timer = null;
@@ -78,6 +88,24 @@ async function boot() {
 
   // Manual recompute
   els.run?.addEventListener("click", onRun);
+
+  // Load VRM creds from storage (separate secret store)
+  hydrateVRM(loadVRMFromStorage());
+
+  // Save VRM creds when fields change
+  for (const el of [els.vrmSite, els.vrmToken]) {
+    el?.addEventListener("input", () => saveVRMToStorage(snapshotVRM()));
+    el?.addEventListener("change", () => saveVRMToStorage(snapshotVRM()));
+  }
+
+  // VRM actions
+  els.vrmClear?.addEventListener("click", () => {
+    clearVRMStorage();
+    hydrateVRM({ installationId: "", token: "" });
+  });
+
+  els.vrmFetchSettings?.addEventListener("click", onFetchVRMSettings);
+  els.vrmFetchForecasts?.addEventListener("click", onFetchVRMForecasts);
 
   // Units toggle recompute
   els.tableKwh?.addEventListener("change", () => {
@@ -128,6 +156,29 @@ function loadFromStorage() {
     return s ? JSON.parse(s) : null;
   } catch { return null; }
 }
+function saveVRMToStorage(obj) {
+  try { localStorage.setItem(STORAGE_VRM_KEY, JSON.stringify(obj)); } catch { }
+}
+function loadVRMFromStorage() {
+  try { const s = localStorage.getItem(STORAGE_VRM_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
+}
+function clearVRMStorage() {
+  try { localStorage.removeItem(STORAGE_VRM_KEY); } catch { }
+}
+function snapshotVRM() {
+  return {
+    installationId: (els.vrmSite?.value || "").trim(),
+    token: (els.vrmToken?.value || "").trim(),
+  };
+}
+function hydrateVRM(obj) {
+  const installationId = obj?.installationId || "";
+  const token = obj?.token || "";
+  if (els.vrmSite) els.vrmSite.value = installationId;
+  if (els.vrmToken) els.vrmToken.value = token;
+  vrm.setAuth({ installationId, token });
+}
+
 // --- URL share helpers (URL-safe base64 of the snapshot JSON) ---
 function encodeConfigToQuery(obj) {
   const json = JSON.stringify(obj);
@@ -147,6 +198,63 @@ function decodeConfigFromQuery() {
     return JSON.parse(json);
   } catch {
     return null;
+  }
+}
+
+async function onFetchVRMSettings() {
+  try {
+    hydrateVRM(snapshotVRM()); // ensure client has latest
+    els.status.textContent = "Fetching VRM settings…";
+    const s = await vrm.fetchDynamicEssSettings();
+
+    // Map settings into the form where reasonable (keep user's current values if VRM returns 0/null)
+    setIfFinite(els.cap, s.batteryCapacity_Wh);
+    setIfFinite(els.pdis, s.dischargePower_W || s.limits?.batteryDischargeLimit_W);
+    setIfFinite(els.pchg, s.chargePower_W || s.limits?.batteryChargeLimit_W);
+    setIfFinite(els.gimp, s.maxPowerFromGrid_W || s.limits?.gridImportLimit_W);
+    setIfFinite(els.gexp, s.maxPowerToGrid_W || s.limits?.gridExportLimit_W);
+
+    // Battery cost → c€/kWh
+    if (Number.isFinite(s.batteryCosts_cents_per_kWh)) {
+      els.bwear.value = s.batteryCosts_cents_per_kWh;
+    }
+
+    saveToStorage(snapshotUI());
+    els.status.textContent = "Settings loaded from VRM.";
+    await onRun();
+  } catch (err) {
+    console.error(err);
+    els.status.textContent = `VRM error: ${err.message}`;
+  }
+}
+function setIfFinite(input, v) { if (Number.isFinite(v) && input) input.value = String(v); }
+
+async function onFetchVRMForecasts() {
+  try {
+    hydrateVRM(snapshotVRM()); // make sure client has current creds
+    els.status.textContent = "Fetching VRM forecasts & prices…";
+
+    // You can override the window if you want; defaults to last hour → next midnight
+    const [fc, pr] = await Promise.all([
+      vrm.fetchForecasts(),
+      vrm.fetchPrices()
+    ]);
+
+    // VRM returns 15-min step; align UI to that
+    if (els.step) els.step.value = fc.step_minutes || 15;
+
+    // Time series (use arrays directly)
+    if (els.tLoad) els.tLoad.value = (fc.load_W || []).join(",");
+    if (els.tPV) els.tPV.value = (fc.pv_W || []).join(",");
+    if (els.tIC) els.tIC.value = (pr.importPrice_cents_per_kwh || []).join(",");
+    if (els.tEC) els.tEC.value = (pr.exportPrice_cents_per_kwh || []).join(",");
+
+    saveToStorage(snapshotUI());
+    els.status.textContent = "Forecasts & prices loaded from VRM.";
+    await onRun();
+  } catch (err) {
+    console.error(err);
+    els.status.textContent = `VRM error: ${err.message}`;
   }
 }
 
@@ -216,7 +324,7 @@ async function onRun() {
     els.objective.textContent = Number.isFinite(result.ObjectiveValue)
       ? Number(result.ObjectiveValue).toFixed(2)
       : "—";
-    els.status.textContent = `Status: ${result.Status}`;
+    els.status.textContent = ` ${result.Status}`;
 
     const { rows } = parseSolution(result, cfg);
     renderTable(rows, cfg, !!els.tableKwh?.checked);
