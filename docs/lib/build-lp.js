@@ -35,6 +35,7 @@ export function buildLP({
     avoidExport: 2e-6, // stronger nudge: prefer pv used locally over pv→grid
     pvToLoad: 1e-6,    // weaker nudge: prefer pv→load over pv→battery
   }
+  const softMinSocPenalty_cents_per_Wh = 0.05; // penalty to keep soc above minSoc when possible
 
   // Unit helpers
   const stepHours = stepSize_m / 60; // hours per slot
@@ -59,6 +60,7 @@ export function buildLP({
   const batteryToLoad = (t) => `battery_to_load_${t}`;
   const batteryToGrid = (t) => `battery_to_grid_${t}`;
   const soc = (t) => `soc_${t}`;
+  const socShortfall = (t) => `soc_shortfall_${t}`;
 
   const lines = [];
 
@@ -78,6 +80,7 @@ export function buildLP({
     const batteryToGridCoeff = -exportCoeff_cents + batteryCost_cents; // export revenue + battery cost
     const batteryToLoadCoeff = batteryCost_cents; // battery cost
     const pvToBatteryCoeff = batteryCost_cents + TIEBREAK.pvToLoad; // battery cost
+    const socShortfallCoeff = softMinSocPenalty_cents_per_Wh; // penalty for being below minSoc
 
     // Add each variable to the objective once with its final coefficient
     if (gridToLoadCoeff !== 0) objTerms.push(` + ${toNum(gridToLoadCoeff)} ${gridToLoad(t)}`);
@@ -86,6 +89,7 @@ export function buildLP({
     if (batteryToGridCoeff !== 0) objTerms.push(` + ${toNum(batteryToGridCoeff)} ${batteryToGrid(t)}`);
     if (batteryToLoadCoeff !== 0) objTerms.push(` + ${toNum(batteryToLoadCoeff)} ${batteryToLoad(t)}`);
     if (pvToBatteryCoeff !== 0) objTerms.push(` + ${toNum(pvToBatteryCoeff)} ${pvToBattery(t)}`);
+    objTerms.push(` + ${toNum(socShortfallCoeff)} ${socShortfall(t)}`);
   }
   // Terminal SOC valuation
   if (terminalPrice_cents_per_Wh > 0) {
@@ -127,6 +131,10 @@ export function buildLP({
     // Grid import/export limits
     lines.push(` c_grid_import_cap_${t}: ${gridToLoad(t)} + ${gridToBattery(t)} <= ${maxGridImport_W}`);
     lines.push(` c_grid_export_cap_${t}: ${pvToGrid(t)} + ${batteryToGrid(t)} <= ${maxGridExport_W}`);
+
+    // Soft min SOC constraint
+    lines.push(` c_min_soc_${t}: ${socShortfall(t)} + ${soc(t)} >= ${minSoc_Wh}`);
+    lines.push(` ${socShortfall(t)} >= 0`);
   }
   lines.push("");
 
@@ -149,7 +157,8 @@ export function buildLP({
     lines.push(` 0 <= ${batteryToGrid(t)} <= ${toNum(Math.min(maxDischargePower_W, maxGridExport_W))}`);
 
     // SOC bounds
-    lines.push(` ${toNum(minSoc_Wh)} <= ${soc(t)} <= ${toNum(maxSoc_Wh)}`);
+    // minSoc handled via soft constraint
+    lines.push(` ${soc(t)} <= ${toNum(maxSoc_Wh)}`);
   }
   lines.push("");
 
