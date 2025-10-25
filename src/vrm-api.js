@@ -78,38 +78,52 @@ export class VRMClient {
   // ----------------------- Time-window helper utilities -----------------------
 
   /**
-   * Last full hour (UTC) → next midnight (UTC).
-   * @returns {{startSec:number,endSec:number,startMs:number,endMs:number}}
-   */
-  static windowLastHourToNextMidnightUTC() {
-    const now = new Date();
-    const utcNow = new Date(
-      Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate(),
-        now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds(), 0
-      )
-    );
-    // Start = last full hour (truncate minutes/seconds to :00)
-    const start = new Date(utcNow);
-    start.setUTCMinutes(0, 0, 0);
+ * windowOptimizationHorizon()
+ *
+ * Build the [start, end) window we want to ask VRM for.
+ *
+ * Rules:
+ * - Start: the last full local hour. Example: if it's 10:37, start = today 10:00 local.
+ * - End:
+ *     If local time < 13:00 → midnight tonight (start of tomorrow local day)
+ *     Else                  → midnight tomorrow night (start of the day after tomorrow local day)
+ *
+ * Returned as both ms and sec (epoch-based, i.e. UTC timestamps).
+ *
+ * Why epoch-based? The VRM API wants `start`/`end` as seconds since epoch (UTC).
+ * We do the time arithmetic in local time first — because "midnight" in your
+ * billing world is local midnight — then call .getTime() to convert to UTC ms.
+ */
+  static windowOptimizationHorizon() {
+    const nowLocal = new Date(); // browser local time
+    const y = nowLocal.getFullYear();
+    const m = nowLocal.getMonth();
+    const d = nowLocal.getDate();
+    const hr = nowLocal.getHours();
 
-    // If we were not exactly at hh:00, move start back to previous full hour
-    if (utcNow.getUTCMinutes() !== 0 || utcNow.getUTCSeconds() !== 0) {
-      start.setUTCHours(start.getUTCHours()); // already hh:00
-    }
+    // --- Start = last full hour local ---
+    // e.g. if it's 10:37, this becomes today 10:00 local
+    const startLocal = new Date(y, m, d, hr, 0, 0, 0);
 
-    // End = midnight (00:00) of the next day UTC
-    const end = new Date(start);
-    // If start is already at today's hh:00, go to next day 00:00
-    end.setUTCDate(end.getUTCDate() + 1);
-    end.setUTCHours(0, 0, 0, 0);
+    // --- End = local midnight depending on cutoff ---
+    // Before 13:00 → up to midnight tonight (= start of tomorrow)
+    // After / at 13:00 → up to midnight tomorrow (= start of day after tomorrow)
+    const dayOffset = (hr < 13) ? 1 : 2;
+    const endLocal = new Date(y, m, d + dayOffset, 0, 0, 0, 0);
 
-    const startMs = start.getTime();
-    const endMs = end.getTime();
-    return { startSec: Math.floor(startMs / 1000), endSec: Math.floor(endMs / 1000), startMs, endMs };
+    // Convert both local times to absolute UTC timestamps
+    // Date.getTime() is ms since epoch in UTC.
+    const startMs = startLocal.getTime();
+    const endMs = endLocal.getTime();
+
+    return {
+      startMs,
+      endMs,
+      startSec: Math.floor(startMs / 1000),
+      endSec: Math.floor(endMs / 1000)
+    };
   }
+
 
   // Make a continuous 15-min timeline in [startMs, endMs)
   static buildTimeline15Min(startMs, endMs) {
@@ -299,12 +313,23 @@ function boolish(v) { return v === true || v === 1 || v === '1'; }
  */
 function ensureWindow({ startSec, endSec, startMs, endMs } = {}) {
   if (startMs != null && endMs != null) {
-    return { startMs, endMs, startSec: Math.floor(startMs / 1000), endSec: Math.floor(endMs / 1000) };
+    return {
+      startMs,
+      endMs,
+      startSec: Math.floor(startMs / 1000),
+      endSec: Math.floor(endMs / 1000)
+    };
   }
   if (startSec != null && endSec != null) {
-    return { startSec, endSec, startMs: startSec * 1000, endMs: endSec * 1000 };
+    return {
+      startSec,
+      endSec,
+      startMs: startSec * 1000,
+      endMs: endSec * 1000
+    };
   }
-  return VRMClient.windowLastHourToNextMidnightUTC();
+  // default: build horizon based on local time + 13:00 rule
+  return VRMClient.windowOptimizationHorizon();
 }
 
 /**
