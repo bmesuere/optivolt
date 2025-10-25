@@ -31,6 +31,11 @@ export function buildLP({
     throw new Error("Arrays must have same length");
   }
 
+  const TIEBREAK = {
+    avoidExport: 2e-6, // stronger nudge: prefer pv used locally over pv→grid
+    pvToLoad: 1e-6,    // weaker nudge: prefer pv→load over pv→battery
+  }
+
   // Unit helpers
   const stepHours = stepSize_m / 60; // hours per slot
   const priceCoeff = stepHours / 1000; // converts c€/kWh * W  →  c€ over the slot: € * (W * h / 1000 kWh/W) = €
@@ -69,10 +74,10 @@ export function buildLP({
     // Aggregate coefficients for each variable
     const gridToLoadCoeff = importCoeff_cents; // import cost
     const gridToBatteryCoeff = importCoeff_cents + batteryCost_cents; // import cost + battery cost
-    const pvToGridCoeff = -exportCoeff_cents + 1e-6; // export revenue + slight penalty to prefer using PV locally
+    const pvToGridCoeff = -exportCoeff_cents + TIEBREAK.avoidExport; // export revenue + slight penalty to prefer using PV locally
     const batteryToGridCoeff = -exportCoeff_cents + batteryCost_cents; // export revenue + battery cost
     const batteryToLoadCoeff = batteryCost_cents; // battery cost
-    const pvToBatteryCoeff = batteryCost_cents; // battery cost
+    const pvToBatteryCoeff = batteryCost_cents + TIEBREAK.pvToLoad; // battery cost
 
     // Add each variable to the objective once with its final coefficient
     if (gridToLoadCoeff !== 0) objTerms.push(` + ${toNum(gridToLoadCoeff)} ${gridToLoad(t)}`);
