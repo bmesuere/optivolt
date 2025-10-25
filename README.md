@@ -18,8 +18,10 @@ Feed it your load, solar forecast, and tariffs, and it returns a day-long schedu
 - [x] Solar PV support
 - [x] Battery cost
 - [x] Terminal state of charge
-- [ ] html frontend
-- [ ] Fetch predictions from Victron
+- [x] html frontend
+- [x] Fetch predictions from Victron
+- [ ] Add experimental optimizer tweaks
+- [ ] Express API
 - [ ] Convert plan to Victron commands
 - [ ] EV charging model
 - [ ] Heat pump model
