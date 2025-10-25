@@ -63,20 +63,93 @@
   <main class="mx-auto max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3">
     <!-- Settings (sticky on large) -->
     <aside class="lg:col-span-1">
-      <div class="lg:sticky lg:top-6 space-y-6">
+      <div class="space-y-6">
+        <!-- VRM (Victron) integration -->
+        <section class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
+          <h2 class="text-base font-semibold mb-2">Victron VRM</h2>
+          <p class="text-xs text-ink-soft mb-4">
+            Enter your VRM site id and API token. The token is <b>stored only in this browser</b> and
+            used directly by this page to call the Victron API. It is <b>never</b> sent elsewhere.
+          </p>
+
+          <!-- credentials row -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label class="text-sm">Site id
+              <input id="vrm-site" type="text" inputmode="numeric" autocomplete="off"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+
+            <label class="text-sm">API token
+              <input id="vrm-token" type="password" autocomplete="off"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+
+            <div class="md:col-span-2">
+              <button id="vrm-clear" type="button"
+                class="inline-flex items-center gap-1.5 text-sm text-sky-700 underline-offset-4 hover:underline dark:text-sky-300">
+                <span aria-hidden="true">🧹</span>
+                <span>Clear credentials</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- action buttons -->
+          <div class="mt-4 flex flex-wrap items-center gap-3">
+            <button id="vrm-fetch-settings" type="button"
+              class="rounded-pill bg-sky-600 px-4 py-2 text-white shadow-soft hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+              Fetch settings
+            </button>
+
+            <button id="vrm-fetch-forecasts" type="button"
+              class="rounded-pill bg-sky-600 px-4 py-2 text-white shadow-soft hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+              Fetch forecasts &amp; prices
+            </button>
+          </div>
+        </section>
+        <section class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
+
+          <div class="flex flex-wrap items-center gap-3">
+            <button id="run"
+              class="rounded-pill bg-sky-600 px-4 py-2 text-white shadow-soft hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+              Recompute
+            </button>
+
+            <span class="text-xs text-ink-soft">Auto-runs on change</span>
+          </div>
+
+          <div class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-ink-soft dark:bg-slate-800/60">
+            <div>Total cost: <span id="objective" class="font-medium text-ink">—</span> c€</div>
+            <div class="mt-0.5">Status: <span id="status" class="font-medium text-ink">Initializing…</span></div>
+          </div>
+        </section>
         <section class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
           <div class="flex items-center justify-between mb-2">
             <h2 class="text-base font-semibold">Configuration</h2>
           </div>
 
+          <div class="mt-3 mb-3 flex flex-wrap items-center gap-3">
+
+            <button id="restore" type="button"
+              class="inline-flex items-center gap-1.5 text-sm text-sky-700 underline-offset-4 hover:underline dark:text-sky-300">
+              <span aria-hidden="true">↺</span>
+              <span>Restore defaults</span>
+            </button>
+
+            <button id="share" type="button"
+              class="inline-flex items-center gap-1.5 text-sm text-sky-700 underline-offset-4 hover:underline dark:text-sky-300">
+              <span aria-hidden="true">🔗</span>
+              <span>Share</span>
+            </button>
+          </div>
+
           <!-- Form grid: single column on small, two columns on md+ -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <!-- Capacity / SoC -->
+            <label class="text-sm">Initial SoC (%)
+              <input id="initsoc" type="number" value="20" class="mt-1 w-full rounded-md border border-green-400 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
             <label class="text-sm">Battery capacity (Wh)
               <input id="cap" type="number" value="20480" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-            <label class="text-sm">Initial SoC (%)
-              <input id="initsoc" type="number" value="20" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
             </label>
 
             <label class="text-sm">Min SoC (%)
@@ -124,7 +197,6 @@
             </label>
           </div>
 
-          <!-- Time series (Step moved here to the top of this block) -->
           <div class="mt-6 space-y-3">
             <div class="flex items-end justify-between gap-3">
               <p class="text-xs font-medium text-ink-soft">Time series (comma or whitespace separated)</p>
@@ -132,6 +204,16 @@
             <label class="block text-sm">Step (min)
               <input id="step" type="number" value="60"
                 class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <label class="block text-sm">
+              Start time
+              <input id="ts-start"
+                type="datetime-local"
+                class="mt-1 w-full rounded border p-2 text-sm"
+              />
+              <p class="mt-1 text-[11px] text-slate-500">
+                First slot timestamp. Filled automatically when loading from VRM.
+              </p>
             </label>
 
             <label class="block text-sm">Load (W)
@@ -146,37 +228,6 @@
             <label class="block text-sm">Export price (c€/kWh)
               <textarea id="ts-ec" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800">6.45074,5.893119999999999,5.391359999999999,5.409,5.09344,4.870979999999999,6.49092,7.481700000000001,7.60126,13.004,11.292919999999999,8.179459999999999,7.754140000000001,7.58754,6.456619999999999,6.700640000000001,6.0264,6.524239999999999,13.200000000000001,26.98174,16.96222,12.48558,9.45444,7.602239999999999</textarea>
             </label>
-          </div>
-
-          <div class="mt-5 flex flex-wrap items-center gap-3">
-            <button id="run"
-              class="rounded-pill bg-sky-600 px-4 py-2 text-white shadow-soft hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
-              Recompute
-            </button>
-
-            <button id="restore" type="button"
-              class="inline-flex items-center gap-1.5 text-sm text-sky-700 underline-offset-4 hover:underline dark:text-sky-300">
-              <span aria-hidden="true">↺</span>
-              <span>Restore defaults</span>
-            </button>
-
-            <button id="share" type="button"
-              class="inline-flex items-center gap-1.5 text-sm text-sky-700 underline-offset-4 hover:underline dark:text-sky-300">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                  fill="none" stroke="currentColor" stroke-width="2"
-                  class="h-4 w-4" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                  d="M13.5 6h2.25A2.25 2.25 0 0 1 18 8.25v2.25m-9 9H6.75A2.25 2.25 0 0 1 4.5 17.25V15m9-9L7.5 12m0 0 6 6" />
-              </svg>
-              <span>Share</span>
-            </button>
-
-            <span class="text-xs text-ink-soft">Auto-runs on change</span>
-          </div>
-
-          <div class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-ink-soft dark:bg-slate-800/60">
-            <div>Total cost: <span id="objective" class="font-medium text-ink">—</span> c€</div>
-            <div class="mt-0.5">Status: <span id="status" class="font-medium text-ink">Initializing…</span></div>
           </div>
         </section>
       </div>

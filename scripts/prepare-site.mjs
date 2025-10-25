@@ -14,6 +14,7 @@ const dstDir = path.join(root, "docs", "lib");
 const files = [
   "build-lp.js",
   "parse-solution.js",
+  "vrm-api.js"
 ];
 
 fs.mkdirSync(dstDir, { recursive: true });

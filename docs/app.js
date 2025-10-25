@@ -1,9 +1,11 @@
 // Import shared logic
 import { buildLP } from "./lib/build-lp.js";
 import { parseSolution } from "./lib/parse-solution.js";
+import { VRMClient } from "./lib/vrm-api.js";
 import { drawFlowsBarStackSigned, drawSocChart, drawPricesStepLines, drawLoadPvGrouped } from "./charts.js";
 
 const STORAGE_KEY = "optivolt-config-v1";
+const STORAGE_VRM_KEY = "optivolt-vrm-cred-v1";
 
 // ---- Defaults (match your latest example) ----
 const DEFAULTS = {
@@ -43,7 +45,7 @@ const els = {
   bwear: $("#bwear"), terminal: $("#terminal"),
 
   // textareas
-  tLoad: $("#ts-load"), tPV: $("#ts-pv"), tIC: $("#ts-ic"), tEC: $("#ts-ec"),
+  tLoad: $("#ts-load"), tPV: $("#ts-pv"), tIC: $("#ts-ic"), tEC: $("#ts-ec"), tsStart: $("#ts-start"),
 
   // charts + status
   flows: $("#flows"), soc: $("#soc"), prices: $("#prices"), loadpv: $("#loadpv"),
@@ -51,9 +53,18 @@ const els = {
   tableKwh: $("#table-kwh"),
   tableUnit: $("#table-unit"),
   status: $("#status"), objective: $("#objective"),
+
+  // VRM section
+  vrmSite: $("#vrm-site"),
+  vrmToken: $("#vrm-token"),
+  vrmFetchSettings: $("#vrm-fetch-settings"),
+  vrmFetchForecasts: $("#vrm-fetch-forecasts"),
+  vrmClear: $("#vrm-clear"),
 };
 
 let highs = null;
+let vrm = new VRMClient();
+let activeTimestampsMs = null;
 
 // --- simple debounce for auto-run ---
 let timer = null;
@@ -61,6 +72,73 @@ const debounceRun = () => {
   clearTimeout(timer);
   timer = setTimeout(onRun, 250);
 };
+
+// -------- timeline + scheduling helpers --------
+
+// activeTimestampsMs holds the canonical per-slot timestamps (ms since epoch)
+// for the currently loaded dataset. It is either:
+// - provided by VRM fetch (preferred, real-world timestamps), OR
+// - synthesized later based on the Start time field or "now".
+
+// Format a Date -> "YYYY-MM-DDTHH:MM" suitable for <input type="datetime-local">
+function toLocalDatetimeLocal(dt) {
+  const pad = (n) => String(n).padStart(2, "0");
+  const yyyy = dt.getFullYear();
+  const mm = pad(dt.getMonth() + 1);
+  const dd = pad(dt.getDate());
+  const HH = pad(dt.getHours());
+  const MM = pad(dt.getMinutes());
+  return `${yyyy}-${mm}-${dd}T${HH}:${MM}`;
+}
+
+/**
+ * Build the timing hints object we pass into parseSolution().
+ *
+ * priority:
+ * 1. If we already have a full timestamps array from VRM (activeTimestampsMs),
+ *    pass that as timestampsMs.
+ * 2. Otherwise, if the user entered a Start time in the form (els.tsStart),
+ *    parse that into startMs.
+ * 3. Always pass stepMin so parseSolution can synthesize a full array.
+ */
+function buildTimingHints(cfg) {
+  const hints = {
+    timestampsMs: null,
+    startMs: null,
+    stepMin: Number(cfg.stepSize_m) || 15
+  };
+
+  // 1. Prefer a full VRM-derived timeline if it matches our data length.
+  if (Array.isArray(activeTimestampsMs) &&
+    activeTimestampsMs.length === cfg.load_W.length) {
+    hints.timestampsMs = activeTimestampsMs.slice();
+    return hints;
+  }
+
+  // 2. Fall back to the Start time input.
+  if (els.tsStart && els.tsStart.value) {
+    const parsed = new Date(els.tsStart.value);
+    if (!isNaN(parsed.getTime())) {
+      hints.startMs = parsed.getTime();
+    }
+  }
+
+  return hints;
+}
+
+/**
+ * Convenience wrapper so onRun() stays clean.
+ * Calls parseSolution(result, cfg, hints) from lib,
+ * updates activeTimestampsMs from the returned canonical timestamps,
+ * and returns { rows, timestampsMs }.
+ */
+function runParseSolutionWithTiming(result, cfg) {
+  const hints = buildTimingHints(cfg);
+  const { rows, timestampsMs } = parseSolution(result, cfg, hints);
+  activeTimestampsMs = timestampsMs.slice(); // keep canonical timeline synced
+  return { rows, timestampsMs };
+}
+
 
 // ---------- Boot ----------
 boot();
@@ -78,6 +156,24 @@ async function boot() {
 
   // Manual recompute
   els.run?.addEventListener("click", onRun);
+
+  // Load VRM creds from storage (separate secret store)
+  hydrateVRM(loadVRMFromStorage());
+
+  // Save VRM creds when fields change
+  for (const el of [els.vrmSite, els.vrmToken]) {
+    el?.addEventListener("input", () => saveVRMToStorage(snapshotVRM()));
+    el?.addEventListener("change", () => saveVRMToStorage(snapshotVRM()));
+  }
+
+  // VRM actions
+  els.vrmClear?.addEventListener("click", () => {
+    clearVRMStorage();
+    hydrateVRM({ installationId: "", token: "" });
+  });
+
+  els.vrmFetchSettings?.addEventListener("click", onFetchVRMSettings);
+  els.vrmFetchForecasts?.addEventListener("click", onFetchVRMForecasts);
 
   // Units toggle recompute
   els.tableKwh?.addEventListener("change", () => {
@@ -128,6 +224,29 @@ function loadFromStorage() {
     return s ? JSON.parse(s) : null;
   } catch { return null; }
 }
+function saveVRMToStorage(obj) {
+  try { localStorage.setItem(STORAGE_VRM_KEY, JSON.stringify(obj)); } catch { }
+}
+function loadVRMFromStorage() {
+  try { const s = localStorage.getItem(STORAGE_VRM_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
+}
+function clearVRMStorage() {
+  try { localStorage.removeItem(STORAGE_VRM_KEY); } catch { }
+}
+function snapshotVRM() {
+  return {
+    installationId: (els.vrmSite?.value || "").trim(),
+    token: (els.vrmToken?.value || "").trim(),
+  };
+}
+function hydrateVRM(obj) {
+  const installationId = obj?.installationId || "";
+  const token = obj?.token || "";
+  if (els.vrmSite) els.vrmSite.value = installationId;
+  if (els.vrmToken) els.vrmToken.value = token;
+  vrm.setAuth({ installationId, token });
+}
+
 // --- URL share helpers (URL-safe base64 of the snapshot JSON) ---
 function encodeConfigToQuery(obj) {
   const json = JSON.stringify(obj);
@@ -147,6 +266,78 @@ function decodeConfigFromQuery() {
     return JSON.parse(json);
   } catch {
     return null;
+  }
+}
+
+async function onFetchVRMSettings() {
+  try {
+    hydrateVRM(snapshotVRM()); // ensure client has latest
+    els.status.textContent = "Fetching VRM settings…";
+    const s = await vrm.fetchDynamicEssSettings();
+
+    // Map settings into the form where reasonable (keep user's current values if VRM returns 0/null)
+    setIfFinite(els.cap, s.batteryCapacity_Wh);
+    setIfFinite(els.pdis, s.dischargePower_W || s.limits?.batteryDischargeLimit_W);
+    setIfFinite(els.pchg, s.chargePower_W || s.limits?.batteryChargeLimit_W);
+    setIfFinite(els.gimp, s.maxPowerFromGrid_W || s.limits?.gridImportLimit_W);
+    setIfFinite(els.gexp, s.maxPowerToGrid_W || s.limits?.gridExportLimit_W);
+
+    // Battery cost → c€/kWh
+    if (Number.isFinite(s.batteryCosts_cents_per_kWh)) {
+      els.bwear.value = s.batteryCosts_cents_per_kWh;
+    }
+
+    saveToStorage(snapshotUI());
+    els.status.textContent = "Settings loaded from VRM.";
+    await onRun();
+  } catch (err) {
+    console.error(err);
+    els.status.textContent = `VRM error: ${err.message}`;
+  }
+}
+function setIfFinite(input, v) { if (Number.isFinite(v) && input) input.value = String(v); }
+
+async function onFetchVRMForecasts() {
+  try {
+    hydrateVRM(snapshotVRM()); // ensure client has latest credentials
+    els.status.textContent = "Fetching VRM forecasts & prices…";
+
+    // Ask VRM for forecasts + prices using its built-in horizon logic
+    const [fc, pr] = await Promise.all([
+      vrm.fetchForecasts(),
+      vrm.fetchPrices()
+    ]);
+
+    // If VRM returned explicit timestamps, adopt them as canonical.
+    if (Array.isArray(fc.timestamps) && fc.timestamps.length > 0) {
+      activeTimestampsMs = fc.timestamps.slice();
+
+      // Write the first timestamp back into the Start time field so we persist it
+      if (els.tsStart) {
+        const firstMs = fc.timestamps[0];
+        els.tsStart.value = toLocalDatetimeLocal(new Date(firstMs));
+      }
+    } else {
+      activeTimestampsMs = null;
+    }
+
+    // Force our step size to match VRM dataset (usually 15 min)
+    if (els.step) els.step.value = fc.step_minutes || 15;
+
+    // Fill in the per-slot series from VRM
+    if (els.tLoad) els.tLoad.value = (fc.load_W || []).join(",");
+    if (els.tPV) els.tPV.value = (fc.pv_W || []).join(",");
+    if (els.tIC) els.tIC.value = (pr.importPrice_cents_per_kwh || []).join(",");
+    if (els.tEC) els.tEC.value = (pr.exportPrice_cents_per_kwh || []).join(",");
+
+    // Persist the full UI state (now including tsStart) in localStorage
+    saveToStorage(snapshotUI());
+
+    els.status.textContent = "Forecasts & prices loaded from VRM.";
+    await onRun();
+  } catch (err) {
+    console.error(err);
+    els.status.textContent = `VRM error: ${err.message}`;
   }
 }
 
@@ -172,6 +363,7 @@ function snapshotUI() {
     pv_W_txt: els.tPV.value,
     importPrice_txt: els.tIC.value,
     exportPrice_txt: els.tEC.value,
+    tsStart: els.tsStart?.value || "",
     tableShowKwh: !!els.tableKwh?.checked,
   };
 }
@@ -199,8 +391,10 @@ function hydrateUI(obj) {
   els.tPV.value = obj.pv_W_txt ?? DEFAULTS.pv_W_txt;
   els.tIC.value = obj.importPrice_txt ?? DEFAULTS.importPrice_txt;
   els.tEC.value = obj.exportPrice_txt ?? DEFAULTS.exportPrice_txt;
+  els.tsStart.value = obj.tsStart || "";
   if (els.tableKwh) els.tableKwh.checked = !!(obj.tableShowKwh ?? DEFAULTS.tableShowKwh);
 }
+
 
 // ---------- Main compute ----------
 async function onRun() {
@@ -208,29 +402,33 @@ async function onRun() {
     const cfg = uiToConfig();
     const lpText = buildLP(cfg);
 
-    // keep a copy in storage whenever we run
+    // keep a copy in storage whenever we run (includes tsStart etc.)
     saveToStorage(snapshotUI());
 
     const result = highs.solve(lpText);
 
+    // report solver status + cost
     els.objective.textContent = Number.isFinite(result.ObjectiveValue)
       ? Number(result.ObjectiveValue).toFixed(2)
       : "—";
-    els.status.textContent = `Status: ${result.Status}`;
+    els.status.textContent = ` ${result.Status}`;
 
-    const { rows } = parseSolution(result, cfg);
-    renderTable(rows, cfg, !!els.tableKwh?.checked);
+    // parseSolution (library) with proper timing hints
+    const { rows, timestampsMs } = runParseSolutionWithTiming(result, cfg);
 
-    // Charts
-    drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m);
-    drawSocChart(els.soc, rows, cfg.batteryCapacity_Wh);
-    drawPricesStepLines(els.prices, rows);
-    drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m);
+    // table + charts now use the canonical timestampsMs
+    renderTable(rows, cfg, timestampsMs);
+
+    drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, timestampsMs);
+    drawSocChart(els.soc, rows, cfg.batteryCapacity_Wh, cfg.stepSize_m, timestampsMs);
+    drawPricesStepLines(els.prices, rows, cfg.stepSize_m, timestampsMs);
+    drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m, timestampsMs);
   } catch (err) {
     console.error(err);
     els.status.textContent = `Error: ${err.message}`;
   }
 }
+
 
 function uiToConfig() {
   const load_W = parseSeries(els.tLoad.value);
@@ -265,35 +463,128 @@ function uiToConfig() {
   };
 }
 
-function renderTable(rows, cfg, showKwh = false) {
+function renderTable(rows, cfg, timestampsMs) {
+  // read current unit toggle once
+  const showKwh = !!els.tableKwh?.checked;
+
+  // battery capacity (for SoC%)
   const cap = Math.max(1e-9, Number(cfg?.batteryCapacity_Wh ?? 20480));
-  const h = Math.max(0.000001, Number(cfg?.stepSize_m ?? 60) / 60); // slot hours
+
+  // slot duration for W→kWh conversion
+  const h = Math.max(0.000001, Number(cfg?.stepSize_m ?? 60) / 60); // hours per slot
   const W2kWh = (x) => (Number(x) || 0) * h / 1000;
 
-  // Model: key, headerHtml (with <br>), fmt, optional tooltip
+  // build human-readable time labels
+  const timesDisp = timestampsMs.map(ms => {
+    const dt = new Date(ms);
+    const HH = String(dt.getHours()).padStart(2, "0");
+    const MM = String(dt.getMinutes()).padStart(2, "0");
+
+    if (dt.getMinutes() === 0) {
+      if (dt.getHours() === 0) {
+        const dd = String(dt.getDate()).padStart(2, "0");
+        const mm = String(dt.getMonth() + 1).padStart(2, "0");
+        return `${dd}/${mm}`;
+      }
+      return `${HH}:00`;
+    }
+    return `${HH}:${MM}`;
+  });
+
   const cols = [
-    { key: "t", headerHtml: "t", fmt: (v) => v },
-    { key: "load", headerHtml: "Exp.<br>load", fmt: (x) => fmtEnergy(x, { dash: false, forecast: true }), tip: "Expected Load" },
-    { key: "pv", headerHtml: "Exp.<br>PV", fmt: (x) => fmtEnergy(x, { dash: false, forecast: true }), tip: "Expected PV" },
+    {
+      key: "time",
+      headerHtml: "Time",
+      fmt: (_, idx) => timesDisp[idx]
+    },
 
-    { key: "ic", headerHtml: "Import<br>cost", fmt: dec2Thin },
-    { key: "ec", headerHtml: "Export<br>cost", fmt: dec2Thin },
+    {
+      key: "load",
+      headerHtml: "Exp.<br>load",
+      fmt: (x) => fmtEnergy(x, { dash: false }),
+      tip: "Expected Load"
+    },
+    {
+      key: "pv",
+      headerHtml: "Exp.<br>PV",
+      fmt: (x) => fmtEnergy(x, { dash: false }),
+      tip: "Expected PV"
+    },
 
-    { key: "g2l", headerHtml: "g2l", fmt: (x) => fmtEnergy(x, { dash: true }), tip: "Grid → Load" },
-    { key: "g2b", headerHtml: "g2b", fmt: (x) => fmtEnergy(x, { dash: true }), tip: "Grid → Battery" },
-    { key: "pv2l", headerHtml: "pv2l", fmt: (x) => fmtEnergy(x, { dash: true }), tip: "Solar → Load" },
-    { key: "pv2b", headerHtml: "pv2b", fmt: (x) => fmtEnergy(x, { dash: true }), tip: "Solar → Battery" },
-    { key: "pv2g", headerHtml: "pv2g", fmt: (x) => fmtEnergy(x, { dash: true }), tip: "Solar → Grid" },
-    { key: "b2l", headerHtml: "b2l", fmt: (x) => fmtEnergy(x, { dash: true }), tip: "Battery → Load" },
-    { key: "b2g", headerHtml: "b2g", fmt: (x) => fmtEnergy(x, { dash: true }), tip: "Battery → Grid" },
+    {
+      key: "ic",
+      headerHtml: "Import<br>cost",
+      fmt: dec2Thin
+    },
+    {
+      key: "ec",
+      headerHtml: "Export<br>cost",
+      fmt: dec2Thin
+    },
 
-    { key: "imp", headerHtml: "Grid<br>import", fmt: (x) => fmtEnergy(x, { dash: true }), tip: "Grid Import" },
-    { key: "exp", headerHtml: "Grid<br>export", fmt: (x) => fmtEnergy(x, { dash: true }), tip: "Grid Export" },
+    {
+      key: "g2l",
+      headerHtml: "g2l",
+      fmt: (x) => fmtEnergy(x, { dash: true }),
+      tip: "Grid → Load"
+    },
+    {
+      key: "g2b",
+      headerHtml: "g2b",
+      fmt: (x) => fmtEnergy(x, { dash: true }),
+      tip: "Grid → Battery"
+    },
+    {
+      key: "pv2l",
+      headerHtml: "pv2l",
+      fmt: (x) => fmtEnergy(x, { dash: true }),
+      tip: "Solar → Load"
+    },
+    {
+      key: "pv2b",
+      headerHtml: "pv2b",
+      fmt: (x) => fmtEnergy(x, { dash: true }),
+      tip: "Solar → Battery"
+    },
+    {
+      key: "pv2g",
+      headerHtml: "pv2g",
+      fmt: (x) => fmtEnergy(x, { dash: true }),
+      tip: "Solar → Grid"
+    },
+    {
+      key: "b2l",
+      headerHtml: "b2l",
+      fmt: (x) => fmtEnergy(x, { dash: true }),
+      tip: "Battery → Load"
+    },
+    {
+      key: "b2g",
+      headerHtml: "b2g",
+      fmt: (x) => fmtEnergy(x, { dash: true }),
+      tip: "Battery → Grid"
+    },
 
-    { key: "soc", headerHtml: "SoC", fmt: (w) => pct0(w / cap) + "%" },
+    {
+      key: "imp",
+      headerHtml: "Grid<br>import",
+      fmt: (x) => fmtEnergy(x, { dash: true }),
+      tip: "Grid Import"
+    },
+    {
+      key: "exp",
+      headerHtml: "Grid<br>export",
+      fmt: (x) => fmtEnergy(x, { dash: true }),
+      tip: "Grid Export"
+    },
+
+    {
+      key: "soc",
+      headerHtml: "SoC",
+      fmt: (w) => pct0(w / cap) + "%"
+    }
   ];
 
-  // Header
   const thead = `
     <thead>
       <tr class="align-bottom">
@@ -303,22 +594,38 @@ function renderTable(rows, cfg, showKwh = false) {
       </tr>
     </thead>`;
 
-  // Body
   const tbody = `
-    <tbody>
-      ${rows.map(r => `
-        <tr>
-          ${cols.map(c => `<td class="px-2 py-1 border-b text-right font-mono tabular-nums">${c.fmt(r[c.key])}</td>`).join("")}
-        </tr>`).join("")}
-    </tbody>`;
+  <tbody>
+    ${rows.map((r, ri) => {
+    // Determine if this row is a midnight boundary.
+    // We call the time formatter once here.
+    const timeLabel = cols[0].fmt(null, ri); // assuming cols[0] is the "time" column
+    const isMidnightRow = /^\d{2}\/\d{2}$/.test(timeLabel);
+
+    // Build the row's <td> cells, all bold if midnight.
+    const tds = cols.map(c => {
+      let displayVal;
+      if (c.key === "time") {
+        displayVal = timeLabel;
+      } else {
+        displayVal = c.fmt(r[c.key], ri);
+      }
+
+      return `<td class="px-2 py-1 border-b text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${displayVal}</td>`;
+    }).join("");
+
+    return `<tr>${tds}</tr>`;
+  }).join("")}
+  </tbody>`;
 
   els.table.innerHTML = thead + tbody;
 
-  // Update the unit badge
-  if (els.tableUnit) els.tableUnit.textContent = `Units: ${showKwh ? "kWh" : "W"}`;
+  if (els.tableUnit) {
+    els.tableUnit.textContent = `Units: ${showKwh ? "kWh" : "W"}`;
+  }
 
-  // ---------- formatters ----------
-  function fmtEnergy(x, { dash = false, forecast = false } = {}) {
+  // helpers
+  function fmtEnergy(x, { dash = false } = {}) {
     const raw = Number(x) || 0;
     if (showKwh) {
       const val = W2kWh(raw);
@@ -327,13 +634,14 @@ function renderTable(rows, cfg, showKwh = false) {
     } else {
       const n = Math.round(raw);
       if (dash && n === 0) return "–";
-      return intThin(n); // forecasts keep zeros via dash:false above
+      return intThin(n);
     }
   }
 
   function intThin(x) {
     return groupThin(Math.round(Number(x) || 0));
   }
+
   function dec2Thin(x) {
     const n = Number(x);
     if (!Number.isFinite(n)) return "";
@@ -341,10 +649,12 @@ function renderTable(rows, cfg, showKwh = false) {
     const [i, f] = s.split(".");
     return `${groupThin(i)}.${f}`;
   }
+
   function pct0(x) {
     const n = (Number(x) || 0) * 100;
     return groupThin(Math.round(n));
   }
+
   function groupThin(numOrStr) {
     const s = String(numOrStr);
     const neg = s.startsWith("-") ? "-" : "";
@@ -353,12 +663,17 @@ function renderTable(rows, cfg, showKwh = false) {
     const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, "\u2009");
     return parts.length > 1 ? `${neg}${intPart}.${parts[1]}` : `${neg}${intPart}`;
   }
+
   function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]));
+    return String(str).replace(/[&<>"']/g, m => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "\"": "&quot;",
+      "'": "&#039;"
+    }[m]));
   }
 }
-
-
 
 // ---------- small utils ----------
 function parseSeries(s) { return (s || "").split(/[\s,]+/).map(Number).filter((x) => Number.isFinite(x)); }
