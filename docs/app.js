@@ -302,7 +302,7 @@ function hydrateVRM(obj) {
   vrm.setBaseURL(proxyBaseURL);
   vrm.setAuth({ installationId, token });
 
-  reorderSidebar(); // unchanged
+  reorderSidebar();
 }
 
 // --- URL share helpers (URL-safe base64 of the snapshot JSON) ---
