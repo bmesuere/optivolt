@@ -300,12 +300,13 @@ function setIfFinite(input, v) { if (Number.isFinite(v) && input) input.value = 
 async function onFetchVRMForecasts() {
   try {
     hydrateVRM(snapshotVRM()); // ensure client has latest credentials
-    els.status.textContent = "Fetching VRM forecasts & prices…";
+    els.status.textContent = "Fetching VRM forecasts, prices & SoC…";
 
-    // Ask VRM for forecasts + prices using its built-in horizon logic
-    const [fc, pr] = await Promise.all([
+    // Fetch everything in parallel (forecasts, prices, and current SoC)
+    const [fc, pr, soc] = await Promise.all([
       vrm.fetchForecasts(),
-      vrm.fetchPrices()
+      vrm.fetchPrices(),
+      typeof vrm.fetchCurrentSoc === "function" ? vrm.fetchCurrentSoc() : Promise.resolve(null)
     ]);
 
     // If VRM returned explicit timestamps, adopt them as canonical.
@@ -330,10 +331,23 @@ async function onFetchVRMForecasts() {
     if (els.tIC) els.tIC.value = (pr.importPrice_cents_per_kwh || []).join(",");
     if (els.tEC) els.tEC.value = (pr.exportPrice_cents_per_kwh || []).join(",");
 
-    // Persist the full UI state (now including tsStart) in localStorage
+    // If SoC is available, set it in the Initial SoC input
+    if (soc && Number.isFinite(soc.soc_percent)) {
+      const clamped = Math.max(0, Math.min(100, Number(soc.soc_percent)));
+      if (els.initsoc) els.initsoc.value = String(clamped);
+    }
+
+    // Persist the full UI state (now including tsStart and initsoc) in localStorage
     saveToStorage(snapshotUI());
 
-    els.status.textContent = "Forecasts & prices loaded from VRM.";
+    // Nice status line (optionally include timestamp if present)
+    if (soc && Number.isFinite(soc.soc_percent)) {
+      const t = soc.timestampMs ? ` @ ${new Date(soc.timestampMs).toLocaleString()}` : "";
+      els.status.textContent = `Forecasts, prices & SoC loaded from VRM (SoC ${soc.soc_percent}%${t}).`;
+    } else {
+      els.status.textContent = "Forecasts & prices loaded from VRM (SoC unavailable).";
+    }
+
     await onRun();
   } catch (err) {
     console.error(err);

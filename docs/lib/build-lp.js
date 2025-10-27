@@ -134,7 +134,6 @@ export function buildLP({
 
     // Soft min SOC constraint
     lines.push(` c_min_soc_${t}: ${socShortfall(t)} + ${soc(t)} >= ${minSoc_Wh}`);
-    lines.push(` ${socShortfall(t)} >= 0`);
   }
   lines.push("");
 
@@ -159,6 +158,7 @@ export function buildLP({
     // SOC bounds
     // minSoc handled via soft constraint
     lines.push(` ${soc(t)} <= ${toNum(maxSoc_Wh)}`);
+    lines.push(` ${socShortfall(t)} >= 0`);
   }
   lines.push("");
 
