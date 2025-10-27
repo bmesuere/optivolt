@@ -186,6 +186,39 @@ export class VRMClient {
     return settings;
   }
 
+  // ------------------------------ Current SoC ------------------------------
+
+  async fetchCurrentSoc() {
+    if (!this.installationId) throw new Error('Missing installationId');
+
+    // Pull diagnostics; count is generous to ensure the SoC entry is included
+    const data = await this._fetch(
+      `/installations/${this.installationId}/diagnostics`,
+      { query: { count: 1000 } }
+    );
+
+    if (!data?.success || !Array.isArray(data.records)) {
+      throw new Error('diagnostics: invalid payload');
+    }
+
+    // Use the exact record you showed: /Dc/Battery/Soc → take rawValue
+    const r =
+      data.records.find(rec => rec.dbusPath === '/Dc/Battery/Soc')
+      // light fallback if the exact path isn’t present
+      || data.records.find(rec => rec.description === 'Battery SOC');
+
+    if (!r || typeof r.rawValue !== 'number') {
+      return { soc_percent: null, timestampMs: null, raw: data };
+    }
+
+    // Bound to [0,100] just to be tidy; keep timestamp (seconds → ms)
+    const soc = Math.max(0, Math.min(100, r.rawValue));
+    const timestampMs = r.timestamp != null ? Number(r.timestamp) * 1000 : null;
+
+    return { soc_percent: soc, timestampMs, raw: data };
+  }
+
+
   // -------------------------- Forecasts (load + PV) ---------------------------
 
   /**
