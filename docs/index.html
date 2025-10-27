@@ -61,131 +61,18 @@
 
   <!-- Main -->
   <main class="mx-auto max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3">
-    <!-- Settings (sticky on large) -->
+    <!-- Settings (independent scroll on large) -->
     <aside class="lg:col-span-1">
-      <div class="space-y-6">
-        <!-- VRM (Victron) integration -->
-        <section class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
-          <h2 class="text-base font-semibold mb-2">Victron VRM</h2>
-          <p class="text-xs text-ink-soft mb-4">
-            Enter your VRM site id and API token. The token is <b>stored only in this browser</b> and
-            used directly by this page to call the Victron API. It is <b>never</b> sent elsewhere.
-          </p>
+      <div id="sidebar-stack"
+          class="space-y-6 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
 
-          <!-- credentials row -->
+        <!-- Settings (Algorithm) -->
+        <section id="card-algo" class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
+          <div class="mb-3 flex items-center justify-between">
+            <h2 class="text-base font-semibold">Settings</h2>
+          </div>
+
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <label class="text-sm">Site id
-              <input id="vrm-site" type="text" inputmode="numeric" autocomplete="off"
-                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-
-            <label class="text-sm">API token
-              <input id="vrm-token" type="password" autocomplete="off"
-                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-
-            <div class="md:col-span-2">
-              <button id="vrm-clear" type="button"
-                class="inline-flex items-center gap-1.5 text-sm text-sky-700 underline-offset-4 hover:underline dark:text-sky-300">
-                <span aria-hidden="true">🧹</span>
-                <span>Clear credentials</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- action buttons -->
-          <div class="mt-4 flex flex-wrap items-center gap-3">
-            <button id="vrm-fetch-settings" type="button"
-              class="rounded-pill bg-sky-600 px-4 py-2 text-white shadow-soft hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
-              Fetch settings
-            </button>
-
-            <button id="vrm-fetch-forecasts" type="button"
-              class="rounded-pill bg-sky-600 px-4 py-2 text-white shadow-soft hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
-              Fetch forecasts &amp; prices
-            </button>
-          </div>
-        </section>
-        <section class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
-
-          <div class="flex flex-wrap items-center gap-3">
-            <button id="run"
-              class="rounded-pill bg-sky-600 px-4 py-2 text-white shadow-soft hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
-              Recompute
-            </button>
-
-            <span class="text-xs text-ink-soft">Auto-runs on change</span>
-          </div>
-
-          <div class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-ink-soft dark:bg-slate-800/60">
-            <div>Total cost: <span id="objective" class="font-medium text-ink">—</span> c€</div>
-            <div class="mt-0.5">Status: <span id="status" class="font-medium text-ink">Initializing…</span></div>
-          </div>
-        </section>
-        <section class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
-          <div class="flex items-center justify-between mb-2">
-            <h2 class="text-base font-semibold">Configuration</h2>
-          </div>
-
-          <div class="mt-3 mb-3 flex flex-wrap items-center gap-3">
-
-            <button id="restore" type="button"
-              class="inline-flex items-center gap-1.5 text-sm text-sky-700 underline-offset-4 hover:underline dark:text-sky-300">
-              <span aria-hidden="true">↺</span>
-              <span>Restore defaults</span>
-            </button>
-
-            <button id="share" type="button"
-              class="inline-flex items-center gap-1.5 text-sm text-sky-700 underline-offset-4 hover:underline dark:text-sky-300">
-              <span aria-hidden="true">🔗</span>
-              <span>Share</span>
-            </button>
-          </div>
-
-          <!-- Form grid: single column on small, two columns on md+ -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <!-- Capacity / SoC -->
-            <label class="text-sm">Initial SoC (%)
-              <input id="initsoc" type="number" value="20" class="mt-1 w-full rounded-md border border-green-400 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-            <label class="text-sm">Battery capacity (Wh)
-              <input id="cap" type="number" value="20480" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-
-            <label class="text-sm">Min SoC (%)
-              <input id="minsoc" type="number" value="20" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-            <label class="text-sm">Max SoC (%)
-              <input id="maxsoc" type="number" value="100" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-
-            <!-- Power limits -->
-            <label class="text-sm">Maximum charge speed (W)
-              <input id="pchg" type="number" value="3600" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-            <label class="text-sm">Maximum discharge speed (W)
-              <input id="pdis" type="number" value="4000" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-            <label class="text-sm">Max grid import (W)
-              <input id="gimp" type="number" value="2500" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-            <label class="text-sm">Max grid export (W)
-              <input id="gexp" type="number" value="5000" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-
-            <!-- Efficiencies -->
-            <label class="text-sm">Charge efficiency (%)
-              <input id="etaC" type="number" value="95" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-            <label class="text-sm">Discharge efficiency (%)
-              <input id="etaD" type="number" value="95" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-
-            <!-- Economics (nowrap titles to keep alignment) -->
-            <label class="text-sm">
-              <span class="whitespace-nowrap">Battery cost (c€/kWh)</span>
-              <input id="bwear" type="number" value="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
             <label class="text-sm">
               <span class="whitespace-nowrap">Terminal SoC valuation</span>
               <select id="terminal" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800">
@@ -197,41 +84,168 @@
             </label>
           </div>
 
-          <div class="mt-6 space-y-3">
-            <div class="flex items-end justify-between gap-3">
-              <p class="text-xs font-medium text-ink-soft">Time series (comma or whitespace separated)</p>
-            </div>
-            <label class="block text-sm">Step (min)
+          <!-- Recompute BELOW fields -->
+          <div class="mt-4">
+            <button id="run"
+              class="rounded-pill bg-sky-600 px-4 py-2 text-white shadow-soft hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+              Recompute
+            </button>
+          </div>
+
+          <div class="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-sm text-ink-soft dark:bg-slate-800/60">
+            <div>Total cost: <span id="objective" class="font-medium text-ink">—</span> c€</div>
+            <div class="mt-0.5">Status: <span id="status" class="font-medium text-ink">Initializing…</span></div>
+          </div>
+        </section>
+
+        <!-- Data -->
+        <section id="card-data" class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
+          <div class="mb-3 flex items-center justify-between">
+            <h2 class="text-base font-semibold">Data</h2>
+            <button id="vrm-fetch-forecasts" type="button"
+              class="inline-flex items-center gap-2 rounded-pill border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+              <!-- autorenew icon -->
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24"><title>autorenew</title><path d="M12,6V9L16,5L12,1V4A8,8 0 0,0 4,12C4,13.57 4.46,15.03 5.24,16.26L6.7,14.8C6.25,13.97 6,13 6,12A6,6 0 0,1 12,6M18.76,7.74L17.3,9.2C17.74,10.04 18,11 18,12A6,6 0 0,1 12,18V15L8,19L12,23V20A8,8 0 0,0 20,12C20,10.43 19.54,8.97 18.76,7.74Z"/></svg>
+              <span>Update</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label class="text-sm">Current SoC (%)
+              <input id="initsoc" type="number" value="20"
+                class="mt-1 w-full rounded-md border border-green-400 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+
+            <label class="text-sm">Step (min)
               <input id="step" type="number" value="60"
                 class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
             </label>
-            <label class="block text-sm">
-              Start time
-              <input id="ts-start"
-                type="datetime-local"
-                class="mt-1 w-full rounded border p-2 text-sm"
-              />
+
+            <label class="text-sm md:col-span-2">Start time
+              <input id="ts-start" type="datetime-local"
+                class="mt-1 w-full rounded border p-2 text-sm" />
               <p class="mt-1 text-[11px] text-slate-500">
                 First slot timestamp. Filled automatically when loading from VRM.
               </p>
             </label>
 
-            <label class="block text-sm">Load (W)
-              <textarea id="ts-load" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800">280,250,360,420,1230,190,190,490,490,360,670,1750,340,640,360,880,650,900,540,500,480,480,480,290</textarea>
+            <div class="md:col-span-2 space-y-3">
+              <p class="text-xs font-medium text-ink-soft">Time series (comma or whitespace separated)</p>
+              <label class="block text-sm">Load (W)
+                <textarea id="ts-load" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800"></textarea>
+              </label>
+              <label class="block text-sm">PV (W)
+                <textarea id="ts-pv" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800"></textarea>
+              </label>
+              <label class="block text-sm">Import price (c€/kWh)
+                <textarea id="ts-ic" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800"></textarea>
+              </label>
+              <label class="block text-sm">Export price (c€/kWh)
+                <textarea id="ts-ec" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800"></textarea>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- System settings (Fixed) -->
+        <section id="card-system" class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
+          <div class="mb-3 flex items-center justify-between">
+            <h2 class="text-base font-semibold">System settings</h2>
+            <button id="vrm-fetch-settings" type="button"
+              class="inline-flex items-center gap-2 rounded-pill border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+              <!-- autorenew icon -->
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24"><title>autorenew</title><path d="M12,6V9L16,5L12,1V4A8,8 0 0,0 4,12C4,13.57 4.46,15.03 5.24,16.26L6.7,14.8C6.25,13.97 6,13 6,12A6,6 0 0,1 12,6M18.76,7.74L17.3,9.2C17.74,10.04 18,11 18,12A6,6 0 0,1 12,18V15L8,19L12,23V20A8,8 0 0,0 20,12C20,10.43 19.54,8.97 18.76,7.74Z"/></svg>
+              <span class="hidden sm:inline">Fetch settings</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <!-- Row 1: Capacity + Battery cost -->
+            <label class="text-sm">Battery capacity (Wh)
+              <input id="cap" type="number"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
             </label>
-            <label class="block text-sm">PV (W)
-              <textarea id="ts-pv" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800">0,0,0,0,0,0,0,0,40,120,480,700,920,910,940,670,520,290,60,0,0,0,0,0</textarea>
+            <label class="text-sm">
+              <span class="whitespace-nowrap">Battery cost (c€/kWh)</span>
+              <input id="bwear" type="number"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
             </label>
-            <label class="block text-sm">Import price (c€/kWh)
-              <textarea id="ts-ic" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800">22.258065600000002,21.642862800000003,21.0892884,21.10875,20.760603600000003,20.515171200000005,22.302394800000002,23.395488,23.527394400000006,29.488050000000005,27.600274800000005,24.1653024,23.696061600000004,23.5122576,22.264552800000004,22.5337716,21.789906000000002,22.3391556,29.704290000000004,44.90920560000001,33.8550168,28.9160952,25.5719436,23.5284756</textarea>
+
+            <!-- Row 2: Min/Max SoC -->
+            <label class="text-sm">Min SoC (%)
+              <input id="minsoc" type="number"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
             </label>
-            <label class="block text-sm">Export price (c€/kWh)
-              <textarea id="ts-ec" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800">6.45074,5.893119999999999,5.391359999999999,5.409,5.09344,4.870979999999999,6.49092,7.481700000000001,7.60126,13.004,11.292919999999999,8.179459999999999,7.754140000000001,7.58754,6.456619999999999,6.700640000000001,6.0264,6.524239999999999,13.200000000000001,26.98174,16.96222,12.48558,9.45444,7.602239999999999</textarea>
+            <label class="text-sm">Max SoC (%)
+              <input id="maxsoc" type="number"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
             </label>
+
+            <!-- Row 3: Charge/Discharge -->
+            <label class="text-sm">Maximum charge speed (W)
+              <input id="pchg" type="number"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <label class="text-sm">Maximum discharge speed (W)
+              <input id="pdis" type="number"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+
+            <!-- Row 4: Grid import/export -->
+            <label class="text-sm">Max grid import (W)
+              <input id="gimp" type="number"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <label class="text-sm">Max grid export (W)
+              <input id="gexp" type="number"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+
+            <!-- Row 5: Efficiencies -->
+            <label class="text-sm">Charge efficiency (%)
+              <input id="etaC" type="number"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <label class="text-sm">Discharge efficiency (%)
+              <input id="etaD" type="number"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+          </div>
+        </section>
+
+        <!-- Victron VRM -->
+        <section id="card-vrm" class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
+          <div class="mb-2 flex items-center justify-between">
+            <h2 class="text-base font-semibold">Victron VRM</h2>
+            <span id="badge-vrm" class="text-xs text-ink-soft"></span>
+          </div>
+          <p class="text-xs text-ink-soft mb-4">
+            Enter your VRM site id and API token. The token is <b>stored only in this browser</b> and used directly by this page.
+          </p>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label class="text-sm">Site id
+              <input id="vrm-site" type="text" inputmode="numeric" autocomplete="off"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <label class="text-sm">API token
+              <input id="vrm-token" type="password" autocomplete="off"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+            <div class="md:col-span-2">
+              <button id="vrm-clear" type="button"
+                class="inline-flex items-center gap-1.5 text-sm text-sky-700 underline-offset-4 hover:underline dark:text-sky-300">
+                <span aria-hidden="true">🧹</span>
+                <span>Clear credentials</span>
+              </button>
+            </div>
           </div>
         </section>
       </div>
     </aside>
+
+
+
 
     <!-- Results (stacked vertically, no side-by-side charts) -->
     <section class="lg:col-span-2 space-y-6 min-w-0">

@@ -6,6 +6,7 @@ import { drawFlowsBarStackSigned, drawSocChart, drawPricesStepLines, drawLoadPvG
 
 const STORAGE_KEY = "optivolt-config-v1";
 const STORAGE_VRM_KEY = "optivolt-vrm-cred-v1";
+const SYSTEM_FETCHED_KEY = "optivolt-system-settings-fetched-at";
 
 // ---- Defaults (match your latest example) ----
 const DEFAULTS = {
@@ -72,6 +73,48 @@ const debounceRun = () => {
   clearTimeout(timer);
   timer = setTimeout(onRun, 250);
 };
+
+// ---------------- Sidebar ordering + badges ----------------
+
+function isVrmConfigured() {
+  const { installationId, token } = snapshotVRM();
+  return Boolean((installationId || "").trim() && (token || "").trim());
+}
+function isSystemSettingsFetched() {
+  try { return !!localStorage.getItem(SYSTEM_FETCHED_KEY); } catch { return false; }
+}
+function setBadge(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text || "";
+}
+function reorderSidebar() {
+  const stack = document.getElementById("sidebar-stack");
+  if (!stack) return;
+
+  const vrmOK = isVrmConfigured();
+  const sysFetched = isSystemSettingsFetched();
+
+  // Desired default order when VRM is configured
+  let order = ["card-algo", "card-data", "card-system", "card-vrm"];
+
+  // If VRM not configured → VRM first
+  if (!vrmOK) order = ["card-vrm", "card-algo", "card-data", "card-system"];
+
+  // While system settings not fetched yet (and VRM OK), keep System second
+  if (vrmOK && !sysFetched) {
+    const i = order.indexOf("card-system");
+    if (i > -1) order.splice(i, 1);
+    order.splice(1, 0, "card-system");
+  }
+
+  for (const id of order) {
+    const node = document.getElementById(id);
+    if (node) stack.appendChild(node);
+  }
+
+  // VRM badge
+  setBadge("badge-vrm", vrmOK ? `Connected (site ${els.vrmSite?.value || "…"})` : "Not connected");
+}
 
 // -------- timeline + scheduling helpers --------
 
@@ -162,14 +205,16 @@ async function boot() {
 
   // Save VRM creds when fields change
   for (const el of [els.vrmSite, els.vrmToken]) {
-    el?.addEventListener("input", () => saveVRMToStorage(snapshotVRM()));
-    el?.addEventListener("change", () => saveVRMToStorage(snapshotVRM()));
+    el?.addEventListener("input", () => { saveVRMToStorage(snapshotVRM()); reorderSidebar(); });
+    el?.addEventListener("change", () => { saveVRMToStorage(snapshotVRM()); reorderSidebar(); });
   }
 
   // VRM actions
   els.vrmClear?.addEventListener("click", () => {
     clearVRMStorage();
     hydrateVRM({ installationId: "", token: "" });
+    setSystemFetched(false);
+    reorderSidebar();
   });
 
   els.vrmFetchSettings?.addEventListener("click", onFetchVRMSettings);
@@ -193,12 +238,10 @@ async function boot() {
     try {
       const link = encodeConfigToQuery(snapshotUI());
       await navigator.clipboard.writeText(link);
-      // tiny visual ack
       const prev = els.share.textContent;
       els.share.textContent = "Copied!";
       setTimeout(() => (els.share.textContent = prev), 1200);
     } catch {
-      // fallback: open in a new tab
       window.open(encodeConfigToQuery(snapshotUI()), "_blank");
     }
   });
@@ -209,6 +252,9 @@ async function boot() {
     locateFile: (file) => "https://lovasoa.github.io/highs-js/" + file
   });
   els.status.textContent = "Solver loaded.";
+
+  // Initial sidebar order & badges
+  reorderSidebar();
 
   // Initial compute
   await onRun();
@@ -245,12 +291,13 @@ function hydrateVRM(obj) {
   if (els.vrmSite) els.vrmSite.value = installationId;
   if (els.vrmToken) els.vrmToken.value = token;
   vrm.setAuth({ installationId, token });
+  reorderSidebar(); // reflect connection state in order + badge
 }
 
 // --- URL share helpers (URL-safe base64 of the snapshot JSON) ---
 function encodeConfigToQuery(obj) {
   const json = JSON.stringify(obj);
-  const b64 = btoa(unescape(encodeURIComponent(json))); // safe for non-ASCII
+  const b64 = btoa(unescape(encodeURIComponent(json)));
   const urlSafe = b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
   const u = new URL(location.href);
   u.searchParams.set("cfg", urlSafe);
@@ -262,7 +309,7 @@ function decodeConfigFromQuery() {
   if (!cfg) return null;
   try {
     const b64 = cfg.replace(/-/g, "+").replace(/_/g, "/");
-    const json = decodeURIComponent(escape(atob(b64))); // inverse of above
+    const json = decodeURIComponent(escape(atob(b64)));
     return JSON.parse(json);
   } catch {
     return null;
@@ -289,6 +336,8 @@ async function onFetchVRMSettings() {
 
     saveToStorage(snapshotUI());
     els.status.textContent = "Settings loaded from VRM.";
+    setSystemFetched(true);
+    reorderSidebar();
     await onRun();
   } catch (err) {
     console.error(err);
@@ -302,7 +351,7 @@ async function onFetchVRMForecasts() {
     hydrateVRM(snapshotVRM()); // ensure client has latest credentials
     els.status.textContent = "Fetching VRM forecasts, prices & SoC…";
 
-    // Fetch everything in parallel (forecasts, prices, and current SoC)
+    // Ask VRM for forecasts + prices using its built-in horizon logic
     const [fc, pr, soc] = await Promise.all([
       vrm.fetchForecasts(),
       vrm.fetchPrices(),
@@ -337,16 +386,12 @@ async function onFetchVRMForecasts() {
       if (els.initsoc) els.initsoc.value = String(clamped);
     }
 
-    // Persist the full UI state (now including tsStart and initsoc) in localStorage
+    // Persist the full UI state (now including tsStart) in localStorage
     saveToStorage(snapshotUI());
 
-    // Nice status line (optionally include timestamp if present)
-    if (soc && Number.isFinite(soc.soc_percent)) {
-      const t = soc.timestampMs ? ` @ ${new Date(soc.timestampMs).toLocaleString()}` : "";
-      els.status.textContent = `Forecasts, prices & SoC loaded from VRM (SoC ${soc.soc_percent}%${t}).`;
-    } else {
-      els.status.textContent = "Forecasts & prices loaded from VRM (SoC unavailable).";
-    }
+    els.status.textContent = soc && Number.isFinite(soc.soc_percent)
+      ? `Forecasts, prices & SoC loaded from VRM (SoC ${soc.soc_percent}%).`
+      : "Forecasts & prices loaded from VRM (SoC unavailable).";
 
     await onRun();
   } catch (err) {
@@ -359,24 +404,24 @@ async function onFetchVRMForecasts() {
 // Take current UI and return a plain object (including textarea strings)
 function snapshotUI() {
   return {
-    stepSize_m: num(els.step.value, DEFAULTS.stepSize_m),
-    batteryCapacity_Wh: num(els.cap.value, DEFAULTS.batteryCapacity_Wh),
-    minSoc_percent: num(els.minsoc.value, DEFAULTS.minSoc_percent),
-    maxSoc_percent: num(els.maxsoc.value, DEFAULTS.maxSoc_percent),
-    initialSoc_percent: num(els.initsoc.value, DEFAULTS.initialSoc_percent),
-    maxChargePower_W: num(els.pchg.value, DEFAULTS.maxChargePower_W),
-    maxDischargePower_W: num(els.pdis.value, DEFAULTS.maxDischargePower_W),
-    maxGridImport_W: num(els.gimp.value, DEFAULTS.maxGridImport_W),
-    maxGridExport_W: num(els.gexp.value, DEFAULTS.maxGridExport_W),
-    chargeEfficiency_percent: num(els.etaC.value, DEFAULTS.chargeEfficiency_percent),
-    dischargeEfficiency_percent: num(els.etaD.value, DEFAULTS.dischargeEfficiency_percent),
-    batteryCost_cent_per_kWh: num(els.bwear.value, DEFAULTS.batteryCost_cent_per_kWh),
-    terminalSocValuation: els.terminal.value || DEFAULTS.terminalSocValuation,
+    stepSize_m: num(els.step?.value, DEFAULTS.stepSize_m),
+    batteryCapacity_Wh: num(els.cap?.value, DEFAULTS.batteryCapacity_Wh),
+    minSoc_percent: num(els.minsoc?.value, DEFAULTS.minSoc_percent),
+    maxSoc_percent: num(els.maxsoc?.value, DEFAULTS.maxSoc_percent),
+    initialSoc_percent: num(els.initsoc?.value, DEFAULTS.initialSoc_percent),
+    maxChargePower_W: num(els.pchg?.value, DEFAULTS.maxChargePower_W),
+    maxDischargePower_W: num(els.pdis?.value, DEFAULTS.maxDischargePower_W),
+    maxGridImport_W: num(els.gimp?.value, DEFAULTS.maxGridImport_W),
+    maxGridExport_W: num(els.gexp?.value, DEFAULTS.maxGridExport_W),
+    chargeEfficiency_percent: num(els.etaC?.value, DEFAULTS.chargeEfficiency_percent),
+    dischargeEfficiency_percent: num(els.etaD?.value, DEFAULTS.dischargeEfficiency_percent),
+    batteryCost_cent_per_kWh: num(els.bwear?.value, DEFAULTS.batteryCost_cent_per_kWh),
+    terminalSocValuation: els.terminal?.value || DEFAULTS.terminalSocValuation,
 
-    load_W_txt: els.tLoad.value,
-    pv_W_txt: els.tPV.value,
-    importPrice_txt: els.tIC.value,
-    exportPrice_txt: els.tEC.value,
+    load_W_txt: els.tLoad?.value ?? "",
+    pv_W_txt: els.tPV?.value ?? "",
+    importPrice_txt: els.tIC?.value ?? "",
+    exportPrice_txt: els.tEC?.value ?? "",
     tsStart: els.tsStart?.value || "",
     tableShowKwh: !!els.tableKwh?.checked,
   };
@@ -384,31 +429,37 @@ function snapshotUI() {
 
 // Write an object into the UI (numbers + textarea strings)
 function hydrateUI(obj) {
-  els.step.value = obj.stepSize_m ?? DEFAULTS.stepSize_m;
-  els.cap.value = obj.batteryCapacity_Wh ?? DEFAULTS.batteryCapacity_Wh;
-  els.minsoc.value = obj.minSoc_percent ?? DEFAULTS.minSoc_percent;
-  els.maxsoc.value = obj.maxSoc_percent ?? DEFAULTS.maxSoc_percent;
-  els.initsoc.value = obj.initialSoc_percent ?? DEFAULTS.initialSoc_percent;
+  if (els.step) els.step.value = obj.stepSize_m ?? DEFAULTS.stepSize_m;
+  if (els.cap) els.cap.value = obj.batteryCapacity_Wh ?? DEFAULTS.batteryCapacity_Wh;
+  if (els.minsoc) els.minsoc.value = obj.minSoc_percent ?? DEFAULTS.minSoc_percent;
+  if (els.maxsoc) els.maxsoc.value = obj.maxSoc_percent ?? DEFAULTS.maxSoc_percent;
+  if (els.initsoc) els.initsoc.value = obj.initialSoc_percent ?? DEFAULTS.initialSoc_percent;
 
-  els.pchg.value = obj.maxChargePower_W ?? DEFAULTS.maxChargePower_W;
-  els.pdis.value = obj.maxDischargePower_W ?? DEFAULTS.maxDischargePower_W;
-  els.gimp.value = obj.maxGridImport_W ?? DEFAULTS.maxGridImport_W;
-  els.gexp.value = obj.maxGridExport_W ?? DEFAULTS.maxGridExport_W;
+  if (els.pchg) els.pchg.value = obj.maxChargePower_W ?? DEFAULTS.maxChargePower_W;
+  if (els.pdis) els.pdis.value = obj.maxDischargePower_W ?? DEFAULTS.maxDischargePower_W;
+  if (els.gimp) els.gimp.value = obj.maxGridImport_W ?? DEFAULTS.maxGridImport_W;
+  if (els.gexp) els.gexp.value = obj.maxGridExport_W ?? DEFAULTS.maxGridExport_W;
 
-  els.etaC.value = obj.chargeEfficiency_percent ?? DEFAULTS.chargeEfficiency_percent;
-  els.etaD.value = obj.dischargeEfficiency_percent ?? DEFAULTS.dischargeEfficiency_percent;
+  if (els.etaC) els.etaC.value = obj.chargeEfficiency_percent ?? DEFAULTS.chargeEfficiency_percent;
+  if (els.etaD) els.etaD.value = obj.dischargeEfficiency_percent ?? DEFAULTS.dischargeEfficiency_percent;
 
-  els.bwear.value = obj.batteryCost_cent_per_kWh ?? DEFAULTS.batteryCost_cent_per_kWh;
-  els.terminal.value = obj.terminalSocValuation ?? DEFAULTS.terminalSocValuation;
+  if (els.bwear) els.bwear.value = obj.batteryCost_cent_per_kWh ?? DEFAULTS.batteryCost_cent_per_kWh;
+  if (els.terminal) els.terminal.value = obj.terminalSocValuation ?? DEFAULTS.terminalSocValuation;
 
-  els.tLoad.value = obj.load_W_txt ?? DEFAULTS.load_W_txt;
-  els.tPV.value = obj.pv_W_txt ?? DEFAULTS.pv_W_txt;
-  els.tIC.value = obj.importPrice_txt ?? DEFAULTS.importPrice_txt;
-  els.tEC.value = obj.exportPrice_txt ?? DEFAULTS.exportPrice_txt;
-  els.tsStart.value = obj.tsStart || "";
+  if (els.tLoad) els.tLoad.value = obj.load_W_txt ?? DEFAULTS.load_W_txt;
+  if (els.tPV) els.tPV.value = obj.pv_W_txt ?? DEFAULTS.pv_W_txt;
+  if (els.tIC) els.tIC.value = obj.importPrice_txt ?? DEFAULTS.importPrice_txt;
+  if (els.tEC) els.tEC.value = obj.exportPrice_txt ?? DEFAULTS.exportPrice_txt;
+  if (els.tsStart) els.tsStart.value = obj.tsStart || "";
   if (els.tableKwh) els.tableKwh.checked = !!(obj.tableShowKwh ?? DEFAULTS.tableShowKwh);
 }
 
+function setSystemFetched(v = true) {
+  try {
+    if (v) localStorage.setItem(SYSTEM_FETCHED_KEY, "1");
+    else localStorage.removeItem(SYSTEM_FETCHED_KEY);
+  } catch { }
+}
 
 // ---------- Main compute ----------
 async function onRun() {
@@ -422,10 +473,12 @@ async function onRun() {
     const result = highs.solve(lpText);
 
     // report solver status + cost
-    els.objective.textContent = Number.isFinite(result.ObjectiveValue)
-      ? Number(result.ObjectiveValue).toFixed(2)
-      : "—";
-    els.status.textContent = ` ${result.Status}`;
+    if (els.objective) {
+      els.objective.textContent = Number.isFinite(result.ObjectiveValue)
+        ? Number(result.ObjectiveValue).toFixed(2)
+        : "—";
+    }
+    if (els.status) els.status.textContent = ` ${result.Status}`;
 
     // parseSolution (library) with proper timing hints
     const { rows, timestampsMs } = runParseSolutionWithTiming(result, cfg);
@@ -439,16 +492,16 @@ async function onRun() {
     drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m, timestampsMs);
   } catch (err) {
     console.error(err);
-    els.status.textContent = `Error: ${err.message}`;
+    if (els.status) els.status.textContent = `Error: ${err.message}`;
   }
 }
 
 
 function uiToConfig() {
-  const load_W = parseSeries(els.tLoad.value);
-  const pv_W = parseSeries(els.tPV.value);
-  const importPrice = parseSeries(els.tIC.value);
-  const exportPrice = parseSeries(els.tEC.value);
+  const load_W = parseSeries(els.tLoad?.value);
+  const pv_W = parseSeries(els.tPV?.value);
+  const importPrice = parseSeries(els.tIC?.value);
+  const exportPrice = parseSeries(els.tEC?.value);
 
   const T = Math.min(load_W.length, pv_W.length, importPrice.length, exportPrice.length);
   if (T === 0) throw new Error("No data in time series.");
@@ -460,20 +513,20 @@ function uiToConfig() {
     importPrice: clip(importPrice),
     exportPrice: clip(exportPrice),
 
-    stepSize_m: num(els.step.value, DEFAULTS.stepSize_m),
-    batteryCapacity_Wh: num(els.cap.value, DEFAULTS.batteryCapacity_Wh),
-    minSoc_percent: num(els.minsoc.value, DEFAULTS.minSoc_percent),
-    maxSoc_percent: num(els.maxsoc.value, DEFAULTS.maxSoc_percent),
-    initialSoc_percent: num(els.initsoc.value, DEFAULTS.initialSoc_percent),
+    stepSize_m: num(els.step?.value, DEFAULTS.stepSize_m),
+    batteryCapacity_Wh: num(els.cap?.value, DEFAULTS.batteryCapacity_Wh),
+    minSoc_percent: num(els.minsoc?.value, DEFAULTS.minSoc_percent),
+    maxSoc_percent: num(els.maxsoc?.value, DEFAULTS.maxSoc_percent),
+    initialSoc_percent: num(els.initsoc?.value, DEFAULTS.initialSoc_percent),
 
-    maxChargePower_W: num(els.pchg.value, DEFAULTS.maxChargePower_W),
-    maxDischargePower_W: num(els.pdis.value, DEFAULTS.maxDischargePower_W),
-    maxGridImport_W: num(els.gimp.value, DEFAULTS.maxGridImport_W),
-    maxGridExport_W: num(els.gexp.value, DEFAULTS.maxGridExport_W),
-    chargeEfficiency_percent: num(els.etaC.value, DEFAULTS.chargeEfficiency_percent),
-    dischargeEfficiency_percent: num(els.etaD.value, DEFAULTS.dischargeEfficiency_percent),
-    batteryCost_cent_per_kWh: num(els.bwear.value, DEFAULTS.batteryCost_cent_per_kWh),
-    terminalSocValuation: els.terminal.value || DEFAULTS.terminalSocValuation,
+    maxChargePower_W: num(els.pchg?.value, DEFAULTS.maxChargePower_W),
+    maxDischargePower_W: num(els.pdis?.value, DEFAULTS.maxDischargePower_W),
+    maxGridImport_W: num(els.gimp?.value, DEFAULTS.maxGridImport_W),
+    maxGridExport_W: num(els.gexp?.value, DEFAULTS.maxGridExport_W),
+    chargeEfficiency_percent: num(els.etaC?.value, DEFAULTS.chargeEfficiency_percent),
+    dischargeEfficiency_percent: num(els.etaD?.value, DEFAULTS.dischargeEfficiency_percent),
+    batteryCost_cent_per_kWh: num(els.bwear?.value, DEFAULTS.batteryCost_cent_per_kWh),
+    terminalSocValuation: els.terminal?.value || DEFAULTS.terminalSocValuation,
   };
 }
 
@@ -612,11 +665,9 @@ function renderTable(rows, cfg, timestampsMs) {
   <tbody>
     ${rows.map((r, ri) => {
     // Determine if this row is a midnight boundary.
-    // We call the time formatter once here.
-    const timeLabel = cols[0].fmt(null, ri); // assuming cols[0] is the "time" column
+    const timeLabel = cols[0].fmt(null, ri); // "time" column
     const isMidnightRow = /^\d{2}\/\d{2}$/.test(timeLabel);
 
-    // Build the row's <td> cells, all bold if midnight.
     const tds = cols.map(c => {
       let displayVal;
       if (c.key === "time") {
@@ -632,7 +683,7 @@ function renderTable(rows, cfg, timestampsMs) {
   }).join("")}
   </tbody>`;
 
-  els.table.innerHTML = thead + tbody;
+  if (els.table) els.table.innerHTML = thead + tbody;
 
   if (els.tableUnit) {
     els.tableUnit.textContent = `Units: ${showKwh ? "kWh" : "W"}`;
