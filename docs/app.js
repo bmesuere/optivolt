@@ -64,7 +64,7 @@ const els = {
 };
 
 let highs = null;
-let vrm = new VRMClient();
+let vrm = new VRMClient({ baseURL: "https://vrm-cors-proxy.mesuerebart.workers.dev/v2" });
 let activeTimestampsMs = null;
 
 // --- simple debounce for auto-run ---
