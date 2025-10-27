@@ -7,7 +7,7 @@ Example:
 import { VRMClient } from './vrmApi.js';
 
 const vrm = new VRMClient({
-  baseURL: 'https://vrmapi.victronenergy.com/v2',
+  baseURL: 'https://vrmapi.victronenergy.com',
   installationId: '123456',
   token: '<your-token-here>'
 });
@@ -29,12 +29,12 @@ const forecasts2 = await vrm.fetchForecasts(win);
 export class VRMClient {
   /**
    * @param {object} opts
-   * @param {string} opts.baseURL - e.g. "https://vrmapi.victronenergy.com/v2"
+   * @param {string} opts.baseURL - e.g. "https://vrmapi.victronenergy.com"
    * @param {string} opts.installationId - numeric idSite / installation id as string
    * @param {string} opts.token - VRM API token
    */
   constructor({ baseURL, installationId, token } = {}) {
-    this.baseURL = (baseURL || 'https://vrmapi.victronenergy.com/v2').replace(/\/+$/, '');
+    this.baseURL = (baseURL || 'https://vrmapi.victronenergy.com').replace(/\/+$/, '') + "/v2";
     this.installationId = installationId || '';
     this.token = token || '';
     this.defaultIntervalMins = 15;
@@ -46,7 +46,7 @@ export class VRMClient {
   }
 
   setBaseURL(baseURL) {
-    this.baseURL = String(baseURL || '').replace(/\/+$/, '');
+    this.baseURL = String(baseURL || '').replace(/\/+$/, '') + "/v2";
   }
 
   // ----------------------------- Core fetch helper -----------------------------

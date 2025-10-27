@@ -7,6 +7,7 @@ import { drawFlowsBarStackSigned, drawSocChart, drawPricesStepLines, drawLoadPvG
 const STORAGE_KEY = "optivolt-config-v1";
 const STORAGE_VRM_KEY = "optivolt-vrm-cred-v1";
 const SYSTEM_FETCHED_KEY = "optivolt-system-settings-fetched-at";
+const DEFAULT_PROXY_BASE = "https://vrm-cors-proxy.mesuerebart.workers.dev";
 
 // ---- Defaults (match your latest example) ----
 const DEFAULTS = {
@@ -61,10 +62,11 @@ const els = {
   vrmFetchSettings: $("#vrm-fetch-settings"),
   vrmFetchForecasts: $("#vrm-fetch-forecasts"),
   vrmClear: $("#vrm-clear"),
+  vrmProxy: $("#vrm-proxy"),
 };
 
 let highs = null;
-let vrm = new VRMClient({ baseURL: "https://vrm-cors-proxy.mesuerebart.workers.dev/v2" });
+let vrm = new VRMClient();
 let activeTimestampsMs = null;
 
 // --- simple debounce for auto-run ---
@@ -204,7 +206,7 @@ async function boot() {
   hydrateVRM(loadVRMFromStorage());
 
   // Save VRM creds when fields change
-  for (const el of [els.vrmSite, els.vrmToken]) {
+  for (const el of [els.vrmSite, els.vrmToken, els.vrmProxy]) {
     el?.addEventListener("input", () => { saveVRMToStorage(snapshotVRM()); reorderSidebar(); });
     el?.addEventListener("change", () => { saveVRMToStorage(snapshotVRM()); reorderSidebar(); });
   }
@@ -283,15 +285,24 @@ function snapshotVRM() {
   return {
     installationId: (els.vrmSite?.value || "").trim(),
     token: (els.vrmToken?.value || "").trim(),
+    proxyBaseURL: (els.vrmProxy?.value || "").trim(),
   };
 }
 function hydrateVRM(obj) {
   const installationId = obj?.installationId || "";
   const token = obj?.token || "";
+  // default proxy if empty in storage
+  const proxyBaseURL = (obj?.proxyBaseURL || DEFAULT_PROXY_BASE);
+
   if (els.vrmSite) els.vrmSite.value = installationId;
   if (els.vrmToken) els.vrmToken.value = token;
+  if (els.vrmProxy) els.vrmProxy.value = proxyBaseURL;
+
+  // IMPORTANT: set baseURL from proxyBaseURL (client will add /v2)
+  vrm.setBaseURL(proxyBaseURL);
   vrm.setAuth({ installationId, token });
-  reorderSidebar(); // reflect connection state in order + badge
+
+  reorderSidebar();
 }
 
 // --- URL share helpers (URL-safe base64 of the snapshot JSON) ---
