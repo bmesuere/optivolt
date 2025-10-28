@@ -1,15 +1,16 @@
 import { buildLP } from "./lib/build-lp.js";
 import { parseSolution } from "./lib/parse-solution.js";
 import { VRMClient } from "./lib/vrm-api.js";
+
 import { drawFlowsBarStackSigned, drawSocChart, drawPricesStepLines, drawLoadPvGrouped } from "./app/charts.js";
 import { renderTable } from "./app/table.js";
 import { runParseSolutionWithTiming, adoptTimelineFromForecast } from "./app/timeline.js";
 import {
   STORAGE_KEY, STORAGE_VRM_KEY,
-  saveToStorage, loadFromStorage, removeFromStorage,
-  isSystemSettingsFetched, setSystemFetched
+  saveToStorage, loadFromStorage, removeFromStorage, setSystemFetched
 } from "./app/storage.js";
 import { encodeConfigToQuery, decodeConfigFromQuery } from "./app/share.js";
+import { reorderSidebar } from "./app/sidebar.js";
 
 
 const DEFAULT_PROXY_BASE = "https://vrm-cors-proxy.mesuerebart.workers.dev";
@@ -81,43 +82,9 @@ const debounceRun = () => {
   timer = setTimeout(onRun, 250);
 };
 
-// ---------------- Sidebar ordering + badges ----------------
-
 function isVrmConfigured() {
   const { installationId, token } = snapshotVRM();
   return Boolean((installationId || "").trim() && (token || "").trim());
-}
-function setBadge(id, text) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = text || "";
-}
-function reorderSidebar() {
-  const stack = document.getElementById("sidebar-stack");
-  if (!stack) return;
-
-  const vrmOK = isVrmConfigured();
-  const sysFetched = isSystemSettingsFetched();
-
-  // Desired default order when VRM is configured
-  let order = ["card-algo", "card-data", "card-system", "card-vrm"];
-
-  // If VRM not configured → VRM first
-  if (!vrmOK) order = ["card-vrm", "card-algo", "card-data", "card-system"];
-
-  // While system settings not fetched yet (and VRM OK), keep System second
-  if (vrmOK && !sysFetched) {
-    const i = order.indexOf("card-system");
-    if (i > -1) order.splice(i, 1);
-    order.splice(1, 0, "card-system");
-  }
-
-  for (const id of order) {
-    const node = document.getElementById(id);
-    if (node) stack.appendChild(node);
-  }
-
-  // VRM badge
-  setBadge("badge-vrm", vrmOK ? `Connected (site ${els.vrmSite?.value || "…"})` : "Not connected");
 }
 
 // ---------- Boot ----------
@@ -147,8 +114,8 @@ async function boot() {
 
   // Save VRM creds when fields change
   for (const el of [els.vrmSite, els.vrmToken, els.vrmProxy]) {
-    el?.addEventListener("input", () => { saveToStorage(STORAGE_VRM_KEY, snapshotVRM()); reorderSidebar(); });
-    el?.addEventListener("change", () => { saveToStorage(STORAGE_VRM_KEY, snapshotVRM()); reorderSidebar(); });
+    el?.addEventListener("input", () => { saveToStorage(STORAGE_VRM_KEY, snapshotVRM()); reorderSidebar({ isVrmConfigured, vrmSiteValue: els.vrmSite?.value }); });
+    el?.addEventListener("change", () => { saveToStorage(STORAGE_VRM_KEY, snapshotVRM()); reorderSidebar({ isVrmConfigured, vrmSiteValue: els.vrmSite?.value }); });
   }
 
   // VRM actions
@@ -156,7 +123,7 @@ async function boot() {
     removeFromStorage(STORAGE_VRM_KEY);
     hydrateVRM({ installationId: "", token: "" });
     setSystemFetched(false);
-    reorderSidebar();
+    reorderSidebar({ isVrmConfigured, vrmSiteValue: els.vrmSite?.value });
   });
 
   els.vrmFetchSettings?.addEventListener("click", onFetchVRMSettings);
@@ -196,7 +163,7 @@ async function boot() {
   els.status.textContent = "Solver loaded.";
 
   // Initial sidebar order & badges
-  reorderSidebar();
+  reorderSidebar({ isVrmConfigured, vrmSiteValue: els.vrmSite?.value });
 
   // Initial compute
   await onRun();
@@ -223,7 +190,7 @@ function hydrateVRM(obj) {
   vrm.setBaseURL(proxyBaseURL);
   vrm.setAuth({ installationId, token });
 
-  reorderSidebar();
+  reorderSidebar({ isVrmConfigured, vrmSiteValue: els.vrmSite?.value });
 }
 
 async function onFetchVRMSettings() {
@@ -247,7 +214,7 @@ async function onFetchVRMSettings() {
     saveToStorage(STORAGE_KEY, snapshotUI());
     els.status.textContent = "Settings loaded from VRM.";
     setSystemFetched(true);
-    reorderSidebar();
+    reorderSidebar({ isVrmConfigured, vrmSiteValue: els.vrmSite?.value });
     await onRun();
   } catch (err) {
     console.error(err);
