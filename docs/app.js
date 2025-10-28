@@ -9,6 +9,8 @@ import {
   saveToStorage, loadFromStorage, removeFromStorage,
   isSystemSettingsFetched, setSystemFetched
 } from "./app/storage.js";
+import { encodeConfigToQuery, decodeConfigFromQuery } from "./app/share.js";
+
 
 const DEFAULT_PROXY_BASE = "https://vrm-cors-proxy.mesuerebart.workers.dev";
 
@@ -222,28 +224,6 @@ function hydrateVRM(obj) {
   vrm.setAuth({ installationId, token });
 
   reorderSidebar();
-}
-
-// --- URL share helpers (URL-safe base64 of the snapshot JSON) ---
-function encodeConfigToQuery(obj) {
-  const json = JSON.stringify(obj);
-  const b64 = btoa(unescape(encodeURIComponent(json)));
-  const urlSafe = b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-  const u = new URL(location.href);
-  u.searchParams.set("cfg", urlSafe);
-  return u.toString();
-}
-function decodeConfigFromQuery() {
-  const u = new URL(location.href);
-  const cfg = u.searchParams.get("cfg");
-  if (!cfg) return null;
-  try {
-    const b64 = cfg.replace(/-/g, "+").replace(/_/g, "/");
-    const json = decodeURIComponent(escape(atob(b64)));
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
 }
 
 async function onFetchVRMSettings() {
