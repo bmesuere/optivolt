@@ -17,7 +17,13 @@ export function buildLP({
   chargeEfficiency_percent = 95,
   dischargeEfficiency_percent = 95,
   batteryCost_cent_per_kWh = 2,
-  terminalSocValuation = "zero", // zero, min, avg or max
+
+  // terminal SOC valuation:
+  // - "zero": no valuation
+  // - "min" | "avg" | "max": derived from importPrice array
+  // - "custom": use terminalSocCustomPrice_cents_per_kWh
+  terminalSocValuation = "zero",
+  terminalSocCustomPrice_cents_per_kWh = 0,
 
   // variable parameters
   initialSoc_percent = 20,
@@ -44,7 +50,7 @@ export function buildLP({
   const dischargeWhPerW = stepHours / (dischargeEfficiency_percent / 100); // Wh lost from battery per W discharged
   const batteryCost_cents = 0.5 * batteryCost_cent_per_kWh * priceCoeff; // c€ cost per W throughput (charge+discharge)
 
-  const terminalPrice_cents_per_Wh = selectTerminalPriceCentsPerKWh(terminalSocValuation, importPrice) / 1000 * (dischargeEfficiency_percent / 100); // c€/Wh
+  const terminalPrice_cents_per_Wh = selectTerminalPriceCentsPerKWh(terminalSocValuation, importPrice, terminalSocCustomPrice_cents_per_kWh) / 1000 * (dischargeEfficiency_percent / 100); // c€/Wh
 
   // Convert soc percentages to Wh
   const minSoc_Wh = (minSoc_percent / 100) * batteryCapacity_Wh;
@@ -167,10 +173,11 @@ export function buildLP({
   return lines.join("\n");
 }
 
-function selectTerminalPriceCentsPerKWh(mode, prices) {
+function selectTerminalPriceCentsPerKWh(mode, prices, customPrice_cents_per_kWh = 0) {
   if (mode === "min") return Math.min(...prices);
   if (mode === "avg") return prices.reduce((a, b) => a + b, 0) / prices.length;
   if (mode === "max") return Math.max(...prices);
+  if (mode === "custom") return Number.isFinite(+customPrice_cents_per_kWh) ? +customPrice_cents_per_kWh : 0;
   return 0; // "zero"
 }
 

@@ -173,7 +173,7 @@ export function buildLP({
   return lines.join("\n");
 }
 
-function selectTerminalPriceCentsPerKWh(mode, prices) {
+function selectTerminalPriceCentsPerKWh(mode, prices, customPrice_cents_per_kWh = 0) {
   if (mode === "min") return Math.min(...prices);
   if (mode === "avg") return prices.reduce((a, b) => a + b, 0) / prices.length;
   if (mode === "max") return Math.max(...prices);
