@@ -2,8 +2,9 @@
 import { buildLP } from "./lib/build-lp.js";
 import { parseSolution } from "./lib/parse-solution.js";
 import { VRMClient } from "./lib/vrm-api.js";
-import { drawFlowsBarStackSigned, drawSocChart, drawPricesStepLines, drawLoadPvGrouped } from "./charts.js";
-import { renderTable } from "./table.js";
+import { drawFlowsBarStackSigned, drawSocChart, drawPricesStepLines, drawLoadPvGrouped } from "./app/charts.js";
+import { renderTable } from "./app/table.js";
+import { runParseSolutionWithTiming, adoptTimelineFromForecast } from "./app/timeline.js";
 
 const STORAGE_KEY = "optivolt-config-v1";
 const STORAGE_VRM_KEY = "optivolt-vrm-cred-v1";
@@ -69,7 +70,6 @@ const els = {
 
 let highs = null;
 let vrm = new VRMClient();
-let activeTimestampsMs = null;
 
 // --- simple debounce for auto-run ---
 let timer = null;
@@ -119,73 +119,6 @@ function reorderSidebar() {
   // VRM badge
   setBadge("badge-vrm", vrmOK ? `Connected (site ${els.vrmSite?.value || "…"})` : "Not connected");
 }
-
-// -------- timeline + scheduling helpers --------
-
-// activeTimestampsMs holds the canonical per-slot timestamps (ms since epoch)
-// for the currently loaded dataset. It is either:
-// - provided by VRM fetch (preferred, real-world timestamps), OR
-// - synthesized later based on the Start time field or "now".
-
-// Format a Date -> "YYYY-MM-DDTHH:MM" suitable for <input type="datetime-local">
-function toLocalDatetimeLocal(dt) {
-  const pad = (n) => String(n).padStart(2, "0");
-  const yyyy = dt.getFullYear();
-  const mm = pad(dt.getMonth() + 1);
-  const dd = pad(dt.getDate());
-  const HH = pad(dt.getHours());
-  const MM = pad(dt.getMinutes());
-  return `${yyyy}-${mm}-${dd}T${HH}:${MM}`;
-}
-
-/**
- * Build the timing hints object we pass into parseSolution().
- *
- * priority:
- * 1. If we already have a full timestamps array from VRM (activeTimestampsMs),
- *    pass that as timestampsMs.
- * 2. Otherwise, if the user entered a Start time in the form (els.tsStart),
- *    parse that into startMs.
- * 3. Always pass stepMin so parseSolution can synthesize a full array.
- */
-function buildTimingHints(cfg) {
-  const hints = {
-    timestampsMs: null,
-    startMs: null,
-    stepMin: Number(cfg.stepSize_m) || 15
-  };
-
-  // 1. Prefer a full VRM-derived timeline if it matches our data length.
-  if (Array.isArray(activeTimestampsMs) &&
-    activeTimestampsMs.length === cfg.load_W.length) {
-    hints.timestampsMs = activeTimestampsMs.slice();
-    return hints;
-  }
-
-  // 2. Fall back to the Start time input.
-  if (els.tsStart && els.tsStart.value) {
-    const parsed = new Date(els.tsStart.value);
-    if (!isNaN(parsed.getTime())) {
-      hints.startMs = parsed.getTime();
-    }
-  }
-
-  return hints;
-}
-
-/**
- * Convenience wrapper so onRun() stays clean.
- * Calls parseSolution(result, cfg, hints) from lib,
- * updates activeTimestampsMs from the returned canonical timestamps,
- * and returns { rows, timestampsMs }.
- */
-function runParseSolutionWithTiming(result, cfg) {
-  const hints = buildTimingHints(cfg);
-  const { rows, timestampsMs } = parseSolution(result, cfg, hints);
-  activeTimestampsMs = timestampsMs.slice(); // keep canonical timeline synced
-  return { rows, timestampsMs };
-}
-
 
 // ---------- Boot ----------
 boot();
@@ -376,17 +309,9 @@ async function onFetchVRMForecasts() {
       typeof vrm.fetchCurrentSoc === "function" ? vrm.fetchCurrentSoc() : Promise.resolve(null)
     ]);
 
-    // If VRM returned explicit timestamps, adopt them as canonical.
-    if (Array.isArray(fc.timestamps) && fc.timestamps.length > 0) {
-      activeTimestampsMs = fc.timestamps.slice();
-
-      // Write the first timestamp back into the Start time field so we persist it
-      if (els.tsStart) {
-        const firstMs = fc.timestamps[0];
-        els.tsStart.value = toLocalDatetimeLocal(new Date(firstMs));
-      }
-    } else {
-      activeTimestampsMs = null;
+    const { adopted, firstInputValue } = adoptTimelineFromForecast(fc);
+    if (adopted && els.tsStart && firstInputValue) {
+      els.tsStart.value = firstInputValue;
     }
 
     // Force our step size to match VRM dataset (usually 15 min)
@@ -503,7 +428,12 @@ async function onRun() {
     if (els.status) els.status.textContent = ` ${result.Status}`;
 
     // parseSolution (library) with proper timing hints
-    const { rows, timestampsMs } = runParseSolutionWithTiming(result, cfg);
+    const { rows, timestampsMs } = runParseSolutionWithTiming(
+      result,
+      cfg,
+      parseSolution,
+      els.tsStart?.value || ""
+    );
 
     renderTable({
       rows,
