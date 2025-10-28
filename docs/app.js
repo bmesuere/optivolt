@@ -24,6 +24,7 @@ const DEFAULTS = {
   dischargeEfficiency_percent: 95,
   batteryCost_cent_per_kWh: 2,
   terminalSocValuation: "zero",
+  terminalSocCustomPrice_cents_per_kWh: 0,
   tableShowKwh: false,
 
   load_W_txt: "280,250,360,420,1230,190,190,490,490,360,670,1750,340,640,360,880,650,900,540,500,480,480,480,290",
@@ -44,7 +45,7 @@ const els = {
   pchg: $("#pchg"), pdis: $("#pdis"),
   gimp: $("#gimp"), gexp: $("#gexp"),
   etaC: $("#etaC"), etaD: $("#etaD"),
-  bwear: $("#bwear"), terminal: $("#terminal"),
+  bwear: $("#bwear"), terminal: $("#terminal"), terminalCustom: $("#terminal-custom"),
 
   // textareas
   tLoad: $("#ts-load"), tPV: $("#ts-pv"), tIC: $("#ts-ic"), tEC: $("#ts-ec"), tsStart: $("#ts-start"),
@@ -198,6 +199,11 @@ async function boot() {
     el.addEventListener("input", () => { saveToStorage(snapshotUI()); debounceRun(); });
     el.addEventListener("change", () => { saveToStorage(snapshotUI()); debounceRun(); });
   }
+
+  els.terminal?.addEventListener("change", () => {
+    updateTerminalCustomUI();
+  });
+  updateTerminalCustomUI();
 
   // Manual recompute
   els.run?.addEventListener("click", onRun);
@@ -428,6 +434,7 @@ function snapshotUI() {
     dischargeEfficiency_percent: num(els.etaD?.value, DEFAULTS.dischargeEfficiency_percent),
     batteryCost_cent_per_kWh: num(els.bwear?.value, DEFAULTS.batteryCost_cent_per_kWh),
     terminalSocValuation: els.terminal?.value || DEFAULTS.terminalSocValuation,
+    terminalSocCustomPrice_cents_per_kWh: num(els.terminalCustom?.value, DEFAULTS.terminalSocCustomPrice_cents_per_kWh),
 
     load_W_txt: els.tLoad?.value ?? "",
     pv_W_txt: els.tPV?.value ?? "",
@@ -456,6 +463,7 @@ function hydrateUI(obj) {
 
   if (els.bwear) els.bwear.value = obj.batteryCost_cent_per_kWh ?? DEFAULTS.batteryCost_cent_per_kWh;
   if (els.terminal) els.terminal.value = obj.terminalSocValuation ?? DEFAULTS.terminalSocValuation;
+  if (els.terminalCustom) els.terminalCustom.value = obj.terminalSocCustomPrice_cents_per_kWh ?? DEFAULTS.terminalSocCustomPrice_cents_per_kWh;
 
   if (els.tLoad) els.tLoad.value = obj.load_W_txt ?? DEFAULTS.load_W_txt;
   if (els.tPV) els.tPV.value = obj.pv_W_txt ?? DEFAULTS.pv_W_txt;
@@ -463,6 +471,8 @@ function hydrateUI(obj) {
   if (els.tEC) els.tEC.value = obj.exportPrice_txt ?? DEFAULTS.exportPrice_txt;
   if (els.tsStart) els.tsStart.value = obj.tsStart || "";
   if (els.tableKwh) els.tableKwh.checked = !!(obj.tableShowKwh ?? DEFAULTS.tableShowKwh);
+
+  updateTerminalCustomUI();
 }
 
 function setSystemFetched(v = true) {
@@ -538,7 +548,17 @@ function uiToConfig() {
     dischargeEfficiency_percent: num(els.etaD?.value, DEFAULTS.dischargeEfficiency_percent),
     batteryCost_cent_per_kWh: num(els.bwear?.value, DEFAULTS.batteryCost_cent_per_kWh),
     terminalSocValuation: els.terminal?.value || DEFAULTS.terminalSocValuation,
+    terminalSocCustomPrice_cents_per_kWh: num(els.terminalCustom?.value, DEFAULTS.terminalSocCustomPrice_cents_per_kWh),
   };
+}
+
+function updateTerminalCustomUI() {
+  const isCustom = (els.terminal?.value === "custom");
+  if (els.terminalCustom) {
+    els.terminalCustom.disabled = !isCustom;
+    // Optional: clear when not custom (comment out if you prefer to keep)
+    // if (!isCustom) els.terminalCustom.value = DEFAULTS.terminalSocCustomPrice_cents_per_kWh;
+  }
 }
 
 function renderTable(rows, cfg, timestampsMs) {
