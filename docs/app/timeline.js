@@ -85,3 +85,12 @@ export function adoptTimelineFromForecast(fc) {
   setActiveTimestampsMs(null);
   return { adopted: false, firstInputValue: null };
 }
+
+/** Return ms timestamp floored to the last quarter (00/15/30/45) in local time.
+ */
+export function lastQuarterMs(baseDate = new Date()) {
+  const d = new Date(baseDate);
+  const q = Math.floor(d.getMinutes() / 15) * 15;
+  d.setMinutes(q, 0, 0);
+  return d.getTime();
+}

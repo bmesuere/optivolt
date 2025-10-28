@@ -4,7 +4,7 @@ import { parseSolution } from "./lib/parse-solution.js";
 
 import { drawFlowsBarStackSigned, drawSocChart, drawPricesStepLines, drawLoadPvGrouped } from "./app/charts.js";
 import { renderTable } from "./app/table.js";
-import { runParseSolutionWithTiming, adoptTimelineFromForecast } from "./app/timeline.js";
+import { runParseSolutionWithTiming, adoptTimelineFromForecast, lastQuarterMs, toLocalDatetimeLocal } from "./app/timeline.js";
 import {
   STORAGE_KEY,
   saveToStorage, loadFromStorage, setSystemFetched
@@ -238,17 +238,34 @@ async function onFetchVRMForecasts() {
       typeof vrmMgr.client.fetchCurrentSoc === "function" ? vrmMgr.client.fetchCurrentSoc() : Promise.resolve(null)
     ]);
 
-    const { adopted, firstInputValue } = adoptTimelineFromForecast(fc);
-    if (adopted && els.tsStart && firstInputValue) {
-      els.tsStart.value = firstInputValue;
+    // 1) Keep canonical VRM timeline (usually starts at last full hour)
+    const { adopted } = adoptTimelineFromForecast(fc);
+
+    // 2) Decide the optimizer start time: last quarter (local)
+    const quarterStartMs = lastQuarterMs(new Date());
+    if (els.tsStart) {
+      els.tsStart.value = toLocalDatetimeLocal(new Date(quarterStartMs));
     }
 
-    if (els.step) els.step.value = fc.step_minutes || 15;
+    // 3) Determine step and compute offset (how many slots to drop from full-hour → quarter)
+    const stepMin = num(els.step?.value, fc.step_minutes || 15); // keep user's step if set; else VRM or 15
+    const fullHourStartMs = Array.isArray(fc.timestamps) && fc.timestamps.length > 0
+      ? Number(fc.timestamps[0])
+      : (() => { const d = new Date(); d.setMinutes(0, 0, 0); return d.getTime(); })();
 
-    if (els.tLoad) els.tLoad.value = (fc.load_W || []).join(",");
-    if (els.tPV) els.tPV.value = (fc.pv_W || []).join(",");
-    if (els.tIC) els.tIC.value = (pr.importPrice_cents_per_kwh || []).join(",");
-    if (els.tEC) els.tEC.value = (pr.exportPrice_cents_per_kwh || []).join(",");
+    let offsetSlots = Math.floor((quarterStartMs - fullHourStartMs) / (stepMin * 60 * 1000));
+    if (!Number.isFinite(offsetSlots) || offsetSlots < 0) offsetSlots = 0;
+    // Clamp to at most 3 if step=15 and we only shifted within the same hour
+    if (stepMin === 15) offsetSlots = Math.min(offsetSlots, 3);
+
+    // 4) Slice helpers
+    const slice = (arr) => (Array.isArray(arr) ? arr.slice(offsetSlots) : []);
+
+    // 5) Fill the per-slot series from VRM, but starting at the last quarter
+    if (els.tLoad) els.tLoad.value = slice(fc.load_W).join(",");
+    if (els.tPV) els.tPV.value = slice(fc.pv_W).join(",");
+    if (els.tIC) els.tIC.value = slice(pr.importPrice_cents_per_kwh).join(",");
+    if (els.tEC) els.tEC.value = slice(pr.exportPrice_cents_per_kwh).join(",");
 
     if (soc && Number.isFinite(soc.soc_percent)) {
       const clamped = Math.max(0, Math.min(100, Number(soc.soc_percent)));
