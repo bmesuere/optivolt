@@ -7,7 +7,7 @@ import { renderTable } from "./app/table.js";
 import { runParseSolutionWithTiming, adoptTimelineFromForecast } from "./app/timeline.js";
 import {
   STORAGE_KEY,
-  saveToStorage, loadFromStorage, removeFromStorage, setSystemFetched
+  saveToStorage, loadFromStorage, setSystemFetched
 } from "./app/storage.js";
 import { encodeConfigToQuery, decodeConfigFromQuery } from "./app/share.js";
 import { reorderSidebar } from "./app/sidebar.js";
@@ -15,8 +15,10 @@ import { debounce } from "./app/utils.js";
 import { VRMManager } from "./app/vrm.js";
 import { DEFAULTS } from "./app/config.js";
 
+// ---------- DOM ----------
 const $ = (sel) => document.querySelector(sel);
 const els = {
+  // actions
   run: $("#run"),
   restore: $("#restore"),
   share: $("#share"),
@@ -48,8 +50,9 @@ const els = {
   vrmProxy: $("#vrm-proxy"),
 };
 
+// ---------- State ----------
 let highs = null;
-const vrmMgr = new VRMManager(); // class-based manager
+const vrmMgr = new VRMManager();
 const debounceRun = debounce(onRun, 250);
 
 // ---------- Boot ----------
@@ -59,6 +62,25 @@ async function boot() {
   const urlCfg = decodeConfigFromQuery();
   hydrateUI(urlCfg || loadFromStorage(STORAGE_KEY) || DEFAULTS);
 
+  wireGlobalInputs();
+  wireVrmInputs();
+
+  // Initialize HiGHS via global UMD factory `Module`
+  // eslint-disable-next-line no-undef
+  highs = await Module({
+    locateFile: (file) => "https://lovasoa.github.io/highs-js/" + file
+  });
+  els.status.textContent = "Solver loaded.";
+
+  // Initial sidebar order & badges
+  reorderNow();
+
+  // Initial compute
+  await onRun();
+}
+
+// ---------- Wiring ----------
+function wireGlobalInputs() {
   // Auto-save whenever anything changes
   for (const el of document.querySelectorAll("input, select, textarea")) {
     el.addEventListener("input", () => { saveToStorage(STORAGE_KEY, snapshotUI()); debounceRun(); });
@@ -70,32 +92,6 @@ async function boot() {
 
   // Manual recompute
   els.run?.addEventListener("click", onRun);
-
-  // VRM: hydrate from storage into inputs + client
-  vrmMgr.hydrateFromStorage(els);
-
-  // Save VRM creds when fields change
-  for (const el of [els.vrmSite, els.vrmToken, els.vrmProxy]) {
-    el?.addEventListener("input", () => {
-      vrmMgr.saveFromEls(els);
-      reorderSidebar({ isVrmConfigured: () => vrmMgr.isConfigured(els), vrmSiteValue: els.vrmSite?.value });
-    });
-    el?.addEventListener("change", () => {
-      vrmMgr.saveFromEls(els);
-      reorderSidebar({ isVrmConfigured: () => vrmMgr.isConfigured(els), vrmSiteValue: els.vrmSite?.value });
-    });
-  }
-
-  // VRM actions
-  els.vrmClear?.addEventListener("click", () => {
-    vrmMgr.clearStorage();
-    vrmMgr.hydrate(els, { installationId: "", token: "" }); // clears inputs + client
-    setSystemFetched(false);
-    reorderSidebar({ isVrmConfigured: () => vrmMgr.isConfigured(els), vrmSiteValue: els.vrmSite?.value });
-  });
-
-  els.vrmFetchSettings?.addEventListener("click", onFetchVRMSettings);
-  els.vrmFetchForecasts?.addEventListener("click", onFetchVRMForecasts);
 
   // Units toggle recompute
   els.tableKwh?.addEventListener("change", () => {
@@ -122,91 +118,32 @@ async function boot() {
       window.open(encodeConfigToQuery(snapshotUI()), "_blank");
     }
   });
+}
 
-  // Initialize HiGHS via global UMD factory `Module`
-  // eslint-disable-next-line no-undef
-  highs = await Module({
-    locateFile: (file) => "https://lovasoa.github.io/highs-js/" + file
+function wireVrmInputs() {
+  // VRM: hydrate from storage into inputs + client
+  vrmMgr.hydrateFromStorage(els);
+
+  // Save VRM creds when fields change
+  for (const el of [els.vrmSite, els.vrmToken, els.vrmProxy]) {
+    el?.addEventListener("input", () => { vrmMgr.saveFromEls(els); reorderNow(); });
+    el?.addEventListener("change", () => { vrmMgr.saveFromEls(els); reorderNow(); });
+  }
+
+  // VRM actions
+  els.vrmClear?.addEventListener("click", () => {
+    // Clears storage and resets inputs + client
+    vrmMgr.clearStorage();
+    vrmMgr.hydrate(els, { installationId: "", token: "" });
+    setSystemFetched(false);
+    reorderNow();
   });
-  els.status.textContent = "Solver loaded.";
 
-  // Initial sidebar order & badges
-  reorderSidebar({ isVrmConfigured: () => vrmMgr.isConfigured(els), vrmSiteValue: els.vrmSite?.value });
-
-  // Initial compute
-  await onRun();
+  els.vrmFetchSettings?.addEventListener("click", onFetchVRMSettings);
+  els.vrmFetchForecasts?.addEventListener("click", onFetchVRMForecasts);
 }
 
-async function onFetchVRMSettings() {
-  try {
-    vrmMgr.refreshClientFromEls(els); // make sure client uses current inputs
-    els.status.textContent = "Fetching VRM settings…";
-    const s = await vrmMgr.client.fetchDynamicEssSettings();
-
-    setIfFinite(els.cap, s.batteryCapacity_Wh);
-    setIfFinite(els.pdis, s.dischargePower_W || s.limits?.batteryDischargeLimit_W);
-    setIfFinite(els.pchg, s.chargePower_W || s.limits?.batteryChargeLimit_W);
-    setIfFinite(els.gimp, s.maxPowerFromGrid_W || s.limits?.gridImportLimit_W);
-    setIfFinite(els.gexp, s.maxPowerToGrid_W || s.limits?.gridExportLimit_W);
-
-    if (Number.isFinite(s.batteryCosts_cents_per_kWh)) {
-      els.bwear.value = s.batteryCosts_cents_per_kWh;
-    }
-
-    saveToStorage(STORAGE_KEY, snapshotUI());
-    els.status.textContent = "Settings loaded from VRM.";
-    setSystemFetched(true);
-    reorderSidebar({ isVrmConfigured: () => vrmMgr.isConfigured(els), vrmSiteValue: els.vrmSite?.value });
-    await onRun();
-  } catch (err) {
-    console.error(err);
-    els.status.textContent = `VRM error: ${err.message}`;
-  }
-}
-function setIfFinite(input, v) { if (Number.isFinite(v) && input) input.value = String(v); }
-
-async function onFetchVRMForecasts() {
-  try {
-    vrmMgr.refreshClientFromEls(els); // ensure client has latest credentials
-    els.status.textContent = "Fetching VRM forecasts, prices & SoC…";
-
-    const [fc, pr, soc] = await Promise.all([
-      vrmMgr.client.fetchForecasts(),
-      vrmMgr.client.fetchPrices(),
-      typeof vrmMgr.client.fetchCurrentSoc === "function" ? vrmMgr.client.fetchCurrentSoc() : Promise.resolve(null)
-    ]);
-
-    const { adopted, firstInputValue } = adoptTimelineFromForecast(fc);
-    if (adopted && els.tsStart && firstInputValue) {
-      els.tsStart.value = firstInputValue;
-    }
-
-    if (els.step) els.step.value = fc.step_minutes || 15;
-
-    if (els.tLoad) els.tLoad.value = (fc.load_W || []).join(",");
-    if (els.tPV) els.tPV.value = (fc.pv_W || []).join(",");
-    if (els.tIC) els.tIC.value = (pr.importPrice_cents_per_kwh || []).join(",");
-    if (els.tEC) els.tEC.value = (pr.exportPrice_cents_per_kwh || []).join(",");
-
-    if (soc && Number.isFinite(soc.soc_percent)) {
-      const clamped = Math.max(0, Math.min(100, Number(soc.soc_percent)));
-      if (els.initsoc) els.initsoc.value = String(clamped);
-    }
-
-    saveToStorage(STORAGE_KEY, snapshotUI());
-
-    els.status.textContent = soc && Number.isFinite(soc.soc_percent)
-      ? `Forecasts, prices & SoC loaded from VRM (SoC ${soc.soc_percent}%).`
-      : "Forecasts & prices loaded from VRM (SoC unavailable).";
-
-    await onRun();
-  } catch (err) {
-    console.error(err);
-    els.status.textContent = `VRM error: ${err.message}`;
-  }
-}
-
-// ---- UI <-> config
+// ---------- UI <-> config ----------
 function snapshotUI() {
   return {
     stepSize_m: num(els.step?.value, DEFAULTS.stepSize_m),
@@ -262,12 +199,82 @@ function hydrateUI(obj) {
   updateTerminalCustomUI();
 }
 
+// ---------- Actions ----------
+async function onFetchVRMSettings() {
+  try {
+    vrmMgr.refreshClientFromEls(els); // make sure client uses current inputs
+    els.status.textContent = "Fetching VRM settings…";
+    const s = await vrmMgr.client.fetchDynamicEssSettings();
+
+    setIfFinite(els.cap, s.batteryCapacity_Wh);
+    setIfFinite(els.pdis, s.dischargePower_W || s.limits?.batteryDischargeLimit_W);
+    setIfFinite(els.pchg, s.chargePower_W || s.limits?.batteryChargeLimit_W);
+    setIfFinite(els.gimp, s.maxPowerFromGrid_W || s.limits?.gridImportLimit_W);
+    setIfFinite(els.gexp, s.maxPowerToGrid_W || s.limits?.gridExportLimit_W);
+
+    if (Number.isFinite(s.batteryCosts_cents_per_kWh)) {
+      els.bwear.value = s.batteryCosts_cents_per_kWh;
+    }
+
+    saveToStorage(STORAGE_KEY, snapshotUI());
+    els.status.textContent = "Settings loaded from VRM.";
+    setSystemFetched(true);
+    reorderNow();
+    await onRun();
+  } catch (err) {
+    console.error(err);
+    els.status.textContent = `VRM error: ${err.message}`;
+  }
+}
+
+async function onFetchVRMForecasts() {
+  try {
+    vrmMgr.refreshClientFromEls(els); // ensure client has latest credentials
+    els.status.textContent = "Fetching VRM forecasts, prices & SoC…";
+
+    const [fc, pr, soc] = await Promise.all([
+      vrmMgr.client.fetchForecasts(),
+      vrmMgr.client.fetchPrices(),
+      typeof vrmMgr.client.fetchCurrentSoc === "function" ? vrmMgr.client.fetchCurrentSoc() : Promise.resolve(null)
+    ]);
+
+    const { adopted, firstInputValue } = adoptTimelineFromForecast(fc);
+    if (adopted && els.tsStart && firstInputValue) {
+      els.tsStart.value = firstInputValue;
+    }
+
+    if (els.step) els.step.value = fc.step_minutes || 15;
+
+    if (els.tLoad) els.tLoad.value = (fc.load_W || []).join(",");
+    if (els.tPV) els.tPV.value = (fc.pv_W || []).join(",");
+    if (els.tIC) els.tIC.value = (pr.importPrice_cents_per_kwh || []).join(",");
+    if (els.tEC) els.tEC.value = (pr.exportPrice_cents_per_kwh || []).join(",");
+
+    if (soc && Number.isFinite(soc.soc_percent)) {
+      const clamped = Math.max(0, Math.min(100, Number(soc.soc_percent)));
+      if (els.initsoc) els.initsoc.value = String(clamped);
+    }
+
+    saveToStorage(STORAGE_KEY, snapshotUI());
+
+    els.status.textContent = soc && Number.isFinite(soc.soc_percent)
+      ? `Forecasts, prices & SoC loaded from VRM (SoC ${soc.soc_percent}%).`
+      : "Forecasts & prices loaded from VRM (SoC unavailable).";
+
+    await onRun();
+  } catch (err) {
+    console.error(err);
+    els.status.textContent = `VRM error: ${err.message}`;
+  }
+}
+
 // ---------- Main compute ----------
 async function onRun() {
   try {
     const cfg = uiToConfig();
     const lpText = buildLP(cfg);
 
+    // keep current UI persisted
     saveToStorage(STORAGE_KEY, snapshotUI());
 
     const result = highs.solve(lpText);
@@ -294,16 +301,14 @@ async function onRun() {
       showKwh: !!els.tableKwh?.checked,
     });
 
-    drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, timestampsMs);
-    drawSocChart(els.soc, rows, cfg.batteryCapacity_Wh, cfg.stepSize_m, timestampsMs);
-    drawPricesStepLines(els.prices, rows, cfg.stepSize_m, timestampsMs);
-    drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m, timestampsMs);
+    renderAllCharts(rows, cfg, timestampsMs);
   } catch (err) {
     console.error(err);
     if (els.status) els.status.textContent = `Error: ${err.message}`;
   }
 }
 
+// ---------- Helpers ----------
 function uiToConfig() {
   const load_W = parseSeries(els.tLoad?.value);
   const pv_W = parseSeries(els.tPV?.value);
@@ -340,11 +345,21 @@ function uiToConfig() {
 
 function updateTerminalCustomUI() {
   const isCustom = (els.terminal?.value === "custom");
-  if (els.terminalCustom) {
-    els.terminalCustom.disabled = !isCustom;
-  }
+  if (els.terminalCustom) els.terminalCustom.disabled = !isCustom;
+}
+
+function reorderNow() {
+  reorderSidebar({ isVrmConfigured: () => vrmMgr.isConfigured(els), vrmSiteValue: els.vrmSite?.value });
+}
+
+function renderAllCharts(rows, cfg, timestampsMs) {
+  drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, timestampsMs);
+  drawSocChart(els.soc, rows, cfg.batteryCapacity_Wh, cfg.stepSize_m, timestampsMs);
+  drawPricesStepLines(els.prices, rows, cfg.stepSize_m, timestampsMs);
+  drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m, timestampsMs);
 }
 
 // ---------- small utils ----------
 function parseSeries(s) { return (s || "").split(/[\s,]+/).map(Number).filter((x) => Number.isFinite(x)); }
 function num(val, fallback) { const n = Number(val); return Number.isFinite(n) ? n : fallback; }
+function setIfFinite(input, v) { if (Number.isFinite(v) && input) input.value = String(v); }
