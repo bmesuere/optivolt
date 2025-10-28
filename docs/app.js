@@ -83,6 +83,7 @@ async function boot() {
 function wireGlobalInputs() {
   // Auto-save whenever anything changes
   for (const el of document.querySelectorAll("input, select, textarea")) {
+    if (el === els.tableKwh) continue;
     el.addEventListener("input", () => { saveToStorage(STORAGE_KEY, snapshotUI()); debounceRun(); });
     el.addEventListener("change", () => { saveToStorage(STORAGE_KEY, snapshotUI()); debounceRun(); });
   }
