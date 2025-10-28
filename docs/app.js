@@ -1,14 +1,15 @@
-// Import shared logic
 import { buildLP } from "./lib/build-lp.js";
 import { parseSolution } from "./lib/parse-solution.js";
 import { VRMClient } from "./lib/vrm-api.js";
 import { drawFlowsBarStackSigned, drawSocChart, drawPricesStepLines, drawLoadPvGrouped } from "./app/charts.js";
 import { renderTable } from "./app/table.js";
 import { runParseSolutionWithTiming, adoptTimelineFromForecast } from "./app/timeline.js";
+import {
+  STORAGE_KEY, STORAGE_VRM_KEY,
+  saveToStorage, loadFromStorage, removeFromStorage,
+  isSystemSettingsFetched, setSystemFetched
+} from "./app/storage.js";
 
-const STORAGE_KEY = "optivolt-config-v1";
-const STORAGE_VRM_KEY = "optivolt-vrm-cred-v1";
-const SYSTEM_FETCHED_KEY = "optivolt-system-settings-fetched-at";
 const DEFAULT_PROXY_BASE = "https://vrm-cors-proxy.mesuerebart.workers.dev";
 
 // ---- Defaults (match your latest example) ----
@@ -84,9 +85,6 @@ function isVrmConfigured() {
   const { installationId, token } = snapshotVRM();
   return Boolean((installationId || "").trim() && (token || "").trim());
 }
-function isSystemSettingsFetched() {
-  try { return !!localStorage.getItem(SYSTEM_FETCHED_KEY); } catch { return false; }
-}
 function setBadge(id, text) {
   const el = document.getElementById(id);
   if (el) el.textContent = text || "";
@@ -126,12 +124,12 @@ boot();
 async function boot() {
   // Hydrate UI from storage or defaults
   const urlCfg = decodeConfigFromQuery();
-  hydrateUI(urlCfg || loadFromStorage() || DEFAULTS);
+  hydrateUI(urlCfg || loadFromStorage(STORAGE_KEY) || DEFAULTS);
 
   // Auto-save whenever anything changes
   for (const el of document.querySelectorAll("input, select, textarea")) {
-    el.addEventListener("input", () => { saveToStorage(snapshotUI()); debounceRun(); });
-    el.addEventListener("change", () => { saveToStorage(snapshotUI()); debounceRun(); });
+    el.addEventListener("input", () => { saveToStorage(STORAGE_KEY, snapshotUI()); debounceRun(); });
+    el.addEventListener("change", () => { saveToStorage(STORAGE_KEY, snapshotUI()); debounceRun(); });
   }
 
   els.terminal?.addEventListener("change", () => {
@@ -143,17 +141,17 @@ async function boot() {
   els.run?.addEventListener("click", onRun);
 
   // Load VRM creds from storage (separate secret store)
-  hydrateVRM(loadVRMFromStorage());
+  hydrateVRM(loadFromStorage(STORAGE_VRM_KEY));
 
   // Save VRM creds when fields change
   for (const el of [els.vrmSite, els.vrmToken, els.vrmProxy]) {
-    el?.addEventListener("input", () => { saveVRMToStorage(snapshotVRM()); reorderSidebar(); });
-    el?.addEventListener("change", () => { saveVRMToStorage(snapshotVRM()); reorderSidebar(); });
+    el?.addEventListener("input", () => { saveToStorage(STORAGE_VRM_KEY, snapshotVRM()); reorderSidebar(); });
+    el?.addEventListener("change", () => { saveToStorage(STORAGE_VRM_KEY, snapshotVRM()); reorderSidebar(); });
   }
 
   // VRM actions
   els.vrmClear?.addEventListener("click", () => {
-    clearVRMStorage();
+    removeFromStorage(STORAGE_VRM_KEY);
     hydrateVRM({ installationId: "", token: "" });
     setSystemFetched(false);
     reorderSidebar();
@@ -164,7 +162,7 @@ async function boot() {
 
   // Units toggle recompute
   els.tableKwh?.addEventListener("change", () => {
-    saveToStorage(snapshotUI());
+    saveToStorage(STORAGE_KEY, snapshotUI());
     onRun();
   });
 
@@ -202,25 +200,6 @@ async function boot() {
   await onRun();
 }
 
-// ---------- Storage helpers ----------
-function saveToStorage(obj) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(obj)); } catch { }
-}
-function loadFromStorage() {
-  try {
-    const s = localStorage.getItem(STORAGE_KEY);
-    return s ? JSON.parse(s) : null;
-  } catch { return null; }
-}
-function saveVRMToStorage(obj) {
-  try { localStorage.setItem(STORAGE_VRM_KEY, JSON.stringify(obj)); } catch { }
-}
-function loadVRMFromStorage() {
-  try { const s = localStorage.getItem(STORAGE_VRM_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
-}
-function clearVRMStorage() {
-  try { localStorage.removeItem(STORAGE_VRM_KEY); } catch { }
-}
 function snapshotVRM() {
   return {
     installationId: (els.vrmSite?.value || "").trim(),
@@ -285,7 +264,7 @@ async function onFetchVRMSettings() {
       els.bwear.value = s.batteryCosts_cents_per_kWh;
     }
 
-    saveToStorage(snapshotUI());
+    saveToStorage(STORAGE_KEY, snapshotUI());
     els.status.textContent = "Settings loaded from VRM.";
     setSystemFetched(true);
     reorderSidebar();
@@ -330,7 +309,7 @@ async function onFetchVRMForecasts() {
     }
 
     // Persist the full UI state (now including tsStart) in localStorage
-    saveToStorage(snapshotUI());
+    saveToStorage(STORAGE_KEY, snapshotUI());
 
     els.status.textContent = soc && Number.isFinite(soc.soc_percent)
       ? `Forecasts, prices & SoC loaded from VRM (SoC ${soc.soc_percent}%).`
@@ -401,13 +380,6 @@ function hydrateUI(obj) {
   updateTerminalCustomUI();
 }
 
-function setSystemFetched(v = true) {
-  try {
-    if (v) localStorage.setItem(SYSTEM_FETCHED_KEY, "1");
-    else localStorage.removeItem(SYSTEM_FETCHED_KEY);
-  } catch { }
-}
-
 // ---------- Main compute ----------
 async function onRun() {
   try {
@@ -415,7 +387,7 @@ async function onRun() {
     const lpText = buildLP(cfg);
 
     // keep a copy in storage whenever we run (includes tsStart etc.)
-    saveToStorage(snapshotUI());
+    saveToStorage(STORAGE_KEY, snapshotUI());
 
     const result = highs.solve(lpText);
 
