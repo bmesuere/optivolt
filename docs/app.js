@@ -3,6 +3,7 @@ import { buildLP } from "./lib/build-lp.js";
 import { parseSolution } from "./lib/parse-solution.js";
 import { VRMClient } from "./lib/vrm-api.js";
 import { drawFlowsBarStackSigned, drawSocChart, drawPricesStepLines, drawLoadPvGrouped } from "./charts.js";
+import { renderTable } from "./table.js";
 
 const STORAGE_KEY = "optivolt-config-v1";
 const STORAGE_VRM_KEY = "optivolt-vrm-cred-v1";
@@ -504,8 +505,13 @@ async function onRun() {
     // parseSolution (library) with proper timing hints
     const { rows, timestampsMs } = runParseSolutionWithTiming(result, cfg);
 
-    // table + charts now use the canonical timestampsMs
-    renderTable(rows, cfg, timestampsMs);
+    renderTable({
+      rows,
+      cfg,
+      timestampsMs,
+      targets: { table: els.table, tableUnit: els.tableUnit },
+      showKwh: !!els.tableKwh?.checked,
+    });
 
     drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, timestampsMs);
     drawSocChart(els.soc, rows, cfg.batteryCapacity_Wh, cfg.stepSize_m, timestampsMs);
@@ -558,216 +564,6 @@ function updateTerminalCustomUI() {
     els.terminalCustom.disabled = !isCustom;
     // Optional: clear when not custom (comment out if you prefer to keep)
     // if (!isCustom) els.terminalCustom.value = DEFAULTS.terminalSocCustomPrice_cents_per_kWh;
-  }
-}
-
-function renderTable(rows, cfg, timestampsMs) {
-  // read current unit toggle once
-  const showKwh = !!els.tableKwh?.checked;
-
-  // battery capacity (for SoC%)
-  const cap = Math.max(1e-9, Number(cfg?.batteryCapacity_Wh ?? 20480));
-
-  // slot duration for W→kWh conversion
-  const h = Math.max(0.000001, Number(cfg?.stepSize_m ?? 60) / 60); // hours per slot
-  const W2kWh = (x) => (Number(x) || 0) * h / 1000;
-
-  // build human-readable time labels
-  const timesDisp = timestampsMs.map(ms => {
-    const dt = new Date(ms);
-    const HH = String(dt.getHours()).padStart(2, "0");
-    const MM = String(dt.getMinutes()).padStart(2, "0");
-
-    if (dt.getMinutes() === 0) {
-      if (dt.getHours() === 0) {
-        const dd = String(dt.getDate()).padStart(2, "0");
-        const mm = String(dt.getMonth() + 1).padStart(2, "0");
-        return `${dd}/${mm}`;
-      }
-      return `${HH}:00`;
-    }
-    return `${HH}:${MM}`;
-  });
-
-  const cols = [
-    {
-      key: "time",
-      headerHtml: "Time",
-      fmt: (_, idx) => timesDisp[idx]
-    },
-
-    {
-      key: "load",
-      headerHtml: "Exp.<br>load",
-      fmt: (x) => fmtEnergy(x, { dash: false }),
-      tip: "Expected Load"
-    },
-    {
-      key: "pv",
-      headerHtml: "Exp.<br>PV",
-      fmt: (x) => fmtEnergy(x, { dash: false }),
-      tip: "Expected PV"
-    },
-
-    {
-      key: "ic",
-      headerHtml: "Import<br>cost",
-      fmt: dec2Thin
-    },
-    {
-      key: "ec",
-      headerHtml: "Export<br>cost",
-      fmt: dec2Thin
-    },
-
-    {
-      key: "g2l",
-      headerHtml: "g2l",
-      fmt: (x) => fmtEnergy(x, { dash: true }),
-      tip: "Grid → Load"
-    },
-    {
-      key: "g2b",
-      headerHtml: "g2b",
-      fmt: (x) => fmtEnergy(x, { dash: true }),
-      tip: "Grid → Battery"
-    },
-    {
-      key: "pv2l",
-      headerHtml: "pv2l",
-      fmt: (x) => fmtEnergy(x, { dash: true }),
-      tip: "Solar → Load"
-    },
-    {
-      key: "pv2b",
-      headerHtml: "pv2b",
-      fmt: (x) => fmtEnergy(x, { dash: true }),
-      tip: "Solar → Battery"
-    },
-    {
-      key: "pv2g",
-      headerHtml: "pv2g",
-      fmt: (x) => fmtEnergy(x, { dash: true }),
-      tip: "Solar → Grid"
-    },
-    {
-      key: "b2l",
-      headerHtml: "b2l",
-      fmt: (x) => fmtEnergy(x, { dash: true }),
-      tip: "Battery → Load"
-    },
-    {
-      key: "b2g",
-      headerHtml: "b2g",
-      fmt: (x) => fmtEnergy(x, { dash: true }),
-      tip: "Battery → Grid"
-    },
-
-    {
-      key: "imp",
-      headerHtml: "Grid<br>import",
-      fmt: (x) => fmtEnergy(x, { dash: true }),
-      tip: "Grid Import"
-    },
-    {
-      key: "exp",
-      headerHtml: "Grid<br>export",
-      fmt: (x) => fmtEnergy(x, { dash: true }),
-      tip: "Grid Export"
-    },
-
-    {
-      key: "soc",
-      headerHtml: "SoC",
-      fmt: (w) => pct0(w / cap) + "%"
-    }
-  ];
-
-  const thead = `
-    <thead>
-      <tr class="align-bottom">
-        ${cols.map(c =>
-    `<th class="px-2 py-1 border-b font-medium text-right align-bottom" ${c.tip ? `title="${escapeHtml(c.tip)}"` : ""}>${c.headerHtml}</th>`
-  ).join("")}
-      </tr>
-    </thead>`;
-
-  const tbody = `
-  <tbody>
-    ${rows.map((r, ri) => {
-    // Determine if this row is a midnight boundary.
-    const timeLabel = cols[0].fmt(null, ri); // "time" column
-    const isMidnightRow = /^\d{2}\/\d{2}$/.test(timeLabel);
-
-    const tds = cols.map(c => {
-      let displayVal;
-      if (c.key === "time") {
-        displayVal = timeLabel;
-      } else {
-        displayVal = c.fmt(r[c.key], ri);
-      }
-
-      return `<td class="px-2 py-1 border-b text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${displayVal}</td>`;
-    }).join("");
-
-    return `<tr>${tds}</tr>`;
-  }).join("")}
-  </tbody>`;
-
-  if (els.table) els.table.innerHTML = thead + tbody;
-
-  if (els.tableUnit) {
-    els.tableUnit.textContent = `Units: ${showKwh ? "kWh" : "W"}`;
-  }
-
-  // helpers
-  function fmtEnergy(x, { dash = false } = {}) {
-    const raw = Number(x) || 0;
-    if (showKwh) {
-      const val = W2kWh(raw);
-      if (dash && Math.abs(val) < 1e-12) return "–";
-      return dec2Thin(val);
-    } else {
-      const n = Math.round(raw);
-      if (dash && n === 0) return "–";
-      return intThin(n);
-    }
-  }
-
-  function intThin(x) {
-    return groupThin(Math.round(Number(x) || 0));
-  }
-
-  function dec2Thin(x) {
-    const n = Number(x);
-    if (!Number.isFinite(n)) return "";
-    const s = n.toFixed(2);
-    const [i, f] = s.split(".");
-    return `${groupThin(i)}.${f}`;
-  }
-
-  function pct0(x) {
-    const n = (Number(x) || 0) * 100;
-    return groupThin(Math.round(n));
-  }
-
-  function groupThin(numOrStr) {
-    const s = String(numOrStr);
-    const neg = s.startsWith("-") ? "-" : "";
-    const body = neg ? s.slice(1) : s;
-    const parts = body.split(".");
-    const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, "\u2009");
-    return parts.length > 1 ? `${neg}${intPart}.${parts[1]}` : `${neg}${intPart}`;
-  }
-
-  function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, m => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      "\"": "&quot;",
-      "'": "&#039;"
-    }[m]));
   }
 }
 
