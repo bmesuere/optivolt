@@ -1,21 +1,20 @@
+// Import shared logic
 import { buildLP } from "./lib/build-lp.js";
 import { parseSolution } from "./lib/parse-solution.js";
-import { VRMClient } from "./lib/vrm-api.js";
 
 import { drawFlowsBarStackSigned, drawSocChart, drawPricesStepLines, drawLoadPvGrouped } from "./app/charts.js";
 import { renderTable } from "./app/table.js";
 import { runParseSolutionWithTiming, adoptTimelineFromForecast } from "./app/timeline.js";
 import {
-  STORAGE_KEY, STORAGE_VRM_KEY,
+  STORAGE_KEY,
   saveToStorage, loadFromStorage, removeFromStorage, setSystemFetched
 } from "./app/storage.js";
 import { encodeConfigToQuery, decodeConfigFromQuery } from "./app/share.js";
 import { reorderSidebar } from "./app/sidebar.js";
+import { debounce } from "./app/utils.js";
+import { VRMManager } from "./app/vrm.js";
 
-
-const DEFAULT_PROXY_BASE = "https://vrm-cors-proxy.mesuerebart.workers.dev";
-
-// ---- Defaults (match your latest example) ----
+// ---- Defaults ----
 const DEFAULTS = {
   stepSize_m: 60,
   batteryCapacity_Wh: 20480,
@@ -73,20 +72,13 @@ const els = {
 };
 
 let highs = null;
-let vrm = new VRMClient();
-
+const vrmMgr = new VRMManager(); // class-based manager
 const debounceRun = debounce(onRun, 250);
-
-function isVrmConfigured() {
-  const { installationId, token } = snapshotVRM();
-  return Boolean((installationId || "").trim() && (token || "").trim());
-}
 
 // ---------- Boot ----------
 boot();
 
 async function boot() {
-  // Hydrate UI from storage or defaults
   const urlCfg = decodeConfigFromQuery();
   hydrateUI(urlCfg || loadFromStorage(STORAGE_KEY) || DEFAULTS);
 
@@ -96,29 +88,33 @@ async function boot() {
     el.addEventListener("change", () => { saveToStorage(STORAGE_KEY, snapshotUI()); debounceRun(); });
   }
 
-  els.terminal?.addEventListener("change", () => {
-    updateTerminalCustomUI();
-  });
+  els.terminal?.addEventListener("change", updateTerminalCustomUI);
   updateTerminalCustomUI();
 
   // Manual recompute
   els.run?.addEventListener("click", onRun);
 
-  // Load VRM creds from storage (separate secret store)
-  hydrateVRM(loadFromStorage(STORAGE_VRM_KEY));
+  // VRM: hydrate from storage into inputs + client
+  vrmMgr.hydrateFromStorage(els);
 
   // Save VRM creds when fields change
   for (const el of [els.vrmSite, els.vrmToken, els.vrmProxy]) {
-    el?.addEventListener("input", () => { saveToStorage(STORAGE_VRM_KEY, snapshotVRM()); reorderSidebar({ isVrmConfigured, vrmSiteValue: els.vrmSite?.value }); });
-    el?.addEventListener("change", () => { saveToStorage(STORAGE_VRM_KEY, snapshotVRM()); reorderSidebar({ isVrmConfigured, vrmSiteValue: els.vrmSite?.value }); });
+    el?.addEventListener("input", () => {
+      vrmMgr.saveFromEls(els);
+      reorderSidebar({ isVrmConfigured: () => vrmMgr.isConfigured(els), vrmSiteValue: els.vrmSite?.value });
+    });
+    el?.addEventListener("change", () => {
+      vrmMgr.saveFromEls(els);
+      reorderSidebar({ isVrmConfigured: () => vrmMgr.isConfigured(els), vrmSiteValue: els.vrmSite?.value });
+    });
   }
 
   // VRM actions
   els.vrmClear?.addEventListener("click", () => {
-    removeFromStorage(STORAGE_VRM_KEY);
-    hydrateVRM({ installationId: "", token: "" });
+    vrmMgr.clearStorage();
+    vrmMgr.hydrate(els, { installationId: "", token: "" }); // clears inputs + client
     setSystemFetched(false);
-    reorderSidebar({ isVrmConfigured, vrmSiteValue: els.vrmSite?.value });
+    reorderSidebar({ isVrmConfigured: () => vrmMgr.isConfigured(els), vrmSiteValue: els.vrmSite?.value });
   });
 
   els.vrmFetchSettings?.addEventListener("click", onFetchVRMSettings);
@@ -133,7 +129,7 @@ async function boot() {
   // Restore defaults
   els.restore?.addEventListener("click", () => {
     hydrateUI(DEFAULTS);
-    saveToStorage(DEFAULTS);
+    saveToStorage(STORAGE_KEY, DEFAULTS);
     onRun();
   });
 
@@ -158,50 +154,24 @@ async function boot() {
   els.status.textContent = "Solver loaded.";
 
   // Initial sidebar order & badges
-  reorderSidebar({ isVrmConfigured, vrmSiteValue: els.vrmSite?.value });
+  reorderSidebar({ isVrmConfigured: () => vrmMgr.isConfigured(els), vrmSiteValue: els.vrmSite?.value });
 
   // Initial compute
   await onRun();
 }
 
-function snapshotVRM() {
-  return {
-    installationId: (els.vrmSite?.value || "").trim(),
-    token: (els.vrmToken?.value || "").trim(),
-    proxyBaseURL: (els.vrmProxy?.value || "").trim(),
-  };
-}
-function hydrateVRM(obj) {
-  const installationId = obj?.installationId || "";
-  const token = obj?.token || "";
-  // default proxy if empty in storage
-  const proxyBaseURL = (obj?.proxyBaseURL || DEFAULT_PROXY_BASE);
-
-  if (els.vrmSite) els.vrmSite.value = installationId;
-  if (els.vrmToken) els.vrmToken.value = token;
-  if (els.vrmProxy) els.vrmProxy.value = proxyBaseURL;
-
-  // IMPORTANT: set baseURL from proxyBaseURL (client will add /v2)
-  vrm.setBaseURL(proxyBaseURL);
-  vrm.setAuth({ installationId, token });
-
-  reorderSidebar({ isVrmConfigured, vrmSiteValue: els.vrmSite?.value });
-}
-
 async function onFetchVRMSettings() {
   try {
-    hydrateVRM(snapshotVRM()); // ensure client has latest
+    vrmMgr.refreshClientFromEls(els); // make sure client uses current inputs
     els.status.textContent = "Fetching VRM settings…";
-    const s = await vrm.fetchDynamicEssSettings();
+    const s = await vrmMgr.client.fetchDynamicEssSettings();
 
-    // Map settings into the form where reasonable (keep user's current values if VRM returns 0/null)
     setIfFinite(els.cap, s.batteryCapacity_Wh);
     setIfFinite(els.pdis, s.dischargePower_W || s.limits?.batteryDischargeLimit_W);
     setIfFinite(els.pchg, s.chargePower_W || s.limits?.batteryChargeLimit_W);
     setIfFinite(els.gimp, s.maxPowerFromGrid_W || s.limits?.gridImportLimit_W);
     setIfFinite(els.gexp, s.maxPowerToGrid_W || s.limits?.gridExportLimit_W);
 
-    // Battery cost → c€/kWh
     if (Number.isFinite(s.batteryCosts_cents_per_kWh)) {
       els.bwear.value = s.batteryCosts_cents_per_kWh;
     }
@@ -209,7 +179,7 @@ async function onFetchVRMSettings() {
     saveToStorage(STORAGE_KEY, snapshotUI());
     els.status.textContent = "Settings loaded from VRM.";
     setSystemFetched(true);
-    reorderSidebar({ isVrmConfigured, vrmSiteValue: els.vrmSite?.value });
+    reorderSidebar({ isVrmConfigured: () => vrmMgr.isConfigured(els), vrmSiteValue: els.vrmSite?.value });
     await onRun();
   } catch (err) {
     console.error(err);
@@ -220,14 +190,13 @@ function setIfFinite(input, v) { if (Number.isFinite(v) && input) input.value = 
 
 async function onFetchVRMForecasts() {
   try {
-    hydrateVRM(snapshotVRM()); // ensure client has latest credentials
+    vrmMgr.refreshClientFromEls(els); // ensure client has latest credentials
     els.status.textContent = "Fetching VRM forecasts, prices & SoC…";
 
-    // Ask VRM for forecasts + prices using its built-in horizon logic
     const [fc, pr, soc] = await Promise.all([
-      vrm.fetchForecasts(),
-      vrm.fetchPrices(),
-      typeof vrm.fetchCurrentSoc === "function" ? vrm.fetchCurrentSoc() : Promise.resolve(null)
+      vrmMgr.client.fetchForecasts(),
+      vrmMgr.client.fetchPrices(),
+      typeof vrmMgr.client.fetchCurrentSoc === "function" ? vrmMgr.client.fetchCurrentSoc() : Promise.resolve(null)
     ]);
 
     const { adopted, firstInputValue } = adoptTimelineFromForecast(fc);
@@ -235,22 +204,18 @@ async function onFetchVRMForecasts() {
       els.tsStart.value = firstInputValue;
     }
 
-    // Force our step size to match VRM dataset (usually 15 min)
     if (els.step) els.step.value = fc.step_minutes || 15;
 
-    // Fill in the per-slot series from VRM
     if (els.tLoad) els.tLoad.value = (fc.load_W || []).join(",");
     if (els.tPV) els.tPV.value = (fc.pv_W || []).join(",");
     if (els.tIC) els.tIC.value = (pr.importPrice_cents_per_kwh || []).join(",");
     if (els.tEC) els.tEC.value = (pr.exportPrice_cents_per_kwh || []).join(",");
 
-    // If SoC is available, set it in the Initial SoC input
     if (soc && Number.isFinite(soc.soc_percent)) {
       const clamped = Math.max(0, Math.min(100, Number(soc.soc_percent)));
       if (els.initsoc) els.initsoc.value = String(clamped);
     }
 
-    // Persist the full UI state (now including tsStart) in localStorage
     saveToStorage(STORAGE_KEY, snapshotUI());
 
     els.status.textContent = soc && Number.isFinite(soc.soc_percent)
@@ -264,8 +229,7 @@ async function onFetchVRMForecasts() {
   }
 }
 
-
-// Take current UI and return a plain object (including textarea strings)
+// ---- UI <-> config
 function snapshotUI() {
   return {
     stepSize_m: num(els.step?.value, DEFAULTS.stepSize_m),
@@ -292,7 +256,6 @@ function snapshotUI() {
   };
 }
 
-// Write an object into the UI (numbers + textarea strings)
 function hydrateUI(obj) {
   if (els.step) els.step.value = obj.stepSize_m ?? DEFAULTS.stepSize_m;
   if (els.cap) els.cap.value = obj.batteryCapacity_Wh ?? DEFAULTS.batteryCapacity_Wh;
@@ -328,12 +291,10 @@ async function onRun() {
     const cfg = uiToConfig();
     const lpText = buildLP(cfg);
 
-    // keep a copy in storage whenever we run (includes tsStart etc.)
     saveToStorage(STORAGE_KEY, snapshotUI());
 
     const result = highs.solve(lpText);
 
-    // report solver status + cost
     if (els.objective) {
       els.objective.textContent = Number.isFinite(result.ObjectiveValue)
         ? Number(result.ObjectiveValue).toFixed(2)
@@ -341,7 +302,6 @@ async function onRun() {
     }
     if (els.status) els.status.textContent = ` ${result.Status}`;
 
-    // parseSolution (library) with proper timing hints
     const { rows, timestampsMs } = runParseSolutionWithTiming(
       result,
       cfg,
@@ -366,7 +326,6 @@ async function onRun() {
     if (els.status) els.status.textContent = `Error: ${err.message}`;
   }
 }
-
 
 function uiToConfig() {
   const load_W = parseSeries(els.tLoad?.value);
@@ -406,8 +365,6 @@ function updateTerminalCustomUI() {
   const isCustom = (els.terminal?.value === "custom");
   if (els.terminalCustom) {
     els.terminalCustom.disabled = !isCustom;
-    // Optional: clear when not custom (comment out if you prefer to keep)
-    // if (!isCustom) els.terminalCustom.value = DEFAULTS.terminalSocCustomPrice_cents_per_kWh;
   }
 }
 
