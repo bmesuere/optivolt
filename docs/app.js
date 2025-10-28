@@ -75,12 +75,7 @@ const els = {
 let highs = null;
 let vrm = new VRMClient();
 
-// --- simple debounce for auto-run ---
-let timer = null;
-const debounceRun = () => {
-  clearTimeout(timer);
-  timer = setTimeout(onRun, 250);
-};
+const debounceRun = debounce(onRun, 250);
 
 function isVrmConfigured() {
   const { installationId, token } = snapshotVRM();
