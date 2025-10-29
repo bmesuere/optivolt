@@ -276,7 +276,7 @@ export function drawSocChart(canvas, rows, batteryCapacity_Wh = 20480, stepSize_
         label: "SoC (%)",
         data: socPct,
         borderColor: SOLUTION_COLORS.soc,
-        backgroundColor: toRGBA(SOLUTION_COLORS.soc, 0.12),
+        backgroundColor: SOLUTION_COLORS.soc,
         borderWidth: 2,
         tension: 0.2,
         pointRadius: 0,
@@ -341,6 +341,7 @@ export function drawPricesStepLines(canvas, rows, stepSize_m = 15, timestampsMs 
           data: rows.map(r => r.ic),
           stepped: true,
           borderColor: "#ef4444",
+          backgroundColor: "#ef4444",
           borderWidth: strokeW,
           pointRadius: 0,
           pointHitRadius: 8
@@ -350,6 +351,7 @@ export function drawPricesStepLines(canvas, rows, stepSize_m = 15, timestampsMs 
           data: rows.map(r => r.ec),
           stepped: true,
           borderColor: "#22c55e",
+          backgroundColor: "#22c55e",
           borderWidth: strokeW,
           pointRadius: 0,
           pointHitRadius: 8
