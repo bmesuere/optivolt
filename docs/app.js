@@ -1,6 +1,8 @@
 // Import shared logic
 import { buildLP } from "./lib/build-lp.js";
 import { parseSolution } from "./lib/parse-solution.js";
+import { mapRowsToDess /*, mergeDessWindows */ } from "./lib/dess-mapper.js";
+
 
 import { drawFlowsBarStackSigned, drawSocChart, drawPricesStepLines, drawLoadPvGrouped } from "./app/charts.js";
 import { renderTable } from "./app/table.js";
@@ -311,6 +313,11 @@ async function onRun() {
       parseSolution,
       els.tsStart?.value || ""
     );
+
+    const { perSlot /*, windows */ } = mapRowsToDess(rows, cfg);
+    for (let i = 0; i < rows.length; i++) {
+      rows[i].dess = perSlot[i]; // { feedin, restrictions, strategy, flags, socTarget_Wh }
+    }
 
     renderTable({
       rows,
