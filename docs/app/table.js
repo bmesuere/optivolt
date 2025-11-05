@@ -1,3 +1,5 @@
+import { SOLUTION_COLORS } from "./charts.js";
+
 /**
  * Render the results table and unit label.
  * Pure function: no global DOM lookups; only uses args.
@@ -107,8 +109,10 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
     const isMidnightRow = /^\d{2}\/\d{2}$/.test(timeLabel);
 
     const tds = cols.map(c => {
-      const displayVal = c.key === "time" ? timeLabel : c.fmt(r[c.key], ri);
-      return `<td class="px-2 py-1 border-b text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${displayVal}</td>`;
+      const raw = c.key === "time" ? null : r[c.key];
+      const displayVal = c.key === "time" ? timeLabel : c.fmt(raw, ri);
+      const styleAttr = styleForCell(c.key, raw); // only applies to flow columns with > 0
+      return `<td ${styleAttr} class="px-2 py-1 border-b text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${displayVal}</td>`;
     }).join("");
 
     return `<tr>${tds}</tr>`;
@@ -166,6 +170,24 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
   function pct0(x) {
     const n = (Number(x) || 0) * 100;
     return groupThin(Math.round(n));
+  }
+
+  // rgb(…, …, …) → rgba(…, …, …, a)
+  function rgbToRgba(rgb, alpha = 0.16) {
+    const m = /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/.exec(rgb || "");
+    return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${alpha})` : rgb;
+  }
+
+  // Build a style attribute for flow cells that are > 0
+  function styleForCell(key, rawValue) {
+    if (key === "soc") return ""; // no special styling for SoC
+    const color = SOLUTION_COLORS[key];
+    if (!color) return ""; // not a flow column
+    const v = Number(rawValue) || 0;
+    if (v <= 0) return ""; // only highlight positive flows
+    const bg = rgbToRgba(color, 0.80);
+    // subtle rounded background; keep text default for contrast
+    return `style="background:${bg}; border-radius:4px"`;
   }
 
   function groupThin(numOrStr) {
