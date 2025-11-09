@@ -2,8 +2,8 @@ import fs from "node:fs";
 import process from "node:process";
 import highsFactory from "highs";
 
-import { buildLP } from "../src/build-lp.js";
-import { parseSolution } from "../src/parse-solution.js";
+import { buildLP } from "../lib/build-lp.js";
+import { parseSolution } from "../lib/parse-solution.js";
 
 /**
  * Usage:
