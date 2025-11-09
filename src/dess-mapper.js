@@ -66,7 +66,7 @@ export function mapRowsToDess(rows, cfg) {
     const startOfSlotSoc_Wh = t > 0 ? Number(rows[t - 1].soc) : Number(row.soc);
     let socTarget_Wh = Number(row.soc);
 
-    // Strategy selection (nested; only observed cases are assigned)
+    // Strategy selection
     let strategy = Strategy.unknown;
 
     if (hasG2B) {
@@ -78,12 +78,14 @@ export function mapRowsToDess(rows, cfg) {
       // There's an active discharge to grid which probably means electricity is expensive.
       // This means we'll want to use the battery for our own load as much as possible and export excess PV to the grid.
       // I haven't observed this case yet, but it's presumably pro-grid (and a target SoC lower than current SoC)
-      // TODO: strategy remains unknown
+      // TODO: validate
+      strategy = Strategy.proGrid;
     } else {
       if (deficitOrNoPv) {
         // We have a deficit to cover our planned loads.
         // Based on how this deficit is covered according to the plan, we can use the same handling for unexpected loads.
-        // TODO: technically, if we have an unexpected PV surplus, we might also want to inject that into the grid. We don't handle that yet. If we do, we must also adapt the restrictions.
+        // TODO: technically, if we have an unexpected PV surplus, we might also want to inject that into the grid. We don't handle that yet.
+        // We can look if we have x2g flows (not due to inverter power cap) on the same day and determine the lowest price of any of these periods. If the current price is higher than that, we can assume excess PV should go to grid.
         if (hasB2L && !hasG2L) {
           // The battery is used to cover the deficit, so we'll do the same for unexpected loads.
           strategy = Strategy.selfConsumption;
@@ -94,25 +96,29 @@ export function mapRowsToDess(rows, cfg) {
         } else if (!hasB2L && !hasG2L) {
           // Predicted PV is exactly equal to predicted load, so there's no deficit handling in the plan.
           // We have thus no indication of how to handle unexpected loads.
-          // TODO: simulate to determine if pro-battery or self-consumption is better? Or use a price indicator?
+          // TODO: use price indicator (or potentially simulation) to determine if grid or battery is better.
           strategy = Strategy.selfConsumption;
         } else {
           // PV deficit is served by both battery and grid.
           // We have thus no clear indication of how to handle unexpected loads.
           // I haven't observed this case yet, but I think it makes sense to use the grid here because the mix probably indicates that the battery is low.
-          // TODO: strategy remains unknown
+          // TODO: validate
+          strategy = Strategy.proBattery;
         }
       } else if (pvCoversLoad) {
-        // In this case, PV is expected to cover all load and we have excess PV.
-        // Based on how this excess PV is used according to the plan, we can use the same handling for unexpected excess PV.
+        // In this case, PV is expected to cover all load and we have additional PV.
+        // Based on how this additional PV is used according to the plan, we can use the same handling for excess PV.
         // It is however less clear how unexpected loads should be covered in this case.
         if (hasPV2B) {
           // If we see PV2B -> use self-consumption to cover the unexpected loads by battery or pro battery to cover by grid.
-          // TODO: simulate to determine if pro-battery or self-consumption is better? Or use a price indicator?
+          // TODO: use price indicator (or potentially simulation) to determine if grid or battery is better.
           strategy = Strategy.selfConsumption;
         } else {
           // In this case, we see PV2G, but I haven't observed this yet.
-          // TODO: strategy remains unknown
+          // Excess PV should go to grid, so we have targetSoC or pro-grid.
+          // Since we're already exporting to grid, pro-grid makes more sense. Or should we also use a price indicator here?
+          // TODO: validate
+          strategy = Strategy.proGrid;
         }
       } else {
         // I don't think we can reach this branch?
