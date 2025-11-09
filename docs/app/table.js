@@ -78,7 +78,7 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
       headerHtml: "Feed-in",
       fmt: (_, ri) => {
         const d = rows[ri]?.dess;
-        return fmtDessFeedin(d?.feedin, d?.feedinCase);
+        return fmtDessFeedin(d?.feedin);
       },
       tip: '1=allowed, 0=blocked; "?" = unknown',
     },
@@ -148,8 +148,8 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
     return String(v);
   }
 
-  function fmtDessFeedin(v, caseTag) {
-    if (v === -1 || v === "-1" || caseTag === "?" || v == null) return "?";
+  function fmtDessFeedin(v) {
+    if (v === -1 || v === "-1" || v == null) return "?";
     if (v === 0 || v === "0") return "no";
     if (v === 1 || v === "1") return "yes";
     return "–";
