@@ -1,3 +1,5 @@
+import { SOLUTION_COLORS } from "./charts.js";
+
 /**
  * Render the results table and unit label.
  * Pure function: no global DOM lookups; only uses args.
@@ -58,6 +60,37 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
     { key: "exp", headerHtml: "Grid<br>export", fmt: x => fmtEnergy(x), tip: "Grid Export" },
 
     { key: "soc", headerHtml: "SoC", fmt: w => pct0(w / cap) + "%" },
+
+    {
+      key: "dess_strategy",
+      headerHtml: "DESS<br>strategy",
+      fmt: (_, ri) => fmtDessStrategy(rows[ri]?.dess?.strategy),
+      tip: '0=Target SOC, 1=Self-consumption, 2=Pro battery, 3=Pro grid; "?" = unknown',
+    },
+    {
+      key: "dess_restrictions",
+      headerHtml: "Restr.",
+      fmt: (_, ri) => fmtDessRestrictions(rows[ri]?.dess?.restrictions),
+      tip: '0=none, 1=grid→bat restricted, 2=bat→grid restricted, 3=both; "?" = unknown',
+    },
+    {
+      key: "dess_feedin",
+      headerHtml: "Feed-in",
+      fmt: (_, ri) => {
+        const d = rows[ri]?.dess;
+        return fmtDessFeedin(d?.feedin);
+      },
+      tip: '1=allowed, 0=blocked; "?" = unknown',
+    },
+    {
+      key: "dess_soc_target",
+      headerHtml: "Soc→",
+      fmt: (_, ri) => {
+        const targetWh = rows[ri]?.dess?.socTarget_Wh ?? 0;
+        return pct0(targetWh / cap) + "%";
+      },
+      tip: "Target SoC at end of slot",
+    },
   ];
 
   const thead = `
@@ -76,8 +109,10 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
     const isMidnightRow = /^\d{2}\/\d{2}$/.test(timeLabel);
 
     const tds = cols.map(c => {
-      const displayVal = c.key === "time" ? timeLabel : c.fmt(r[c.key], ri);
-      return `<td class="px-2 py-1 border-b text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${displayVal}</td>`;
+      const raw = c.key === "time" ? null : r[c.key];
+      const displayVal = c.key === "time" ? timeLabel : c.fmt(raw, ri);
+      const styleAttr = styleForCell(c.key, raw); // only applies to flow columns with > 0
+      return `<td ${styleAttr} class="px-2 py-1 border-b text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${displayVal}</td>`;
     }).join("");
 
     return `<tr>${tds}</tr>`;
@@ -101,6 +136,25 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
     }
   }
 
+  function fmtDessStrategy(v) {
+    if (v === -1 || v === "-1" || v == null) return "?";
+    const map = { 0: "TS", 1: "SC", 2: "PB", 3: "PG" }; // Target, Self, Pro-bat, Pro-grid
+    return map[v] ?? String(v);
+  }
+
+  function fmtDessRestrictions(v) {
+    if (v === -1 || v === "-1" || v == null) return "?";
+    // 0=no restrictions, 1=grid→bat restricted, 2=bat→grid restricted, 3=both blocked
+    return String(v);
+  }
+
+  function fmtDessFeedin(v) {
+    if (v === -1 || v === "-1" || v == null) return "?";
+    if (v === 0 || v === "0") return "no";
+    if (v === 1 || v === "1") return "yes";
+    return "–";
+  }
+
   function intThin(x) {
     return groupThin(Math.round(Number(x) || 0));
   }
@@ -116,6 +170,24 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
   function pct0(x) {
     const n = (Number(x) || 0) * 100;
     return groupThin(Math.round(n));
+  }
+
+  // rgb(…, …, …) → rgba(…, …, …, a)
+  function rgbToRgba(rgb, alpha = 0.16) {
+    const m = /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/.exec(rgb || "");
+    return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${alpha})` : rgb;
+  }
+
+  // Build a style attribute for flow cells that are > 0
+  function styleForCell(key, rawValue) {
+    if (key === "soc") return ""; // no special styling for SoC
+    const color = SOLUTION_COLORS[key];
+    if (!color) return ""; // not a flow column
+    const v = Number(rawValue) || 0;
+    if (v <= 0) return ""; // only highlight positive flows
+    const bg = rgbToRgba(color, 0.80);
+    // subtle rounded background; keep text default for contrast
+    return `style="background:${bg}; border-radius:4px"`;
   }
 
   function groupThin(numOrStr) {

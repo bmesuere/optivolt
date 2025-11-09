@@ -1,6 +1,6 @@
 // charts.js
 
-const SOLUTION_COLORS = {
+export const SOLUTION_COLORS = {
   b2g: "rgb(15, 192, 216)",   // Battery to Grid (teal-ish)
   pv2g: "rgb(247, 171, 62)",  // Solar to Grid (amber)
   pv2b: "rgb(139, 201, 100)", // Solar to Battery (green)

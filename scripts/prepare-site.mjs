@@ -13,6 +13,7 @@ const dstDir = path.join(root, "docs", "lib");
 // Files we want available to the browser UI
 const files = [
   "build-lp.js",
+  "dess-mapper.js",
   "parse-solution.js",
   "vrm-api.js"
 ];
