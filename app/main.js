@@ -64,6 +64,13 @@ const els = {
   vrmProxy: $("#vrm-proxy"),
 };
 
+if (isApiMode && els.vrmProxy) {
+  const proxyLabel = els.vrmProxy.closest("label");
+  if (proxyLabel) {
+    proxyLabel.style.display = "none";
+  }
+}
+
 // ---------- State ----------
 let highs = null;
 const vrmMgr = new VRMManager();
@@ -149,7 +156,11 @@ function wireVrmInputs() {
   vrmMgr.hydrateFromStorage(els);
 
   // Save VRM creds when fields change
-  for (const el of [els.vrmSite, els.vrmToken, els.vrmProxy]) {
+  const vrmInputs = isApiMode
+    ? [els.vrmSite, els.vrmToken]
+    : [els.vrmSite, els.vrmToken, els.vrmProxy];
+
+  for (const el of vrmInputs) {
     el?.addEventListener("input", () => { vrmMgr.saveFromEls(els); reorderNow(); });
     el?.addEventListener("change", () => { vrmMgr.saveFromEls(els); reorderNow(); });
   }
@@ -226,9 +237,13 @@ function hydrateUI(obj) {
 // ---------- Actions ----------
 async function onFetchVRMSettings() {
   try {
-    vrmMgr.refreshClientFromEls(els); // make sure client uses current inputs
+    const creds = vrmMgr.snapshotFromEls(els);
+    if (!vrmMgr.isConfigured(creds)) {
+      throw new Error("Enter your VRM site id and API token first");
+    }
+
     if (els.status) els.status.textContent = "Fetching VRM settings…";
-    const s = await vrmMgr.client.fetchDynamicEssSettings();
+    const s = await vrmMgr.fetchSettings(creds);
 
     setIfFinite(els.cap, s.batteryCapacity_Wh);
     setIfFinite(els.pdis, s.dischargePower_W || s.limits?.batteryDischargeLimit_W);
@@ -253,14 +268,13 @@ async function onFetchVRMSettings() {
 
 async function onFetchVRMForecasts() {
   try {
-    vrmMgr.refreshClientFromEls(els); // ensure client has latest credentials
-    if (els.status) els.status.textContent = "Fetching VRM forecasts, prices & SoC…";
+    const creds = vrmMgr.snapshotFromEls(els);
+    if (!vrmMgr.isConfigured(creds)) {
+      throw new Error("Enter your VRM site id and API token first");
+    }
 
-    const [fc, pr, soc] = await Promise.all([
-      vrmMgr.client.fetchForecasts(),
-      vrmMgr.client.fetchPrices(),
-      typeof vrmMgr.client.fetchCurrentSoc === "function" ? vrmMgr.client.fetchCurrentSoc() : Promise.resolve(null),
-    ]);
+    if (els.status) els.status.textContent = "Fetching VRM forecasts, prices & SoC…";
+    const { forecasts: fc, prices: pr, soc } = await vrmMgr.fetchTimeseries(creds);
 
     // 1) Keep canonical VRM timeline (usually starts at last full hour)
     const { adopted } = adoptTimelineFromForecast(fc);

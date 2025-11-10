@@ -1,6 +1,51 @@
 // app/vrm.js
 import { VRMClient } from "../lib/vrm-api.js";
+import { API_BASE_URL, BACKEND_MODE } from "../runtime-config.js";
 import { STORAGE_VRM_KEY, saveToStorage, loadFromStorage, removeFromStorage } from "./storage.js";
+
+const isApiMode = BACKEND_MODE === "api";
+
+function normaliseApiBase(baseUrl) {
+  return (baseUrl || "").replace(/\/$/, "");
+}
+
+async function postJson(path, payload) {
+  if (!isApiMode) {
+    throw new Error("VRM API proxy is only available in remote mode");
+  }
+
+  const res = await fetch(`${normaliseApiBase(API_BASE_URL)}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    let message = `VRM request failed with ${res.status}`;
+    try {
+      const text = await res.text();
+      if (text) {
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed.error === "string") {
+            message = parsed.error;
+          } else if (parsed && typeof parsed.message === "string") {
+            message = parsed.message;
+          } else {
+            message = text;
+          }
+        } catch {
+          message = text;
+        }
+      }
+    } catch {
+      // ignore parsing failures
+    }
+    throw new Error(message);
+  }
+
+  return res.json();
+}
 
 export class VRMManager {
   /**
@@ -9,7 +54,8 @@ export class VRMManager {
    */
   constructor({ defaultProxyBase = "https://vrm-cors-proxy.mesuerebart.workers.dev" } = {}) {
     this.defaultProxyBase = defaultProxyBase;
-    this._client = new VRMClient();
+    // The browser needs a CORS proxy for VRM calls, but the API server can talk to VRM directly.
+    this._client = isApiMode ? null : new VRMClient();
   }
 
   /** Read fields from the DOM into a plain object */
@@ -57,19 +103,54 @@ export class VRMManager {
     removeFromStorage(STORAGE_VRM_KEY);
   }
 
-  /** Ensure the client uses the current DOM values */
-  refreshClientFromEls(els) {
-    this._applyToClient(this.snapshotFromEls(els));
+  /** Fetch ESS settings from VRM (local or remote depending on runtime mode) */
+  async fetchSettings(creds) {
+    const normalised = this._normaliseCreds(creds);
+
+    if (isApiMode) {
+      const { settings } = await postJson("/vrm/settings", {
+        installationId: normalised.installationId,
+        token: normalised.token,
+      });
+      return settings;
+    }
+
+    this._applyToClient(normalised);
+    return this._client.fetchDynamicEssSettings();
   }
 
-  /** Expose the underlying client */
-  get client() {
-    return this._client;
+  /** Fetch forecasts, prices and SoC from VRM */
+  async fetchTimeseries(creds) {
+    const normalised = this._normaliseCreds(creds);
+
+    if (isApiMode) {
+      return postJson("/vrm/timeseries", {
+        installationId: normalised.installationId,
+        token: normalised.token,
+      });
+    }
+
+    this._applyToClient(normalised);
+    const [forecasts, prices, soc] = await Promise.all([
+      this._client.fetchForecasts(),
+      this._client.fetchPrices(),
+      this._client.fetchCurrentSoc(),
+    ]);
+    return { forecasts, prices, soc };
   }
 
   // ---- private
   _applyToClient({ installationId, token, proxyBaseURL }) {
+    if (!this._client) return;
     this._client.setBaseURL(proxyBaseURL || this.defaultProxyBase); // VRMClient adds /v2
     this._client.setAuth({ installationId: installationId || "", token: token || "" });
+  }
+
+  _normaliseCreds(creds = {}) {
+    return {
+      installationId: (creds.installationId || "").trim(),
+      token: (creds.token || "").trim(),
+      proxyBaseURL: (creds.proxyBaseURL || "").trim(),
+    };
   }
 }
