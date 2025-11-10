@@ -382,9 +382,11 @@ async function onRun() {
     }
     if (els.status) els.status.textContent = ` ${statusText}`;
 
-    const { perSlot } = mapRowsToDess(rows, cfg);
-    for (let i = 0; i < rows.length; i++) {
-      rows[i].dess = perSlot[i]; // { feedin, restrictions, strategy, flags, socTarget_Wh }
+    if (!isApiMode) {
+      const { perSlot } = mapRowsToDess(rows, cfg);
+      for (let i = 0; i < rows.length; i++) {
+        rows[i].dess = perSlot[i]; // { feedin, restrictions, strategy, flags, socTarget_Wh }
+      }
     }
 
     renderTable({

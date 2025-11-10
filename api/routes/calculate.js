@@ -3,6 +3,7 @@ import highsFactory from "highs";
 
 import { buildLP } from "../../lib/build-lp.js";
 import { parseSolution } from "../../lib/parse-solution.js";
+import { mapRowsToDess } from "../../lib/dess-mapper.js";
 
 const router = express.Router();
 
@@ -23,6 +24,11 @@ router.post('/', async (req, res) => {
       stepMin: Number.isFinite(stepMin) ? stepMin : undefined,
     };
     const { rows, timestampsMs } = parseSolution(result, cfg, hints);
+
+    const { perSlot } = mapRowsToDess(rows, cfg);
+    for (let i = 0; i < rows.length; i++) {
+      rows[i].dess = perSlot[i];
+    }
 
     res.json({ status: result.Status, objectiveValue: result.ObjectiveValue, rows, timestampsMs });
   } catch (error) {
