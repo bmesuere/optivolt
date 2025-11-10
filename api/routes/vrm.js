@@ -1,50 +1,41 @@
 import express from 'express';
 
+import { HttpError, assertCondition, toHttpError } from '../http-errors.js';
 import { VRMClient } from '../../lib/vrm-api.js';
 
 const router = express.Router();
 
-function createClient({ installationId, token }) {
-  if (!installationId || !token) {
-    const err = new Error('installationId and token are required');
-    err.statusCode = 400;
-    throw err;
-  }
+function createClient(body = {}) {
+  const installationId = String(body.installationId ?? '').trim();
+  const token = String(body.token ?? '').trim();
 
-  const client = new VRMClient({
-    installationId: String(installationId).trim(),
-    token: String(token).trim(),
+  assertCondition(installationId.length > 0, 400, 'installationId is required');
+  assertCondition(token.length > 0, 400, 'token is required');
+
+  return new VRMClient({
+    installationId,
+    token,
   });
-
-  return client;
 }
 
-function sendError(res, error) {
-  const status = Number.isInteger(error?.statusCode) ? error.statusCode : 502;
-  const message = error?.message || 'VRM request failed';
-  if (status >= 500) {
-    console.error('VRM proxy error:', error);
-  }
-  res.status(status).json({ error: message });
+function normalizeVrmError(error, message) {
+  const status = error instanceof HttpError ? error.statusCode : 502;
+  return toHttpError(error, status, message);
 }
 
-router.post('/settings', async (req, res) => {
+router.post('/settings', async (req, res, next) => {
   try {
-    const body = req.body ?? {};
-    const client = createClient(body);
-
+    const client = createClient(req.body);
     const settings = await client.fetchDynamicEssSettings();
     res.json({ settings });
   } catch (error) {
-    sendError(res, error);
+    next(normalizeVrmError(error, 'Failed to fetch VRM settings'));
   }
 });
 
-router.post('/timeseries', async (req, res) => {
+router.post('/timeseries', async (req, res, next) => {
   try {
-    const body = req.body ?? {};
-    const client = createClient(body);
-
+    const client = createClient(req.body);
     const [forecasts, prices, soc] = await Promise.all([
       client.fetchForecasts(),
       client.fetchPrices(),
@@ -53,7 +44,7 @@ router.post('/timeseries', async (req, res) => {
 
     res.json({ forecasts, prices, soc });
   } catch (error) {
-    sendError(res, error);
+    next(normalizeVrmError(error, 'Failed to fetch VRM data'));
   }
 });
 

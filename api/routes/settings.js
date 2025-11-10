@@ -1,39 +1,52 @@
 import express from 'express';
-import fs from 'node:fs.promises';
+import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const SETTINGS_PATH = path.join(process.cwd(), '../../data/settings.json');
-const DEFAULT_PATH = path.join(process.cwd(), '../../lib/default-settings.json');
+import { assertCondition, toHttpError } from '../http-errors.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = path.resolve(__dirname, '../../data');
+const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
+const DEFAULT_PATH = path.resolve(__dirname, '../../lib/default-settings.json');
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
+async function readJson(filePath) {
+  const data = await fs.readFile(filePath, 'utf8');
+  return JSON.parse(data);
+}
+
+router.get('/', async (req, res, next) => {
   try {
-    let data;
     try {
-      data = await fs.readFile(SETTINGS_PATH, 'utf-8');
-    } catch (err) {
-      if (err.code !== 'ENOENT') throw err; // rethrow if it's a different error
-      data = await fs.readFile(DEFAULT_PATH, 'utf-8');
+      const settings = await readJson(SETTINGS_PATH);
+      res.json(settings);
+      return;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
     }
 
-    const settings = JSON.parse(data);
-    res.json(settings);
+    const defaults = await readJson(DEFAULT_PATH);
+    res.json(defaults);
   } catch (error) {
-    console.error("Failed to read settings:", error);
-    res.status(500).json({ error: 'Failed to read settings.', message: error.message });
+    next(toHttpError(error, 500, 'Failed to read settings'));
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', async (req, res, next) => {
   try {
-    const settings = req.body;
-    const data = JSON.stringify(settings, null, 2);
-    await fs.writeFile(SETTINGS_PATH, data, 'utf-8');
+    const settings = req.body ?? {};
+    assertCondition(settings && typeof settings === 'object' && !Array.isArray(settings), 400, 'settings payload must be an object');
+
+    const data = `${JSON.stringify(settings, null, 2)}\n`;
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(SETTINGS_PATH, data, 'utf8');
     res.json({ message: 'Settings saved successfully.' });
   } catch (error) {
-    console.error("Failed to save settings:", error);
-    res.status(500).json({ error: 'Failed to save settings.', message: error.message });
+    next(toHttpError(error, 500, 'Failed to save settings'));
   }
 });
 
