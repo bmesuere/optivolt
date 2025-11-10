@@ -1,4 +1,4 @@
-// app/vrm.js
+// app/scr/vrm.js
 import { VRMClient } from "../lib/vrm-api.js";
 import { API_BASE_URL, BACKEND_MODE } from "../runtime-config.js";
 import { STORAGE_VRM_KEY, saveToStorage, loadFromStorage, removeFromStorage } from "./storage.js";
