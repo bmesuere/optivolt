@@ -1,14 +1,6 @@
-import { BACKEND_MODE, API_BASE_URL } from "../runtime-config.js";
+import { BACKEND_MODE } from "../runtime-config.js";
 import { STORAGE_KEY, loadFromStorage, saveToStorage } from "./storage.js";
-
-function normaliseBaseUrl(baseUrl) {
-  return (baseUrl || "").replace(/\/$/, "");
-}
-
-function buildApiUrl(path) {
-  const base = normaliseBaseUrl(API_BASE_URL);
-  return `${base}${path}`;
-}
+import { buildApiUrl } from "./api-utils.js";
 
 export async function loadInitialConfig(defaults) {
   if (BACKEND_MODE === "api") {

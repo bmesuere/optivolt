@@ -1,13 +1,4 @@
-import { API_BASE_URL } from "../runtime-config.js";
-
-function normaliseBaseUrl(baseUrl) {
-  return (baseUrl || "").replace(/\/$/, "");
-}
-
-function buildApiUrl(path) {
-  const base = normaliseBaseUrl(API_BASE_URL);
-  return `${base}${path}`;
-}
+import { buildApiUrl } from "./api-utils.js";
 
 export async function requestRemoteSolve({ config, timing }) {
   const payload = {
