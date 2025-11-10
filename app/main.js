@@ -335,6 +335,7 @@ async function onRun() {
     let timestampsMs = [];
     let statusText = "";
     let objectiveValue = null;
+    let hasDessFromRemote = false;
 
     if (isApiMode) {
       const timing = buildTimingHints(cfg, {
@@ -346,6 +347,10 @@ async function onRun() {
       rows = Array.isArray(result.rows) ? result.rows : [];
       statusText = result.status || "OK";
       objectiveValue = Number(result.objectiveValue);
+
+      hasDessFromRemote = rows.length > 0
+        ? rows.every((row) => row && typeof row === "object" && row.dess != null)
+        : false;
 
       timestampsMs = Array.isArray(result.timestampsMs) ? result.timestampsMs.slice() : null;
       if (!Array.isArray(timestampsMs) || timestampsMs.length !== rows.length) {
@@ -382,9 +387,11 @@ async function onRun() {
     }
     if (els.status) els.status.textContent = ` ${statusText}`;
 
-    const { perSlot } = mapRowsToDess(rows, cfg);
-    for (let i = 0; i < rows.length; i++) {
-      rows[i].dess = perSlot[i]; // { feedin, restrictions, strategy, flags, socTarget_Wh }
+    if (!isApiMode || !hasDessFromRemote) {
+      const { perSlot } = mapRowsToDess(rows, cfg);
+      for (let i = 0; i < rows.length; i++) {
+        rows[i].dess = perSlot[i]; // { feedin, restrictions, strategy, flags, socTarget_Wh }
+      }
     }
 
     renderTable({
