@@ -1,4 +1,4 @@
-// charts.js
+/* global Chart */
 
 export const SOLUTION_COLORS = {
   b2g: "rgb(15, 192, 216)",   // Battery to Grid (teal-ish)
@@ -24,7 +24,7 @@ const legendSquare = {
     pointStyle: "rect",
     boxWidth: 10,
     padding: 12,
-    font: (ctx) => ({
+    font: (_ctx) => ({
       size: 12,
       family: getComputedStyle(document.documentElement).fontFamily
     })
@@ -260,7 +260,7 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, timestamp
 // 2) SoC line chart (%)
 // -----------------------------------------------------------------------------
 
-export function drawSocChart(canvas, rows, batteryCapacity_Wh = 20480, stepSize_m = 15, timestampsMs = []) {
+export function drawSocChart(canvas, rows, batteryCapacity_Wh = 20480, _stepSize_m = 15, timestampsMs = []) {
   const { labels, ticksCb, tooltipTitleCb, gridCb } =
     buildTimeAxisFromTimestamps(timestampsMs);
 
@@ -322,7 +322,7 @@ export function drawSocChart(canvas, rows, batteryCapacity_Wh = 20480, stepSize_
 // 3) Buy/Sell price chart (stepped line)
 // -----------------------------------------------------------------------------
 
-export function drawPricesStepLines(canvas, rows, stepSize_m = 15, timestampsMs = []) {
+export function drawPricesStepLines(canvas, rows, _stepSize_m = 15, timestampsMs = []) {
   const { labels, ticksCb, tooltipTitleCb, gridCb } =
     buildTimeAxisFromTimestamps(timestampsMs);
 

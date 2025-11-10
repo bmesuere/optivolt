@@ -12,7 +12,6 @@ import {
 import { renderTable } from "./scr/table.js";
 import {
   runParseSolutionWithTiming,
-  adoptTimelineFromForecast,
   lastQuarterMs,
   toLocalDatetimeLocal,
   buildTimingHints,
@@ -276,16 +275,13 @@ async function onFetchVRMForecasts() {
     if (els.status) els.status.textContent = "Fetching VRM forecasts, prices & SoC…";
     const { forecasts: fc, prices: pr, soc } = await vrmMgr.fetchTimeseries(creds);
 
-    // 1) Keep canonical VRM timeline (usually starts at last full hour)
-    const { adopted } = adoptTimelineFromForecast(fc);
-
-    // 2) Decide the optimizer start time: last quarter (local)
+    // Decide the optimizer start time: last quarter (local)
     const quarterStartMs = lastQuarterMs(new Date());
     if (els.tsStart) {
       els.tsStart.value = toLocalDatetimeLocal(new Date(quarterStartMs));
     }
 
-    // 3) Determine step and compute offset (how many slots to drop from full-hour → quarter)
+    // Determine step and compute offset (how many slots to drop from full-hour → quarter)
     const stepMin = num(els.step?.value, fc.step_minutes || 15); // keep user's step if set; else VRM or 15
     const fullHourStartMs = Array.isArray(fc.timestamps) && fc.timestamps.length > 0
       ? Number(fc.timestamps[0])
@@ -296,10 +292,10 @@ async function onFetchVRMForecasts() {
     // Clamp to at most 3 if step=15 and we only shifted within the same hour
     if (stepMin === 15) offsetSlots = Math.min(offsetSlots, 3);
 
-    // 4) Slice helpers
+    // Slice helpers
     const slice = (arr) => (Array.isArray(arr) ? arr.slice(offsetSlots) : []);
 
-    // 5) Fill the per-slot series from VRM, but starting at the last quarter
+    // Fill the per-slot series from VRM, but starting at the last quarter
     if (els.tLoad) els.tLoad.value = slice(fc.load_W).join(",");
     if (els.tPV) els.tPV.value = slice(fc.pv_W).join(",");
     if (els.tIC) els.tIC.value = slice(pr.importPrice_cents_per_kwh).join(",");
