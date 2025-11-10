@@ -1,6 +1,7 @@
 import express from 'express';
 
 import calculateRouter from './routes/calculate.js';
+import settingsRouter from './routes/settings.js';
 
 const app = express();
 const port = 3000;
@@ -8,6 +9,7 @@ const port = 3000;
 app.use(express.json());
 
 app.use('/calculate', calculateRouter);
+app.use('/settings', settingsRouter);
 
 app.get('/', (req, res) => {
   res.send('Optivolt API is running.');
