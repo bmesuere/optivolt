@@ -5,6 +5,33 @@
 It uses linear programming to decide — every 15 minutes — how your battery, EV, heat pump, and the grid should interact.
 Feed it your load, solar forecast, and tariffs, and it returns a day-long schedule that minimizes cost and peaks.
 
+## REST API
+
+OptiVolt ships with an Express server that exposes the solver and Victron VRM helpers over HTTP.
+
+### Running the server
+
+```bash
+npm install
+npm run api
+```
+
+By default the server listens on `http://localhost:3000`. Override the host or port via `HOST` and `PORT` environment variables.
+
+Persisted UI settings are stored in `data/settings.json`. The directory is created on demand and ignored by Git.
+
+### Endpoints
+
+| Method & path         | Description                                                                                                    |
+|-----------------------|----------------------------------------------------------------------------------------------------------------|
+| `POST /calculate`     | Runs the solver. Accepts `{ config, timing }` (or just the config object) and returns `{ status, rows, ... }`. |
+| `GET /settings`       | Reads the last saved UI settings, falling back to `lib/default-settings.json` when no custom settings exist.   |
+| `POST /settings`      | Persists a settings object to `data/settings.json`.                                                            |
+| `POST /vrm/settings`  | Fetches dynamic ESS settings from the Victron VRM API. Requires `{ installationId, token }`.                   |
+| `POST /vrm/timeseries`| Fetches VRM forecasts, pricing and state-of-charge data. Requires `{ installationId, token }`.                 |
+
+All endpoints respond with JSON. Errors are returned in the shape `{ "error": string }` with an appropriate HTTP status code. Client-side validation errors use 4xx codes, whereas unexpected failures are logged and mapped to 5xx responses.
+
 ### Planned features
 - Fast linear and mixed-integer optimization using [HiGHS](https://github.com/ERGO-Code/HiGHS)
 - Models power balance, battery dynamics, peak tariffs, and efficiency losses
@@ -21,7 +48,7 @@ Feed it your load, solar forecast, and tariffs, and it returns a day-long schedu
 - [x] html frontend
 - [x] Fetch predictions from Victron
 - [ ] Add experimental optimizer tweaks
-- [ ] Express API
+- [x] Express API
 - [ ] Convert plan to Victron commands
 - [ ] EV charging model
 - [ ] Heat pump model
