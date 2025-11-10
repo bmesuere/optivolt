@@ -1,21 +1,34 @@
 // Import shared logic
 import { buildLP } from "./lib/build-lp.js";
 import { parseSolution } from "./lib/parse-solution.js";
-import { mapRowsToDess /*, mergeDessWindows */ } from "./lib/dess-mapper.js";
+import { mapRowsToDess } from "./lib/dess-mapper.js";
 
-
-import { drawFlowsBarStackSigned, drawSocChart, drawPricesStepLines, drawLoadPvGrouped } from "./app/charts.js";
-import { renderTable } from "./app/table.js";
-import { runParseSolutionWithTiming, adoptTimelineFromForecast, lastQuarterMs, toLocalDatetimeLocal } from "./app/timeline.js";
 import {
-  STORAGE_KEY,
-  saveToStorage, loadFromStorage, setSystemFetched
-} from "./app/storage.js";
-import { encodeConfigToQuery, decodeConfigFromQuery } from "./app/share.js";
-import { reorderSidebar } from "./app/sidebar.js";
-import { debounce } from "./app/utils.js";
-import { VRMManager } from "./app/vrm.js";
-import { DEFAULTS } from "./app/config.js";
+  drawFlowsBarStackSigned,
+  drawSocChart,
+  drawPricesStepLines,
+  drawLoadPvGrouped,
+} from "./scr/charts.js";
+import { renderTable } from "./scr/table.js";
+import {
+  runParseSolutionWithTiming,
+  adoptTimelineFromForecast,
+  lastQuarterMs,
+  toLocalDatetimeLocal,
+  buildTimingHints,
+  getActiveTimestampsMs,
+  setActiveTimestampsMs,
+} from "./scr/timeline.js";
+import { setSystemFetched } from "./scr/storage.js";
+import { reorderSidebar } from "./scr/sidebar.js";
+import { debounce } from "./scr/utils.js";
+import { VRMManager } from "./scr/vrm.js";
+import { DEFAULTS } from "./scr/config.js";
+import { loadInitialConfig, saveConfig } from "./scr/config-store.js";
+import { requestRemoteSolve } from "./scr/calc-service.js";
+import { BACKEND_MODE } from "./runtime-config.js";
+
+const isApiMode = BACKEND_MODE === "api";
 
 // ---------- DOM ----------
 const $ = (sel) => document.querySelector(sel);
@@ -23,7 +36,6 @@ const els = {
   // actions
   run: $("#run"),
   restore: $("#restore"),
-  share: $("#share"),
 
   // numeric inputs
   step: $("#step"), cap: $("#cap"),
@@ -56,23 +68,38 @@ const els = {
 let highs = null;
 const vrmMgr = new VRMManager();
 const debounceRun = debounce(onRun, 250);
+const persistConfigDebounced = debounce(
+  (cfg) => { void persistConfig(cfg); },
+  isApiMode ? 600 : 250,
+);
 
 // ---------- Boot ----------
 boot();
 
 async function boot() {
-  const urlCfg = decodeConfigFromQuery();
-  hydrateUI(urlCfg || loadFromStorage(STORAGE_KEY) || DEFAULTS);
+  const { config: initialConfig, source: initialSource } = await loadInitialConfig(DEFAULTS);
+
+  hydrateUI(initialConfig);
 
   wireGlobalInputs();
   wireVrmInputs();
 
-  // Initialize HiGHS via global UMD factory `Module`
-  // eslint-disable-next-line no-undef
-  highs = await Module({
-    locateFile: (file) => "https://lovasoa.github.io/highs-js/" + file
-  });
-  els.status.textContent = "Solver loaded.";
+  if (isApiMode) {
+    if (els.status) {
+      const note = initialSource === "api"
+        ? "Loaded settings from API."
+        : "Using defaults (API settings unavailable).";
+      els.status.textContent = note;
+    }
+  } else {
+    if (els.status) els.status.textContent = "Loading solver…";
+    // Initialize HiGHS via global UMD factory `Module`
+    // eslint-disable-next-line no-undef
+    highs = await Module({
+      locateFile: (file) => "https://lovasoa.github.io/highs-js/" + file,
+    });
+    if (els.status) els.status.textContent = "Solver loaded.";
+  }
 
   // Initial sidebar order & badges
   reorderNow();
@@ -83,12 +110,17 @@ async function boot() {
 
 // ---------- Wiring ----------
 function wireGlobalInputs() {
+  const handleChange = () => {
+    queuePersistSnapshot();
+    debounceRun();
+  };
+
   // Auto-save whenever anything changes
   for (const el of document.querySelectorAll("input, select, textarea")) {
     // tableKwh has its own change handler below, so we exclude it from auto-save/debounce here
     if (el === els.tableKwh) continue;
-    el.addEventListener("input", () => { saveToStorage(STORAGE_KEY, snapshotUI()); debounceRun(); });
-    el.addEventListener("change", () => { saveToStorage(STORAGE_KEY, snapshotUI()); debounceRun(); });
+    el.addEventListener("input", handleChange);
+    el.addEventListener("change", handleChange);
   }
 
   els.terminal?.addEventListener("change", updateTerminalCustomUI);
@@ -98,30 +130,18 @@ function wireGlobalInputs() {
   els.run?.addEventListener("click", onRun);
 
   // Units toggle recompute
-  els.tableKwh?.addEventListener("change", () => {
-    saveToStorage(STORAGE_KEY, snapshotUI());
+  els.tableKwh?.addEventListener("change", async () => {
+    await persistConfig();
     onRun();
   });
 
   // Restore defaults
-  els.restore?.addEventListener("click", () => {
+  els.restore?.addEventListener("click", async () => {
     hydrateUI(DEFAULTS);
-    saveToStorage(STORAGE_KEY, DEFAULTS);
+    await persistConfig();
     onRun();
   });
 
-  // Share current config via URL (copied to clipboard)
-  els.share?.addEventListener("click", async () => {
-    try {
-      const link = encodeConfigToQuery(snapshotUI());
-      await navigator.clipboard.writeText(link);
-      const prev = els.share.textContent;
-      els.share.textContent = "Copied!";
-      setTimeout(() => (els.share.textContent = prev), 1200);
-    } catch {
-      window.open(encodeConfigToQuery(snapshotUI()), "_blank");
-    }
-  });
 }
 
 function wireVrmInputs() {
@@ -207,7 +227,7 @@ function hydrateUI(obj) {
 async function onFetchVRMSettings() {
   try {
     vrmMgr.refreshClientFromEls(els); // make sure client uses current inputs
-    els.status.textContent = "Fetching VRM settings…";
+    if (els.status) els.status.textContent = "Fetching VRM settings…";
     const s = await vrmMgr.client.fetchDynamicEssSettings();
 
     setIfFinite(els.cap, s.batteryCapacity_Wh);
@@ -220,26 +240,26 @@ async function onFetchVRMSettings() {
       els.bwear.value = s.batteryCosts_cents_per_kWh;
     }
 
-    saveToStorage(STORAGE_KEY, snapshotUI());
-    els.status.textContent = "Settings loaded from VRM.";
+    await persistConfig();
+    if (els.status) els.status.textContent = "Settings loaded from VRM.";
     setSystemFetched(true);
     reorderNow();
     await onRun();
   } catch (err) {
     console.error(err);
-    els.status.textContent = `VRM error: ${err.message}`;
+    if (els.status) els.status.textContent = `VRM error: ${err.message}`;
   }
 }
 
 async function onFetchVRMForecasts() {
   try {
     vrmMgr.refreshClientFromEls(els); // ensure client has latest credentials
-    els.status.textContent = "Fetching VRM forecasts, prices & SoC…";
+    if (els.status) els.status.textContent = "Fetching VRM forecasts, prices & SoC…";
 
     const [fc, pr, soc] = await Promise.all([
       vrmMgr.client.fetchForecasts(),
       vrmMgr.client.fetchPrices(),
-      typeof vrmMgr.client.fetchCurrentSoc === "function" ? vrmMgr.client.fetchCurrentSoc() : Promise.resolve(null)
+      typeof vrmMgr.client.fetchCurrentSoc === "function" ? vrmMgr.client.fetchCurrentSoc() : Promise.resolve(null),
     ]);
 
     // 1) Keep canonical VRM timeline (usually starts at last full hour)
@@ -276,16 +296,18 @@ async function onFetchVRMForecasts() {
       if (els.initsoc) els.initsoc.value = String(clamped);
     }
 
-    saveToStorage(STORAGE_KEY, snapshotUI());
+    await persistConfig();
 
-    els.status.textContent = soc && Number.isFinite(soc.soc_percent)
-      ? `Forecasts, prices & SoC loaded from VRM (SoC ${soc.soc_percent}%).`
-      : "Forecasts & prices loaded from VRM (SoC unavailable).";
+    if (els.status) {
+      els.status.textContent = soc && Number.isFinite(soc.soc_percent)
+        ? `Forecasts, prices & SoC loaded from VRM (SoC ${soc.soc_percent}%).`
+        : "Forecasts & prices loaded from VRM (SoC unavailable).";
+    }
 
     await onRun();
   } catch (err) {
     console.error(err);
-    els.status.textContent = `VRM error: ${err.message}`;
+    if (els.status) els.status.textContent = `VRM error: ${err.message}`;
   }
 }
 
@@ -293,28 +315,60 @@ async function onFetchVRMForecasts() {
 async function onRun() {
   try {
     const cfg = uiToConfig();
-    const lpText = buildLP(cfg);
+    await persistConfig();
 
-    // keep current UI persisted
-    saveToStorage(STORAGE_KEY, snapshotUI());
+    let rows = [];
+    let timestampsMs = [];
+    let statusText = "";
+    let objectiveValue = null;
 
-    const result = highs.solve(lpText);
+    if (isApiMode) {
+      const timing = buildTimingHints(cfg, {
+        candidate: getActiveTimestampsMs(),
+        tsStartValue: els.tsStart?.value || "",
+      });
+
+      const result = await requestRemoteSolve({ config: cfg, timing });
+      rows = Array.isArray(result.rows) ? result.rows : [];
+      statusText = result.status || "OK";
+      objectiveValue = Number(result.objectiveValue);
+
+      timestampsMs = Array.isArray(result.timestampsMs) ? result.timestampsMs.slice() : null;
+      if (!Array.isArray(timestampsMs) || timestampsMs.length !== rows.length) {
+        timestampsMs = Array.isArray(timing.timestampsMs) && timing.timestampsMs.length === rows.length
+          ? timing.timestampsMs.slice()
+          : [];
+      }
+      if (Array.isArray(timestampsMs) && timestampsMs.length === rows.length) {
+        setActiveTimestampsMs(timestampsMs);
+      } else {
+        setActiveTimestampsMs(null);
+      }
+    } else {
+      const lpText = buildLP(cfg);
+      const result = highs.solve(lpText);
+
+      statusText = result.Status;
+      objectiveValue = Number(result.ObjectiveValue);
+
+      const parsed = runParseSolutionWithTiming(
+        result,
+        cfg,
+        parseSolution,
+        els.tsStart?.value || "",
+      );
+      rows = parsed.rows;
+      timestampsMs = parsed.timestampsMs;
+    }
 
     if (els.objective) {
-      els.objective.textContent = Number.isFinite(result.ObjectiveValue)
-        ? Number(result.ObjectiveValue).toFixed(2)
+      els.objective.textContent = Number.isFinite(objectiveValue)
+        ? objectiveValue.toFixed(2)
         : "—";
     }
-    if (els.status) els.status.textContent = ` ${result.Status}`;
+    if (els.status) els.status.textContent = ` ${statusText}`;
 
-    const { rows, timestampsMs } = runParseSolutionWithTiming(
-      result,
-      cfg,
-      parseSolution,
-      els.tsStart?.value || ""
-    );
-
-    const { perSlot /*, windows */ } = mapRowsToDess(rows, cfg);
+    const { perSlot } = mapRowsToDess(rows, cfg);
     for (let i = 0; i < rows.length; i++) {
       rows[i].dess = perSlot[i]; // { feedin, restrictions, strategy, flags, socTarget_Wh }
     }
@@ -383,6 +437,22 @@ function renderAllCharts(rows, cfg, timestampsMs) {
   drawSocChart(els.soc, rows, cfg.batteryCapacity_Wh, cfg.stepSize_m, timestampsMs);
   drawPricesStepLines(els.prices, rows, cfg.stepSize_m, timestampsMs);
   drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m, timestampsMs);
+}
+
+async function persistConfig(cfg = snapshotUI()) {
+  const payload = (cfg && typeof cfg.load_W_txt === "string") ? cfg : snapshotUI();
+  try {
+    await saveConfig(payload);
+  } catch (error) {
+    console.error("Failed to persist settings", error);
+    if (isApiMode && els.status) {
+      els.status.textContent = `Settings error: ${error.message}`;
+    }
+  }
+}
+
+function queuePersistSnapshot() {
+  persistConfigDebounced(snapshotUI());
 }
 
 // ---------- small utils ----------

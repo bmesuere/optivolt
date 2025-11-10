@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
 
 const srcDir = path.join(root, "lib");
-const dstDir = path.join(root, "docs", "lib");
+const dstDir = path.join(root, "app", "lib");
 
 // Files we want available to the browser UI
 const files = [
@@ -33,4 +33,4 @@ for (const f of files) {
   }
 }
 
-console.log(`Prepared site: copied ${copied}/${files.length} file(s) to docs/lib`);
+console.log(`Prepared site: copied ${copied}/${files.length} file(s) to app/lib`);
