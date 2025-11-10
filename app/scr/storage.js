@@ -15,5 +15,5 @@ export function isSystemSettingsFetched() {
   try { return !!localStorage.getItem(SYSTEM_FETCHED_KEY); } catch { return false; }
 }
 export function setSystemFetched(v = true) {
-  try { v ? localStorage.setItem(SYSTEM_FETCHED_KEY, "1") : localStorage.removeItem(SYSTEM_FETCHED_KEY); } catch { }
+  try { v ? localStorage.setItem(SYSTEM_FETCHED_KEY, "1") : localStorage.removeItem(SYSTEM_FETCHED_KEY); } catch { /* ignore */ }
 }

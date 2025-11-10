@@ -19,6 +19,7 @@
     "dev:api": "nodemon ./api/index.js",
     "dev": "node ./cli/index.js",
     "solve": "node ./cli/index.js",
+    "lint": "npx eslint .",
     "prepare": "node ./scripts/prepare-site.mjs"
   },
   "engines": {
