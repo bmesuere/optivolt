@@ -1,5 +1,5 @@
 export const DEFAULTS = {
-  stepSize_m: 60,
+  stepSize_m: 15,
   batteryCapacity_Wh: 20480,
   minSoc_percent: 20,
   maxSoc_percent: 100,

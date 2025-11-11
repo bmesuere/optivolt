@@ -1,0 +1,11 @@
+#!/usr/bin/with-contenv sh
+set -eu
+
+APP_DIR="/opt/optivolt"
+
+export HOST="0.0.0.0"
+export PORT="3000"      # matches ingress_port
+export DATA_DIR="/data" # HA persistent storage
+
+cd "$APP_DIR"
+exec node "$APP_DIR/api/index.js"

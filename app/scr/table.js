@@ -21,7 +21,7 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
   const cap = Math.max(1e-9, Number(cfg?.batteryCapacity_Wh ?? 20480));
 
   // slot duration for W→kWh conversion
-  const h = Math.max(0.000001, Number(cfg?.stepSize_m ?? 60) / 60); // hours per slot
+  const h = Math.max(0.000001, Number(cfg?.stepSize_m ?? 15) / 60); // hours per slot
   const W2kWh = (x) => (Number(x) || 0) * h / 1000;
 
   // human-readable time labels

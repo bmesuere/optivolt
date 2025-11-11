@@ -1,0 +1,20 @@
+name: Optivolt
+slug: optivolt
+version: "0.1.0"
+description: Plan and control Victron ESS with forecasts & dynamic tariffs.
+url: https://github.com/bmesuere/optivolt
+arch:
+  - aarch64
+  - amd64
+startup: application
+init: false
+
+# Ingress lets the UI appear inside Home Assistant without opening a port.
+ingress: true
+ingress_port: 3000
+panel_title: Optivolt
+panel_icon: mdi:home-battery-outline
+
+# Persist add-on state in /data
+map:
+  - data:rw
