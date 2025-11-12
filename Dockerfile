@@ -7,7 +7,7 @@ ENV \
   S6_BEHAVIOUR_IF_STAGE2_FAILS=2 \
   NODE_ENV=production
 
-# We need Node to run the Express server and do a one-time prepare step.
+# We need Node to run the Express server.
 # The base is Alpine; install node & npm.
 RUN apk add --no-cache nodejs npm curl
 
@@ -23,7 +23,6 @@ COPY scripts ./scripts
 
 # Install deps, build/mirror shared code into /app, then prune dev deps
 RUN npm ci \
-  && npm run prepare \
   && npm prune --omit=dev
 
 # s6-overlay service + init hooks
