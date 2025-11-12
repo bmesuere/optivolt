@@ -4,7 +4,8 @@ import highsFactory from 'highs';
 import { mapRowsToDess } from '../../lib/dess-mapper.js';
 import { buildLP } from '../../lib/build-lp.js';
 import { parseSolution } from '../../lib/parse-solution.js';
-import { assertCondition, toHttpError } from '../http-errors.js';
+import { toHttpError } from '../http-errors.js';
+import { loadSolverInputs } from '../services/settings-store.js';
 
 const router = express.Router();
 
@@ -20,9 +21,9 @@ async function getHighsInstance() {
   return highsPromise;
 }
 
-function parseTimingHints(timing = {}) {
+function parseTimingHints(timing = {}, timeseries = {}, cfg = {}) {
   if (typeof timing !== 'object' || timing === null) {
-    return {};
+    timing = {};
   }
 
   const startMs = Number(timing.startMs);
@@ -32,25 +33,29 @@ function parseTimingHints(timing = {}) {
     ? timing.timestampsMs.map((value) => Number(value)).filter(Number.isFinite)
     : undefined;
 
+  let fallbackStartMs;
+  if (typeof timeseries.tsStart === 'string' && timeseries.tsStart.trim().length > 0) {
+    const parsed = Date.parse(timeseries.tsStart);
+    fallbackStartMs = Number.isFinite(parsed) ? parsed : undefined;
+  }
+
   return {
     timestampsMs: timestampsMs?.length ? timestampsMs : undefined,
-    startMs: Number.isFinite(startMs) ? startMs : undefined,
-    stepMin: Number.isFinite(stepMin) ? stepMin : undefined,
+    startMs: Number.isFinite(startMs) ? startMs : fallbackStartMs,
+    stepMin: Number.isFinite(stepMin) ? stepMin : (Number(cfg.stepSize_m) || 15),
   };
 }
 
 router.post('/', async (req, res, next) => {
   try {
     const body = req.body ?? {};
-    const cfg = body.config ?? body;
-
-    assertCondition(cfg && typeof cfg === 'object' && !Array.isArray(cfg), 400, 'config payload must be an object');
+    const { config: cfg, timeseries } = await loadSolverInputs();
 
     const lpText = buildLP(cfg);
     const highs = await getHighsInstance();
     const result = highs.solve(lpText);
 
-    const hints = parseTimingHints(body.timing);
+    const hints = parseTimingHints(body.timing, timeseries, cfg);
     const { rows, timestampsMs } = parseSolution(result, cfg, hints);
 
     const { perSlot } = mapRowsToDess(rows, cfg);

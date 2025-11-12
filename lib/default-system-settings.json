@@ -1,0 +1,14 @@
+{
+  "stepSize_m": 15,
+  "batteryCapacity_Wh": 20480,
+  "minSoc_percent": 20,
+  "maxSoc_percent": 100,
+  "initialSoc_percent": 20,
+  "maxChargePower_W": 3600,
+  "maxDischargePower_W": 4000,
+  "maxGridImport_W": 2500,
+  "maxGridExport_W": 5000,
+  "chargeEfficiency_percent": 95,
+  "dischargeEfficiency_percent": 95,
+  "batteryCost_cent_per_kWh": 2
+}

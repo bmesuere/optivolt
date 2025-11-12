@@ -2,36 +2,21 @@
 GET http://localhost:3000/
 
 ### Calculation
-
+# Uses settings persisted via /settings/* endpoints
 POST http://localhost:3000/calculate
 Content-Type: application/json
 
 {
-  "stepSize_m": 15,
-  "load_W":       [1800, 1500, 1200, 2000, 2500, 2200, 1600, 1400],
-  "pv_W":         [0,    0,    0,    100,  200,  600,  200,  100],
-  "importPrice":  [30,   28,   55,   22,   20,   18,   20,   24],
-  "exportPrice":  [5,    5,    45,   7,    8,    9,    7,    6],
-
-  "batteryCapacity_Wh": 20480,
-  "minSoc_percent": 20,
-  "maxSoc_percent": 100,
-  "maxChargePower_W": 3600,
-  "maxDischargePower_W": 4000,
-  "maxGridImport_W": 2500,
-  "maxGridExport_W": 5000,
-  "initialSoc_percent": 20,
-  "chargeEfficiency_percent": 95,
-  "dischargeEfficiency_percent": 95,
-  "batteryCost_cent_per_kWh": 2,
-  "terminalSocValuation": "zero"
+  "timing": {
+    "startMs": 1700000000000,
+    "stepMin": 15
+  }
 }
 
-### Get settings
-GET http://localhost:3000/settings
+### System settings
+GET http://localhost:3000/settings/system
 
-### Post settings
-POST http://localhost:3000/settings
+POST http://localhost:3000/settings/system
 Content-Type: application/json
 
 {
@@ -39,13 +24,38 @@ Content-Type: application/json
   "batteryCapacity_Wh": 20480,
   "minSoc_percent": 20,
   "maxSoc_percent": 100,
+  "initialSoc_percent": 20,
   "maxChargePower_W": 3600,
   "maxDischargePower_W": 4000,
   "maxGridImport_W": 2500,
   "maxGridExport_W": 5000,
-  "initialSoc_percent": 20,
   "chargeEfficiency_percent": 95,
   "dischargeEfficiency_percent": 95,
-  "batteryCost_cent_per_kWh": 2,
-  "terminalSocValuation": "zero"
+  "batteryCost_cent_per_kWh": 2
+}
+
+### Algorithm settings
+GET http://localhost:3000/settings/algorithm
+
+POST http://localhost:3000/settings/algorithm
+Content-Type: application/json
+
+{
+  "terminalSocValuation": "zero",
+  "terminalSocCustomPrice_cents_per_kWh": 0
+}
+
+### Time series
+GET http://localhost:3000/settings/time-series
+
+POST http://localhost:3000/settings/time-series
+Content-Type: application/json
+
+{
+  "load_W_txt": "280,250,360,420",
+  "pv_W_txt": "0,0,0,0",
+  "importPrice_txt": "20,20,30,30",
+  "exportPrice_txt": "5,5,6,6",
+  "tsStart": "2024-01-01T00:00",
+  "tableShowKwh": false
 }

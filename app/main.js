@@ -266,7 +266,7 @@ async function onRun() {
       tsStartValue: els.tsStart?.value || "",
     });
 
-    const result = await requestRemoteSolve({ config: cfg, timing });
+    const result = await requestRemoteSolve({ timing });
     const rows = Array.isArray(result.rows) ? result.rows : [];
     const statusText = result.status || "OK";
     const objectiveValue = Number(result.objectiveValue);

@@ -1,37 +1,79 @@
 import express from 'express';
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-import { assertCondition, toHttpError } from '../http-errors.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Allow overriding via env (e.g. Home Assistant mounts persistent state at /data)
-const DATA_DIR = path.resolve(process.env.DATA_DIR ?? path.resolve(__dirname, '../../data'));
-const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
-const DEFAULT_PATH = path.resolve(__dirname, '../../lib/default-settings.json');
+import { toHttpError } from '../http-errors.js';
+import {
+  getAlgorithmSettings,
+  getSystemSettings,
+  getTimeSeriesSettings,
+  saveAlgorithmSettings,
+  saveSystemSettings,
+  saveTimeSeriesSettings,
+} from '../services/settings-store.js';
 
 const router = express.Router();
 
-async function readJson(filePath) {
-  const data = await fs.readFile(filePath, 'utf8');
-  return JSON.parse(data);
-}
-
-router.get('/', async (req, res, next) => {
+router.get('/system', async (_req, res, next) => {
   try {
-    try {
-      const settings = await readJson(SETTINGS_PATH);
-      res.json(settings);
-      return;
-    } catch (error) {
-      if (error?.code !== 'ENOENT') {
-        throw error;
-      }
-    }
+    const settings = await getSystemSettings();
+    res.json(settings);
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to read system settings'));
+  }
+});
 
-    const defaults = await readJson(DEFAULT_PATH);
-    res.json(defaults);
+router.post('/system', async (req, res, next) => {
+  try {
+    await saveSystemSettings(req.body ?? {});
+    res.json({ message: 'System settings saved successfully.' });
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to save system settings'));
+  }
+});
+
+router.get('/algorithm', async (_req, res, next) => {
+  try {
+    const settings = await getAlgorithmSettings();
+    res.json(settings);
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to read algorithm settings'));
+  }
+});
+
+router.post('/algorithm', async (req, res, next) => {
+  try {
+    await saveAlgorithmSettings(req.body ?? {});
+    res.json({ message: 'Algorithm settings saved successfully.' });
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to save algorithm settings'));
+  }
+});
+
+router.get('/time-series', async (_req, res, next) => {
+  try {
+    const settings = await getTimeSeriesSettings();
+    res.json(settings);
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to read time series settings'));
+  }
+});
+
+router.post('/time-series', async (req, res, next) => {
+  try {
+    await saveTimeSeriesSettings(req.body ?? {});
+    res.json({ message: 'Time series settings saved successfully.' });
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to save time series settings'));
+  }
+});
+
+router.get('/', async (_req, res, next) => {
+  try {
+    const [system, algorithm, timeseries] = await Promise.all([
+      getSystemSettings(),
+      getAlgorithmSettings(),
+      getTimeSeriesSettings(),
+    ]);
+    res.json({ ...system, ...algorithm, ...timeseries });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to read settings'));
   }
@@ -39,12 +81,12 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const settings = req.body ?? {};
-    assertCondition(settings && typeof settings === 'object' && !Array.isArray(settings), 400, 'settings payload must be an object');
-
-    const data = `${JSON.stringify(settings, null, 2)}\n`;
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(SETTINGS_PATH, data, 'utf8');
+    const body = req.body ?? {};
+    await Promise.all([
+      saveSystemSettings(body),
+      saveAlgorithmSettings(body),
+      saveTimeSeriesSettings(body),
+    ]);
     res.json({ message: 'Settings saved successfully.' });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to save settings'));
