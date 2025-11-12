@@ -9,8 +9,8 @@ function createClient() {
   const installationId = (process.env.VRM_INSTALLATION_ID ?? '').trim();
   const token = (process.env.VRM_TOKEN ?? '').trim();
 
-  assertCondition(installationId.length > 0, 400, 'installationId is required');
-  assertCondition(token.length > 0, 400, 'token is required');
+  assertCondition(installationId.length > 0, 400, 'VRM Site ID not configured in add-on settings');
+  assertCondition(token.length > 0, 400, 'VRM API token not configured in add-on settings');
 
   return new VRMClient({
     installationId,

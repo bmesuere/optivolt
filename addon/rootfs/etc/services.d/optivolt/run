@@ -16,7 +16,7 @@ export VRM_INSTALLATION_ID="${SITE_ID}"
 export VRM_TOKEN="${TOKEN}"
 
 if [ -z "${VRM_INSTALLATION_ID}" ] || [ -z "${VRM_TOKEN}" ]; then
-  bashio::log.warning "VRM credentials not set. VRM endpoints will return 503 until configured."
+  bashio::log.warning "VRM credentials not set. VRM endpoints will return 400 (Bad Request) until configured."
 fi
 
 cd "$APP_DIR"
