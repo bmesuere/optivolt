@@ -15,8 +15,7 @@ import {
 } from "./scr/timeline.js";
 import { debounce } from "./scr/utils.js";
 import { fetchVrmSettings, fetchVrmTimeseries } from "./scr/api/backend.js";
-import { DEFAULTS } from "./scr/config.js";
-import { loadInitialConfig, saveConfig, mergeWithDefaults } from "./scr/config-store.js";
+import { flattenStructured, loadInitialConfig, saveConfig } from "./scr/config-store.js";
 import { requestRemoteSolve } from "./scr/api/solver.js";
 // ---------- DOM ----------
 const $ = (sel) => document.querySelector(sel);
@@ -59,12 +58,13 @@ const persistConfigDebounced = debounce(
 );
 
 let darkModeEnabled = root.classList.contains("dark");
+let lastKnownConfig = {};
 
 // ---------- Boot ----------
 boot();
 
 async function boot() {
-  const { config: initialConfig, source: initialSource } = await loadInitialConfig(DEFAULTS);
+  const { config: initialConfig, source: initialSource } = await loadInitialConfig();
 
   hydrateUI(initialConfig);
 
@@ -75,7 +75,7 @@ async function boot() {
   if (els.status) {
     const note = initialSource === "api"
       ? "Loaded settings from API."
-      : "Using defaults (API settings unavailable).";
+      : "Failed to load settings from API.";
     els.status.textContent = note;
   }
 
@@ -110,13 +110,6 @@ function wireGlobalInputs() {
     onRun();
   });
 
-  // Restore defaults
-  els.restore?.addEventListener("click", async () => {
-    hydrateUI(DEFAULTS);
-    await persistConfig();
-    onRun();
-  });
-
 }
 
 function wireThemeToggle() {
@@ -135,58 +128,67 @@ function wireVrmInputs() {
 // ---------- UI <-> config ----------
 function snapshotUI() {
   return {
-    stepSize_m: num(els.step?.value, DEFAULTS.stepSize_m),
-    batteryCapacity_Wh: num(els.cap?.value, DEFAULTS.batteryCapacity_Wh),
-    minSoc_percent: num(els.minsoc?.value, DEFAULTS.minSoc_percent),
-    maxSoc_percent: num(els.maxsoc?.value, DEFAULTS.maxSoc_percent),
-    initialSoc_percent: num(els.initsoc?.value, DEFAULTS.initialSoc_percent),
-    maxChargePower_W: num(els.pchg?.value, DEFAULTS.maxChargePower_W),
-    maxDischargePower_W: num(els.pdis?.value, DEFAULTS.maxDischargePower_W),
-    maxGridImport_W: num(els.gimp?.value, DEFAULTS.maxGridImport_W),
-    maxGridExport_W: num(els.gexp?.value, DEFAULTS.maxGridExport_W),
-    chargeEfficiency_percent: num(els.etaC?.value, DEFAULTS.chargeEfficiency_percent),
-    dischargeEfficiency_percent: num(els.etaD?.value, DEFAULTS.dischargeEfficiency_percent),
-    batteryCost_cent_per_kWh: num(els.bwear?.value, DEFAULTS.batteryCost_cent_per_kWh),
-    terminalSocValuation: els.terminal?.value || DEFAULTS.terminalSocValuation,
-    terminalSocCustomPrice_cents_per_kWh: num(els.terminalCustom?.value, DEFAULTS.terminalSocCustomPrice_cents_per_kWh),
+    stepSize_m: num(els.step?.value, fallbackNumber("stepSize_m")),
+    batteryCapacity_Wh: num(els.cap?.value, fallbackNumber("batteryCapacity_Wh")),
+    minSoc_percent: num(els.minsoc?.value, fallbackNumber("minSoc_percent")),
+    maxSoc_percent: num(els.maxsoc?.value, fallbackNumber("maxSoc_percent")),
+    initialSoc_percent: num(els.initsoc?.value, fallbackNumber("initialSoc_percent")),
 
-    load_W_txt: els.tLoad?.value ?? "",
-    pv_W_txt: els.tPV?.value ?? "",
-    importPrice_txt: els.tIC?.value ?? "",
-    exportPrice_txt: els.tEC?.value ?? "",
-    tsStart: els.tsStart?.value || "",
-    tableShowKwh: !!els.tableKwh?.checked,
-    darkMode: darkModeEnabled,
+    maxChargePower_W: num(els.pchg?.value, fallbackNumber("maxChargePower_W")),
+    maxDischargePower_W: num(els.pdis?.value, fallbackNumber("maxDischargePower_W")),
+    maxGridImport_W: num(els.gimp?.value, fallbackNumber("maxGridImport_W")),
+    maxGridExport_W: num(els.gexp?.value, fallbackNumber("maxGridExport_W")),
+    chargeEfficiency_percent: num(els.etaC?.value, fallbackNumber("chargeEfficiency_percent")),
+    dischargeEfficiency_percent: num(els.etaD?.value, fallbackNumber("dischargeEfficiency_percent")),
+    batteryCost_cent_per_kWh: num(els.bwear?.value, fallbackNumber("batteryCost_cent_per_kWh")),
+    terminalSocValuation: els.terminal?.value || fallbackEnum("terminalSocValuation", "zero"),
+    terminalSocCustomPrice_cents_per_kWh: num(els.terminalCustom?.value, fallbackNumber("terminalSocCustomPrice_cents_per_kWh")),
+
+    load_W_txt: typeof els.tLoad?.value === "string" ? els.tLoad.value : fallbackString("load_W_txt"),
+    pv_W_txt: typeof els.tPV?.value === "string" ? els.tPV.value : fallbackString("pv_W_txt"),
+    importPrice_txt: typeof els.tIC?.value === "string" ? els.tIC.value : fallbackString("importPrice_txt"),
+    exportPrice_txt: typeof els.tEC?.value === "string" ? els.tEC.value : fallbackString("exportPrice_txt"),
+    tsStart: typeof els.tsStart?.value === "string" ? els.tsStart.value : fallbackString("tsStart"),
+    tableShowKwh: els.tableKwh ? !!els.tableKwh.checked : fallbackBoolean("tableShowKwh"),
+    darkMode: darkModeEnabled ?? fallbackBoolean("darkMode"),
   };
 }
 
-function hydrateUI(obj) {
-  if (els.step) els.step.value = obj.stepSize_m ?? DEFAULTS.stepSize_m;
-  if (els.cap) els.cap.value = obj.batteryCapacity_Wh ?? DEFAULTS.batteryCapacity_Wh;
-  if (els.minsoc) els.minsoc.value = obj.minSoc_percent ?? DEFAULTS.minSoc_percent;
-  if (els.maxsoc) els.maxsoc.value = obj.maxSoc_percent ?? DEFAULTS.maxSoc_percent;
-  if (els.initsoc) els.initsoc.value = obj.initialSoc_percent ?? DEFAULTS.initialSoc_percent;
+function hydrateUI(snapshot = {}) {
+  if (!snapshot || typeof snapshot !== "object") return;
 
-  if (els.pchg) els.pchg.value = obj.maxChargePower_W ?? DEFAULTS.maxChargePower_W;
-  if (els.pdis) els.pdis.value = obj.maxDischargePower_W ?? DEFAULTS.maxDischargePower_W;
-  if (els.gimp) els.gimp.value = obj.maxGridImport_W ?? DEFAULTS.maxGridImport_W;
-  if (els.gexp) els.gexp.value = obj.maxGridExport_W ?? DEFAULTS.maxGridExport_W;
+  lastKnownConfig = { ...lastKnownConfig, ...snapshot };
+  const cfg = lastKnownConfig;
 
-  if (els.etaC) els.etaC.value = obj.chargeEfficiency_percent ?? DEFAULTS.chargeEfficiency_percent;
-  if (els.etaD) els.etaD.value = obj.dischargeEfficiency_percent ?? DEFAULTS.dischargeEfficiency_percent;
+  if (els.step) els.step.value = cfg.stepSize_m ?? "";
+  if (els.cap) els.cap.value = cfg.batteryCapacity_Wh ?? "";
+  if (els.minsoc) els.minsoc.value = cfg.minSoc_percent ?? "";
+  if (els.maxsoc) els.maxsoc.value = cfg.maxSoc_percent ?? "";
+  if (els.initsoc) els.initsoc.value = cfg.initialSoc_percent ?? "";
 
-  if (els.bwear) els.bwear.value = obj.batteryCost_cent_per_kWh ?? DEFAULTS.batteryCost_cent_per_kWh;
-  if (els.terminal) els.terminal.value = obj.terminalSocValuation ?? DEFAULTS.terminalSocValuation;
-  if (els.terminalCustom) els.terminalCustom.value = obj.terminalSocCustomPrice_cents_per_kWh ?? DEFAULTS.terminalSocCustomPrice_cents_per_kWh;
+  if (els.pchg) els.pchg.value = cfg.maxChargePower_W ?? "";
+  if (els.pdis) els.pdis.value = cfg.maxDischargePower_W ?? "";
+  if (els.gimp) els.gimp.value = cfg.maxGridImport_W ?? "";
+  if (els.gexp) els.gexp.value = cfg.maxGridExport_W ?? "";
 
-  if (els.tLoad) els.tLoad.value = obj.load_W_txt ?? DEFAULTS.load_W_txt;
-  if (els.tPV) els.tPV.value = obj.pv_W_txt ?? DEFAULTS.pv_W_txt;
-  if (els.tIC) els.tIC.value = obj.importPrice_txt ?? DEFAULTS.importPrice_txt;
-  if (els.tEC) els.tEC.value = obj.exportPrice_txt ?? DEFAULTS.exportPrice_txt;
-  if (els.tsStart) els.tsStart.value = obj.tsStart || "";
-  if (els.tableKwh) els.tableKwh.checked = !!(obj.tableShowKwh ?? DEFAULTS.tableShowKwh);
+  if (els.etaC) els.etaC.value = cfg.chargeEfficiency_percent ?? "";
+  if (els.etaD) els.etaD.value = cfg.dischargeEfficiency_percent ?? "";
 
-  setDarkMode(obj.darkMode ?? DEFAULTS.darkMode);
+  if (els.bwear) els.bwear.value = cfg.batteryCost_cent_per_kWh ?? "";
+  if (els.terminal) els.terminal.value = cfg.terminalSocValuation ?? "zero";
+  if (els.terminalCustom) {
+    const custom = cfg.terminalSocCustomPrice_cents_per_kWh;
+    els.terminalCustom.value = custom ?? "";
+  }
+
+  if (els.tLoad) els.tLoad.value = typeof cfg.load_W_txt === "string" ? cfg.load_W_txt : "";
+  if (els.tPV) els.tPV.value = typeof cfg.pv_W_txt === "string" ? cfg.pv_W_txt : "";
+  if (els.tIC) els.tIC.value = typeof cfg.importPrice_txt === "string" ? cfg.importPrice_txt : "";
+  if (els.tEC) els.tEC.value = typeof cfg.exportPrice_txt === "string" ? cfg.exportPrice_txt : "";
+  if (els.tsStart) els.tsStart.value = cfg.tsStart ?? "";
+  if (els.tableKwh) els.tableKwh.checked = !!cfg.tableShowKwh;
+
+  setDarkMode(!!cfg.darkMode);
 
   updateTerminalCustomUI();
 }
@@ -200,7 +202,7 @@ async function onFetchVRMSettings() {
       throw new Error("Invalid VRM settings response");
     }
 
-    const merged = mergeWithDefaults(DEFAULTS, structured);
+    const merged = flattenStructured(structured);
     hydrateUI(merged);
 
     if (els.status) els.status.textContent = "System settings synced from VRM.";
@@ -332,21 +334,21 @@ function uiToConfig() {
     importPrice: clip(importPrice),
     exportPrice: clip(exportPrice),
 
-    stepSize_m: num(els.step?.value, DEFAULTS.stepSize_m),
-    batteryCapacity_Wh: num(els.cap?.value, DEFAULTS.batteryCapacity_Wh),
-    minSoc_percent: num(els.minsoc?.value, DEFAULTS.minSoc_percent),
-    maxSoc_percent: num(els.maxsoc?.value, DEFAULTS.maxSoc_percent),
-    initialSoc_percent: num(els.initsoc?.value, DEFAULTS.initialSoc_percent),
+    stepSize_m: num(els.step?.value, fallbackNumber("stepSize_m")),
+    batteryCapacity_Wh: num(els.cap?.value, fallbackNumber("batteryCapacity_Wh")),
+    minSoc_percent: num(els.minsoc?.value, fallbackNumber("minSoc_percent")),
+    maxSoc_percent: num(els.maxsoc?.value, fallbackNumber("maxSoc_percent")),
+    initialSoc_percent: num(els.initsoc?.value, fallbackNumber("initialSoc_percent")),
 
-    maxChargePower_W: num(els.pchg?.value, DEFAULTS.maxChargePower_W),
-    maxDischargePower_W: num(els.pdis?.value, DEFAULTS.maxDischargePower_W),
-    maxGridImport_W: num(els.gimp?.value, DEFAULTS.maxGridImport_W),
-    maxGridExport_W: num(els.gexp?.value, DEFAULTS.maxGridExport_W),
-    chargeEfficiency_percent: num(els.etaC?.value, DEFAULTS.chargeEfficiency_percent),
-    dischargeEfficiency_percent: num(els.etaD?.value, DEFAULTS.dischargeEfficiency_percent),
-    batteryCost_cent_per_kWh: num(els.bwear?.value, DEFAULTS.batteryCost_cent_per_kWh),
-    terminalSocValuation: els.terminal?.value || DEFAULTS.terminalSocValuation,
-    terminalSocCustomPrice_cents_per_kWh: num(els.terminalCustom?.value, DEFAULTS.terminalSocCustomPrice_cents_per_kWh),
+    maxChargePower_W: num(els.pchg?.value, fallbackNumber("maxChargePower_W")),
+    maxDischargePower_W: num(els.pdis?.value, fallbackNumber("maxDischargePower_W")),
+    maxGridImport_W: num(els.gimp?.value, fallbackNumber("maxGridImport_W")),
+    maxGridExport_W: num(els.gexp?.value, fallbackNumber("maxGridExport_W")),
+    chargeEfficiency_percent: num(els.etaC?.value, fallbackNumber("chargeEfficiency_percent")),
+    dischargeEfficiency_percent: num(els.etaD?.value, fallbackNumber("dischargeEfficiency_percent")),
+    batteryCost_cent_per_kWh: num(els.bwear?.value, fallbackNumber("batteryCost_cent_per_kWh")),
+    terminalSocValuation: els.terminal?.value || fallbackEnum("terminalSocValuation", "zero"),
+    terminalSocCustomPrice_cents_per_kWh: num(els.terminalCustom?.value, fallbackNumber("terminalSocCustomPrice_cents_per_kWh")),
   };
 }
 
@@ -372,7 +374,7 @@ function setDarkMode(enabled, { persistLocal = true } = {}) {
   if (!persistLocal) return;
   try {
     localStorage.setItem(THEME_STORAGE_KEY, darkModeEnabled ? "dark" : "light");
-  } catch (error) {
+  } catch {
     // Ignore storage errors (e.g. Safari private mode)
   }
 }
@@ -381,6 +383,7 @@ async function persistConfig(cfg = snapshotUI()) {
   const payload = (cfg && typeof cfg.load_W_txt === "string") ? cfg : snapshotUI();
   try {
     await saveConfig(payload);
+    lastKnownConfig = { ...lastKnownConfig, ...payload };
   } catch (error) {
     console.error("Failed to persist settings", error);
     if (els.status) {
@@ -396,3 +399,7 @@ function queuePersistSnapshot() {
 // ---------- small utils ----------
 function parseSeries(s) { return (s || "").split(/[\s,]+/).map(Number).filter((x) => Number.isFinite(x)); }
 function num(val, fallback) { const n = Number(val); return Number.isFinite(n) ? n : fallback; }
+function fallbackNumber(key) { const value = Number(lastKnownConfig[key]); return Number.isFinite(value) ? value : undefined; }
+function fallbackString(key) { const value = lastKnownConfig[key]; return typeof value === "string" ? value : ""; }
+function fallbackBoolean(key) { const value = lastKnownConfig[key]; return typeof value === "boolean" ? value : false; }
+function fallbackEnum(key, defaultValue = "") { const value = lastKnownConfig[key]; return typeof value === "string" ? value : defaultValue; }

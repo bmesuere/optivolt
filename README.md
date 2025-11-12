@@ -22,7 +22,7 @@ Plan and control a home energy system with forecasts, dynamic tariffs, and a day
   - `/vrm/*` — server-side helpers that talk to **Victron VRM** using env-provided credentials.
 - Shared logic lives in **`lib/`**.
 
-```
+```text
 app/                 # static web UI (index.html, main.js, app/scr/**)
 api/                 # Express server (index.js + routes)
 lib/                 # core logic: LP builder, parser, DESS, VRM client, defaults

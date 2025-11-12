@@ -41,17 +41,19 @@ function createEmptyStructured() {
   }, {});
 }
 
-export function mergeWithDefaults(defaults, structured) {
-  const result = { ...defaults };
+export function flattenStructured(structured) {
+  const flat = {};
   for (const category of CATEGORY_NAMES) {
-    const values = structured?.[category] ?? {};
+    const values = structured?.[category];
+    if (!values || typeof values !== "object") continue;
+
     for (const key of CATEGORY_FIELDS[category]) {
       if (Object.prototype.hasOwnProperty.call(values, key)) {
-        result[key] = values[key];
+        flat[key] = values[key];
       }
     }
   }
-  return result;
+  return flat;
 }
 
 function splitSnapshot(snapshot) {
@@ -71,14 +73,14 @@ function splitSnapshot(snapshot) {
   return structured;
 }
 
-export async function loadInitialConfig(defaults) {
+export async function loadInitialConfig() {
   try {
     const structured = await fetchStoredSettings();
-    const config = mergeWithDefaults(defaults, structured);
+    const config = flattenStructured(structured);
     return { config, source: "api" };
   } catch (error) {
     console.error("Failed to load settings from API", error);
-    return { config: { ...defaults }, source: "defaults" };
+    return { config: flattenStructured(createEmptyStructured()), source: "error" };
   }
 }
 
