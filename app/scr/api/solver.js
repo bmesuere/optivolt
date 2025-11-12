@@ -1,8 +1,7 @@
 import { postJson } from "./client.js";
 
-export function requestRemoteSolve({ config, timing }) {
+export function requestRemoteSolve({ timing }) {
   const payload = {
-    config,
     timing: {
       timestampsMs: Array.isArray(timing?.timestampsMs) ? timing.timestampsMs : null,
       startMs: Number.isFinite(timing?.startMs) ? timing.startMs : null,

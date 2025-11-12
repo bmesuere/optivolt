@@ -175,7 +175,7 @@
               class="inline-flex items-center gap-2 rounded-pill border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
               <!-- autorenew icon -->
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24"><title>autorenew</title><path d="M12,6V9L16,5L12,1V4A8,8 0 0,0 4,12C4,13.57 4.46,15.03 5.24,16.26L6.7,14.8C6.25,13.97 6,13 6,12A6,6 0 0,1 12,6M18.76,7.74L17.3,9.2C17.74,10.04 18,11 18,12A6,6 0 0,1 12,18V15L8,19L12,23V20A8,8 0 0,0 20,12C20,10.43 19.54,8.97 18.76,7.74Z"/></svg>
-              <span class="hidden sm:inline">Fetch settings</span>
+              <span class="hidden sm:inline">Sync VRM settings</span>
             </button>
           </div>
 
@@ -293,16 +293,15 @@
   <!-- App -->
   <script type="module" src="./main.js"></script>
   <script>
-    // Appearance toggle (persists)
-    const btn = document.getElementById('themeToggle');
-    const root = document.documentElement;
-    const key = 'battery-ui-theme';
-    const saved = localStorage.getItem(key);
-    if (saved === 'dark') root.classList.add('dark');
-    btn?.addEventListener('click', () => {
-      root.classList.toggle('dark');
-      localStorage.setItem(key, root.classList.contains('dark') ? 'dark' : 'light');
-    });
+    // Apply saved theme early to avoid flash of incorrect mode.
+    (function applyInitialTheme() {
+      try {
+        const saved = localStorage.getItem('battery-ui-theme');
+        if (saved === 'dark') document.documentElement.classList.add('dark');
+      } catch (error) {
+        /* ignore storage errors */
+      }
+    }());
   </script>
 </body>
 </html>

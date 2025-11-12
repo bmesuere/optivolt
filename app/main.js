@@ -13,18 +13,20 @@ import {
   getActiveTimestampsMs,
   setActiveTimestampsMs,
 } from "./scr/timeline.js";
-import { setSystemFetched } from "./scr/storage.js";
 import { debounce } from "./scr/utils.js";
 import { fetchVrmSettings, fetchVrmTimeseries } from "./scr/api/backend.js";
 import { DEFAULTS } from "./scr/config.js";
-import { loadInitialConfig, saveConfig } from "./scr/config-store.js";
+import { loadInitialConfig, saveConfig, mergeWithDefaults } from "./scr/config-store.js";
 import { requestRemoteSolve } from "./scr/api/solver.js";
 // ---------- DOM ----------
 const $ = (sel) => document.querySelector(sel);
+const root = document.documentElement;
+const THEME_STORAGE_KEY = "battery-ui-theme";
 const els = {
   // actions
   run: $("#run"),
   restore: $("#restore"),
+  themeToggle: $("#themeToggle"),
 
   // numeric inputs
   step: $("#step"), cap: $("#cap"),
@@ -56,6 +58,8 @@ const persistConfigDebounced = debounce(
   600,
 );
 
+let darkModeEnabled = root.classList.contains("dark");
+
 // ---------- Boot ----------
 boot();
 
@@ -65,6 +69,7 @@ async function boot() {
   hydrateUI(initialConfig);
 
   wireGlobalInputs();
+  wireThemeToggle();
   wireVrmInputs();
 
   if (els.status) {
@@ -114,6 +119,14 @@ function wireGlobalInputs() {
 
 }
 
+function wireThemeToggle() {
+  if (!els.themeToggle) return;
+  els.themeToggle.addEventListener("click", async () => {
+    toggleDarkMode();
+    await persistConfig();
+  });
+}
+
 function wireVrmInputs() {
   els.vrmFetchSettings?.addEventListener("click", onFetchVRMSettings);
   els.vrmFetchForecasts?.addEventListener("click", onFetchVRMForecasts);
@@ -143,6 +156,7 @@ function snapshotUI() {
     exportPrice_txt: els.tEC?.value ?? "",
     tsStart: els.tsStart?.value || "",
     tableShowKwh: !!els.tableKwh?.checked,
+    darkMode: darkModeEnabled,
   };
 }
 
@@ -172,32 +186,28 @@ function hydrateUI(obj) {
   if (els.tsStart) els.tsStart.value = obj.tsStart || "";
   if (els.tableKwh) els.tableKwh.checked = !!(obj.tableShowKwh ?? DEFAULTS.tableShowKwh);
 
+  setDarkMode(obj.darkMode ?? DEFAULTS.darkMode);
+
   updateTerminalCustomUI();
 }
 
 // ---------- Actions ----------
 async function onFetchVRMSettings() {
   try {
-    if (els.status) els.status.textContent = "Fetching VRM settings…";
-    const s = await fetchVrmSettings();
-
-    setIfFinite(els.cap, s.batteryCapacity_Wh);
-    setIfFinite(els.pdis, s.dischargePower_W || s.limits?.batteryDischargeLimit_W);
-    setIfFinite(els.pchg, s.chargePower_W || s.limits?.batteryChargeLimit_W);
-    setIfFinite(els.gimp, s.maxPowerFromGrid_W || s.limits?.gridImportLimit_W);
-    setIfFinite(els.gexp, s.maxPowerToGrid_W || s.limits?.gridExportLimit_W);
-
-    if (Number.isFinite(s.batteryCosts_cents_per_kWh)) {
-      els.bwear.value = s.batteryCosts_cents_per_kWh;
+    if (els.status) els.status.textContent = "Syncing system settings from VRM…";
+    const structured = await fetchVrmSettings();
+    if (!structured || typeof structured !== "object") {
+      throw new Error("Invalid VRM settings response");
     }
 
-    await persistConfig();
-    if (els.status) els.status.textContent = "Settings loaded from VRM.";
-    setSystemFetched(true);
+    const merged = mergeWithDefaults(DEFAULTS, structured);
+    hydrateUI(merged);
+
+    if (els.status) els.status.textContent = "System settings synced from VRM.";
     await onRun();
   } catch (err) {
     console.error(err);
-    if (els.status) els.status.textContent = `VRM error: ${err.message}`;
+    if (els.status) els.status.textContent = `VRM sync error: ${err.message}`;
   }
 }
 
@@ -266,7 +276,7 @@ async function onRun() {
       tsStartValue: els.tsStart?.value || "",
     });
 
-    const result = await requestRemoteSolve({ config: cfg, timing });
+    const result = await requestRemoteSolve({ timing });
     const rows = Array.isArray(result.rows) ? result.rows : [];
     const statusText = result.status || "OK";
     const objectiveValue = Number(result.objectiveValue);
@@ -352,6 +362,21 @@ function renderAllCharts(rows, cfg, timestampsMs) {
   drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m, timestampsMs);
 }
 
+function toggleDarkMode() {
+  setDarkMode(!darkModeEnabled);
+}
+
+function setDarkMode(enabled, { persistLocal = true } = {}) {
+  darkModeEnabled = !!enabled;
+  root.classList.toggle("dark", darkModeEnabled);
+  if (!persistLocal) return;
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, darkModeEnabled ? "dark" : "light");
+  } catch (error) {
+    // Ignore storage errors (e.g. Safari private mode)
+  }
+}
+
 async function persistConfig(cfg = snapshotUI()) {
   const payload = (cfg && typeof cfg.load_W_txt === "string") ? cfg : snapshotUI();
   try {
@@ -371,4 +396,3 @@ function queuePersistSnapshot() {
 // ---------- small utils ----------
 function parseSeries(s) { return (s || "").split(/[\s,]+/).map(Number).filter((x) => Number.isFinite(x)); }
 function num(val, fallback) { const n = Number(val); return Number.isFinite(n) ? n : fallback; }
-function setIfFinite(input, v) { if (Number.isFinite(v) && input) input.value = String(v); }

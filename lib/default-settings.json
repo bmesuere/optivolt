@@ -13,6 +13,8 @@
   "batteryCost_cent_per_kWh": 2,
   "terminalSocValuation": "zero",
   "terminalSocCustomPrice_cents_per_kWh": 0,
+  "tableShowKwh": false,
+  "darkMode": false,
 
   "load_W_txt": "280,250,360,420,1230,190,190,490,490,360,670,1750,340,640,360,880,650,900,540,500,480,480,480,290",
   "pv_W_txt": "0,0,0,0,0,0,0,0,40,120,480,700,920,910,940,670,520,290,60,0,0,0,0,0",

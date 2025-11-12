@@ -1,51 +1,79 @@
 import express from 'express';
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { assertCondition, toHttpError } from '../http-errors.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Allow overriding via env (e.g. Home Assistant mounts persistent state at /data)
-const DATA_DIR = path.resolve(process.env.DATA_DIR ?? path.resolve(__dirname, '../../data'));
-const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
-const DEFAULT_PATH = path.resolve(__dirname, '../../lib/default-settings.json');
+import {
+  CATEGORY_NAMES,
+  loadSettings,
+  loadSettingsCategory,
+  replaceSettings,
+  updateSettings,
+  updateSettingsCategory,
+} from '../settings-store.js';
 
 const router = express.Router();
 
-async function readJson(filePath) {
-  const data = await fs.readFile(filePath, 'utf8');
-  return JSON.parse(data);
+function ensurePlainObject(value) {
+  assertCondition(value && typeof value === 'object' && !Array.isArray(value), 400, 'settings payload must be an object');
 }
 
-router.get('/', async (req, res, next) => {
+router.get('/', async (_req, res, next) => {
   try {
-    try {
-      const settings = await readJson(SETTINGS_PATH);
-      res.json(settings);
-      return;
-    } catch (error) {
-      if (error?.code !== 'ENOENT') {
-        throw error;
-      }
-    }
-
-    const defaults = await readJson(DEFAULT_PATH);
-    res.json(defaults);
+    const settings = await loadSettings();
+    res.json(settings);
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to read settings'));
   }
 });
 
-router.post('/', async (req, res, next) => {
+async function handleReplace(req, res, next) {
   try {
-    const settings = req.body ?? {};
-    assertCondition(settings && typeof settings === 'object' && !Array.isArray(settings), 400, 'settings payload must be an object');
+    const payload = req.body ?? {};
+    ensurePlainObject(payload);
 
-    const data = `${JSON.stringify(settings, null, 2)}\n`;
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(SETTINGS_PATH, data, 'utf8');
-    res.json({ message: 'Settings saved successfully.' });
+    const updated = await replaceSettings(payload);
+    res.json(updated);
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to save settings'));
+  }
+}
+
+router.put('/', handleReplace);
+router.post('/', handleReplace);
+
+router.patch('/', async (req, res, next) => {
+  try {
+    const payload = req.body ?? {};
+    ensurePlainObject(payload);
+
+    const updated = await updateSettings(payload);
+    res.json(updated);
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to save settings'));
+  }
+});
+
+router.get('/:category', async (req, res, next) => {
+  try {
+    const { category } = req.params;
+    assertCondition(CATEGORY_NAMES.includes(category), 404, 'Unknown settings category');
+
+    const settings = await loadSettingsCategory(category);
+    res.json(settings);
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to read settings'));
+  }
+});
+
+router.put('/:category', async (req, res, next) => {
+  try {
+    const { category } = req.params;
+    assertCondition(CATEGORY_NAMES.includes(category), 404, 'Unknown settings category');
+
+    const payload = req.body ?? {};
+    ensurePlainObject(payload);
+
+    const updated = await updateSettingsCategory(category, payload);
+    res.json(updated);
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to save settings'));
   }

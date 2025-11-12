@@ -4,7 +4,8 @@ import highsFactory from 'highs';
 import { mapRowsToDess } from '../../lib/dess-mapper.js';
 import { buildLP } from '../../lib/build-lp.js';
 import { parseSolution } from '../../lib/parse-solution.js';
-import { assertCondition, toHttpError } from '../http-errors.js';
+import { toHttpError } from '../http-errors.js';
+import { loadSettings, structuredToSolverConfig } from '../settings-store.js';
 
 const router = express.Router();
 
@@ -42,9 +43,8 @@ function parseTimingHints(timing = {}) {
 router.post('/', async (req, res, next) => {
   try {
     const body = req.body ?? {};
-    const cfg = body.config ?? body;
-
-    assertCondition(cfg && typeof cfg === 'object' && !Array.isArray(cfg), 400, 'config payload must be an object');
+    const settings = await loadSettings();
+    const cfg = structuredToSolverConfig(settings);
 
     const lpText = buildLP(cfg);
     const highs = await getHighsInstance();
