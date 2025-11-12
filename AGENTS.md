@@ -2,9 +2,8 @@
 
 ## Front-end layout
 - The public web app lives in the `app/` directory. `main.js` is the module entry point and re-exports logic from `app/scr/`.
-- Runtime behaviour (local solver vs API solver) is controlled via `app/runtime-config.js`. Do not hard-code alternative entry points—extend the config switch instead.
+- The browser talks to the Express API through helpers in `app/scr/api/`. Reuse `client.js` for shared request/response handling and group endpoint-specific helpers (e.g. settings, solver, VRM proxy) into separate modules there.
 - Persisted UI settings must stay compatible with `DEFAULTS` in `app/scr/config.js`. Use `snapshotUI()` when saving browser settings so the `_txt` fields remain strings.
-- The `app/lib/` folder is generated via `npm run prepare` for GitHub Pages deploys; keep it out of version control.
 
 ## API
 - When changing API endpoints, keep the request/response contracts in sync with the browser client. `/calculate` accepts `{ config, timing }` and returns `{ status, objectiveValue, rows, timestampsMs }`.

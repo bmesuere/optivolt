@@ -9,6 +9,10 @@ Feed it your load, solar forecast, and tariffs, and it returns a day-long schedu
 
 OptiVolt ships with an Express server that exposes the solver and Victron VRM helpers over HTTP.
 
+## Frontend
+
+The static client that lives in `app/` always targets the co-hosted Express API. Browser fetch logic is centralised under `app/scr/api/`, where `client.js` normalises requests/responses and endpoint-specific modules (settings, solver, VRM proxy) wrap each backend call.
+
 ### Running the server
 
 ```bash
