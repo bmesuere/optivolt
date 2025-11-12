@@ -107,6 +107,11 @@ async function boot() {
     if (els.status) els.status.textContent = "Solver loaded.";
   }
 
+  if (isApiMode) {
+    const el = document.getElementById('card-vrm');
+    if (el) el.remove();
+  }
+
   // Initial sidebar order & badges
   reorderNow();
 

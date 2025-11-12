@@ -1,4 +1,3 @@
-// app/vrm.js
 import { VRMClient } from "../lib/vrm-api.js";
 import { API_BASE_URL, BACKEND_MODE } from "../runtime-config.js";
 import { STORAGE_VRM_KEY, saveToStorage, loadFromStorage, removeFromStorage } from "./storage.js";
@@ -6,7 +5,7 @@ import { normaliseBaseUrl } from "./api-utils.js";
 
 const isApiMode = BACKEND_MODE === "api";
 
-async function postJson(path, payload) {
+async function postJson(path, payload = {}) {
   if (!isApiMode) {
     throw new Error("VRM server endpoints are only available in API mode");
   }
@@ -51,21 +50,22 @@ export class VRMManager {
    */
   constructor({ defaultProxyBase = "https://vrm-cors-proxy.mesuerebart.workers.dev" } = {}) {
     this.defaultProxyBase = defaultProxyBase;
-    // The browser needs a CORS proxy for VRM calls, but the API server can talk to VRM directly.
+    // In API mode the server talks to VRM; in browser mode we need a proxy + client.
     this._client = isApiMode ? null : new VRMClient();
   }
 
   /** Read fields from the DOM into a plain object */
   snapshotFromEls(els) {
     return {
-      installationId: (els.vrmSite?.value || "").trim(),
-      token: (els.vrmToken?.value || "").trim(),
-      proxyBaseURL: (els.vrmProxy?.value || "").trim(),
+      installationId: (els?.vrmSite?.value || "").trim(),
+      token: (els?.vrmToken?.value || "").trim(),
+      proxyBaseURL: (els?.vrmProxy?.value || "").trim(),
     };
   }
 
-  /** True if both installationId and token present */
+  /** True if both installationId and token present (API mode: always true) */
   isConfigured(source) {
+    if (isApiMode) return true;
     const obj = source?.vrmSite ? this.snapshotFromEls(source) : source || {};
     const { installationId, token } = obj;
     return Boolean((installationId || "").trim() && (token || "").trim());
@@ -77,9 +77,9 @@ export class VRMManager {
     const token = obj.token || "";
     const proxyBaseURL = obj.proxyBaseURL || this.defaultProxyBase;
 
-    if (els.vrmSite) els.vrmSite.value = installationId;
-    if (els.vrmToken) els.vrmToken.value = token;
-    if (els.vrmProxy) els.vrmProxy.value = proxyBaseURL;
+    if (els?.vrmSite) els.vrmSite.value = installationId;
+    if (els?.vrmToken) els.vrmToken.value = token;
+    if (els?.vrmProxy) els.vrmProxy.value = proxyBaseURL;
 
     this._applyToClient({ installationId, token, proxyBaseURL });
   }
@@ -102,31 +102,23 @@ export class VRMManager {
 
   /** Fetch ESS settings from VRM (local or remote depending on runtime mode) */
   async fetchSettings(creds) {
-    const normalised = this._normaliseCreds(creds);
-
     if (isApiMode) {
-      const { settings } = await postJson("/vrm/settings", {
-        installationId: normalised.installationId,
-        token: normalised.token,
-      });
+      // Server supplies credentials from env; do not send any from the client.
+      const { settings } = await postJson("/vrm/settings", {});
       return settings;
     }
-
+    const normalised = this._normaliseCreds(creds);
     this._applyToClient(normalised);
     return this._client.fetchDynamicEssSettings();
   }
 
   /** Fetch forecasts, prices and SoC from VRM */
   async fetchTimeseries(creds) {
-    const normalised = this._normaliseCreds(creds);
-
     if (isApiMode) {
-      return postJson("/vrm/timeseries", {
-        installationId: normalised.installationId,
-        token: normalised.token,
-      });
+      // Server supplies credentials from env; do not send any from the client.
+      return postJson("/vrm/timeseries", {});
     }
-
+    const normalised = this._normaliseCreds(creds);
     this._applyToClient(normalised);
     const [forecasts, prices, soc] = await Promise.all([
       this._client.fetchForecasts(),

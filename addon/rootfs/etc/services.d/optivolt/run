@@ -1,11 +1,23 @@
-#!/usr/bin/with-contenv sh
-set -eu
+#!/usr/bin/with-contenv bashio
+set -euo pipefail
 
 APP_DIR="/opt/optivolt"
 
 export HOST="0.0.0.0"
 export PORT="3000"      # matches ingress_port
 export DATA_DIR="/data" # HA persistent storage
+
+# Read add-on options (from config.yaml)
+SITE_ID="$(bashio::config 'site_id')"
+TOKEN="$(bashio::config 'vrm_token')"
+
+# Export for the Node process
+export VRM_INSTALLATION_ID="${SITE_ID}"
+export VRM_TOKEN="${TOKEN}"
+
+if [ -z "${VRM_INSTALLATION_ID}" ] || [ -z "${VRM_TOKEN}" ]; then
+  bashio::log.warning "VRM credentials not set. VRM endpoints will return 503 until configured."
+fi
 
 cd "$APP_DIR"
 exec node "$APP_DIR/api/index.js"

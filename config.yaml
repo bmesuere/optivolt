@@ -18,3 +18,11 @@ panel_icon: mdi:home-battery-outline
 # Persist add-on state in /data
 map:
   - data:rw
+
+options:
+  site_id: ""
+  vrm_token: ""
+
+schema:
+  site_id: str
+  vrm_token: password

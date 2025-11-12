@@ -1,0 +1,10 @@
+configuration:
+  site_id:
+    name: VRM Site ID
+    description: >
+      The Victron VRM installation ID (also called **idSite**). Example: 839355.
+      You can find it in the VRM URL (…/installations/<idSite>/…).
+  vrm_token:
+    name: VRM API token
+    description: >
+      A Personal Access Token from Victron VRM (Preferences → Integrations).
