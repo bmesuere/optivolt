@@ -1,0 +1,3 @@
+#!/usr/bin/execlineb -S0
+# Allow s6 to restart the service on exit/crash
+s6-svscanctl -t /var/run/s6/services

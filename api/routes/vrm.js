@@ -5,12 +5,12 @@ import { VRMClient } from '../../lib/vrm-api.js';
 
 const router = express.Router();
 
-function createClient(body = {}) {
-  const installationId = String(body.installationId ?? '').trim();
-  const token = String(body.token ?? '').trim();
+function createClient() {
+  const installationId = (process.env.VRM_INSTALLATION_ID ?? '').trim();
+  const token = (process.env.VRM_TOKEN ?? '').trim();
 
-  assertCondition(installationId.length > 0, 400, 'installationId is required');
-  assertCondition(token.length > 0, 400, 'token is required');
+  assertCondition(installationId.length > 0, 400, 'VRM Site ID not configured in add-on settings');
+  assertCondition(token.length > 0, 400, 'VRM API token not configured in add-on settings');
 
   return new VRMClient({
     installationId,
@@ -23,9 +23,10 @@ function normalizeVrmError(error, message) {
   return toHttpError(error, status, message);
 }
 
+
 router.post('/settings', async (req, res, next) => {
   try {
-    const client = createClient(req.body);
+    const client = createClient();
     const settings = await client.fetchDynamicEssSettings();
     res.json({ settings });
   } catch (error) {
@@ -35,7 +36,7 @@ router.post('/settings', async (req, res, next) => {
 
 router.post('/timeseries', async (req, res, next) => {
   try {
-    const client = createClient(req.body);
+    const client = createClient();
     const [forecasts, prices, soc] = await Promise.all([
       client.fetchForecasts(),
       client.fetchPrices(),

@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { assertCondition, toHttpError } from '../http-errors.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.resolve(__dirname, '../../data');
+// Allow overriding via env (e.g. Home Assistant mounts persistent state at /data)
+const DATA_DIR = path.resolve(process.env.DATA_DIR ?? path.resolve(__dirname, '../../data'));
 const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
 const DEFAULT_PATH = path.resolve(__dirname, '../../lib/default-settings.json');
 
