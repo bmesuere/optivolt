@@ -1,8 +1,4 @@
 // Import shared logic
-import { buildLP } from "./lib/build-lp.js";
-import { parseSolution } from "./lib/parse-solution.js";
-import { mapRowsToDess } from "./lib/dess-mapper.js";
-
 import {
   drawFlowsBarStackSigned,
   drawSocChart,
@@ -11,7 +7,6 @@ import {
 } from "./scr/charts.js";
 import { renderTable } from "./scr/table.js";
 import {
-  runParseSolutionWithTiming,
   lastQuarterMs,
   toLocalDatetimeLocal,
   buildTimingHints,
@@ -19,16 +14,11 @@ import {
   setActiveTimestampsMs,
 } from "./scr/timeline.js";
 import { setSystemFetched } from "./scr/storage.js";
-import { reorderSidebar } from "./scr/sidebar.js";
 import { debounce } from "./scr/utils.js";
-import { VRMManager } from "./scr/vrm.js";
+import { fetchVrmSettings, fetchVrmTimeseries } from "./scr/api/backend.js";
 import { DEFAULTS } from "./scr/config.js";
 import { loadInitialConfig, saveConfig } from "./scr/config-store.js";
-import { requestRemoteSolve } from "./scr/calc-service.js";
-import { BACKEND_MODE } from "./runtime-config.js";
-
-const isApiMode = BACKEND_MODE === "api";
-
+import { requestRemoteSolve } from "./scr/api/solver.js";
 // ---------- DOM ----------
 const $ = (sel) => document.querySelector(sel);
 const els = {
@@ -55,28 +45,15 @@ const els = {
   status: $("#status"), objective: $("#objective"),
 
   // VRM section
-  vrmSite: $("#vrm-site"),
-  vrmToken: $("#vrm-token"),
   vrmFetchSettings: $("#vrm-fetch-settings"),
   vrmFetchForecasts: $("#vrm-fetch-forecasts"),
-  vrmClear: $("#vrm-clear"),
-  vrmProxy: $("#vrm-proxy"),
 };
 
-if (isApiMode && els.vrmProxy) {
-  const proxyLabel = els.vrmProxy.closest("label");
-  if (proxyLabel) {
-    proxyLabel.style.display = "none";
-  }
-}
-
 // ---------- State ----------
-let highs = null;
-const vrmMgr = new VRMManager();
 const debounceRun = debounce(onRun, 250);
 const persistConfigDebounced = debounce(
   (cfg) => { void persistConfig(cfg); },
-  isApiMode ? 600 : 250,
+  600,
 );
 
 // ---------- Boot ----------
@@ -90,30 +67,12 @@ async function boot() {
   wireGlobalInputs();
   wireVrmInputs();
 
-  if (isApiMode) {
-    if (els.status) {
-      const note = initialSource === "api"
-        ? "Loaded settings from API."
-        : "Using defaults (API settings unavailable).";
-      els.status.textContent = note;
-    }
-  } else {
-    if (els.status) els.status.textContent = "Loading solver…";
-    // Initialize HiGHS via global UMD factory `Module`
-    // eslint-disable-next-line no-undef
-    highs = await Module({
-      locateFile: (file) => "https://lovasoa.github.io/highs-js/" + file,
-    });
-    if (els.status) els.status.textContent = "Solver loaded.";
+  if (els.status) {
+    const note = initialSource === "api"
+      ? "Loaded settings from API."
+      : "Using defaults (API settings unavailable).";
+    els.status.textContent = note;
   }
-
-  if (isApiMode) {
-    const el = document.getElementById('card-vrm');
-    if (el) el.remove();
-  }
-
-  // Initial sidebar order & badges
-  reorderNow();
 
   // Initial compute
   await onRun();
@@ -156,28 +115,6 @@ function wireGlobalInputs() {
 }
 
 function wireVrmInputs() {
-  // VRM: hydrate from storage into inputs + client
-  vrmMgr.hydrateFromStorage(els);
-
-  // Save VRM creds when fields change
-  const vrmInputs = isApiMode
-    ? [els.vrmSite, els.vrmToken]
-    : [els.vrmSite, els.vrmToken, els.vrmProxy];
-
-  for (const el of vrmInputs) {
-    el?.addEventListener("input", () => { vrmMgr.saveFromEls(els); reorderNow(); });
-    el?.addEventListener("change", () => { vrmMgr.saveFromEls(els); reorderNow(); });
-  }
-
-  // VRM actions
-  els.vrmClear?.addEventListener("click", () => {
-    // Clears storage and resets inputs + client
-    vrmMgr.clearStorage();
-    vrmMgr.hydrate(els, { installationId: "", token: "" });
-    setSystemFetched(false);
-    reorderNow();
-  });
-
   els.vrmFetchSettings?.addEventListener("click", onFetchVRMSettings);
   els.vrmFetchForecasts?.addEventListener("click", onFetchVRMForecasts);
 }
@@ -241,13 +178,8 @@ function hydrateUI(obj) {
 // ---------- Actions ----------
 async function onFetchVRMSettings() {
   try {
-    const creds = vrmMgr.snapshotFromEls(els);
-    if (!vrmMgr.isConfigured(creds)) {
-      throw new Error("Enter your VRM site id and API token first");
-    }
-
     if (els.status) els.status.textContent = "Fetching VRM settings…";
-    const s = await vrmMgr.fetchSettings(creds);
+    const s = await fetchVrmSettings();
 
     setIfFinite(els.cap, s.batteryCapacity_Wh);
     setIfFinite(els.pdis, s.dischargePower_W || s.limits?.batteryDischargeLimit_W);
@@ -262,7 +194,6 @@ async function onFetchVRMSettings() {
     await persistConfig();
     if (els.status) els.status.textContent = "Settings loaded from VRM.";
     setSystemFetched(true);
-    reorderNow();
     await onRun();
   } catch (err) {
     console.error(err);
@@ -272,13 +203,11 @@ async function onFetchVRMSettings() {
 
 async function onFetchVRMForecasts() {
   try {
-    const creds = vrmMgr.snapshotFromEls(els);
-    if (!vrmMgr.isConfigured(creds)) {
-      throw new Error("Enter your VRM site id and API token first");
-    }
-
     if (els.status) els.status.textContent = "Fetching VRM forecasts, prices & SoC…";
-    const { forecasts: fc, prices: pr, soc } = await vrmMgr.fetchTimeseries(creds);
+    const timeseries = await fetchVrmTimeseries();
+    const fc = timeseries?.forecasts ?? {};
+    const pr = timeseries?.prices ?? {};
+    const soc = timeseries?.soc;
 
     // Decide the optimizer start time: last quarter (local)
     const quarterStartMs = lastQuarterMs(new Date());
@@ -332,48 +261,26 @@ async function onRun() {
     const cfg = uiToConfig();
     await persistConfig();
 
-    let rows = [];
-    let timestampsMs = [];
-    let statusText = "";
-    let objectiveValue = null;
+    const timing = buildTimingHints(cfg, {
+      candidate: getActiveTimestampsMs(),
+      tsStartValue: els.tsStart?.value || "",
+    });
 
-    if (isApiMode) {
-      const timing = buildTimingHints(cfg, {
-        candidate: getActiveTimestampsMs(),
-        tsStartValue: els.tsStart?.value || "",
-      });
+    const result = await requestRemoteSolve({ config: cfg, timing });
+    const rows = Array.isArray(result.rows) ? result.rows : [];
+    const statusText = result.status || "OK";
+    const objectiveValue = Number(result.objectiveValue);
 
-      const result = await requestRemoteSolve({ config: cfg, timing });
-      rows = Array.isArray(result.rows) ? result.rows : [];
-      statusText = result.status || "OK";
-      objectiveValue = Number(result.objectiveValue);
-
-      timestampsMs = Array.isArray(result.timestampsMs) ? result.timestampsMs.slice() : null;
-      if (!Array.isArray(timestampsMs) || timestampsMs.length !== rows.length) {
-        timestampsMs = Array.isArray(timing.timestampsMs) && timing.timestampsMs.length === rows.length
-          ? timing.timestampsMs.slice()
-          : [];
-      }
-      if (Array.isArray(timestampsMs) && timestampsMs.length === rows.length) {
-        setActiveTimestampsMs(timestampsMs);
-      } else {
-        setActiveTimestampsMs(null);
-      }
+    let timestampsMs = Array.isArray(result.timestampsMs) ? result.timestampsMs.slice() : null;
+    if (!Array.isArray(timestampsMs) || timestampsMs.length !== rows.length) {
+      timestampsMs = Array.isArray(timing.timestampsMs) && timing.timestampsMs.length === rows.length
+        ? timing.timestampsMs.slice()
+        : [];
+    }
+    if (Array.isArray(timestampsMs) && timestampsMs.length === rows.length) {
+      setActiveTimestampsMs(timestampsMs);
     } else {
-      const lpText = buildLP(cfg);
-      const result = highs.solve(lpText);
-
-      statusText = result.Status;
-      objectiveValue = Number(result.ObjectiveValue);
-
-      const parsed = runParseSolutionWithTiming(
-        result,
-        cfg,
-        parseSolution,
-        els.tsStart?.value || "",
-      );
-      rows = parsed.rows;
-      timestampsMs = parsed.timestampsMs;
+      setActiveTimestampsMs(null);
     }
 
     if (els.objective) {
@@ -382,13 +289,6 @@ async function onRun() {
         : "—";
     }
     if (els.status) els.status.textContent = ` ${statusText}`;
-
-    if (!isApiMode) {
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      for (let i = 0; i < rows.length; i++) {
-        rows[i].dess = perSlot[i]; // { feedin, restrictions, strategy, flags, socTarget_Wh }
-      }
-    }
 
     renderTable({
       rows,
@@ -445,10 +345,6 @@ function updateTerminalCustomUI() {
   if (els.terminalCustom) els.terminalCustom.disabled = !isCustom;
 }
 
-function reorderNow() {
-  reorderSidebar({ isVrmConfigured: () => vrmMgr.isConfigured(els), vrmSiteValue: els.vrmSite?.value });
-}
-
 function renderAllCharts(rows, cfg, timestampsMs) {
   drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, timestampsMs);
   drawSocChart(els.soc, rows, cfg.batteryCapacity_Wh, cfg.stepSize_m, timestampsMs);
@@ -462,7 +358,7 @@ async function persistConfig(cfg = snapshotUI()) {
     await saveConfig(payload);
   } catch (error) {
     console.error("Failed to persist settings", error);
-    if (isApiMode && els.status) {
+    if (els.status) {
       els.status.textContent = `Settings error: ${error.message}`;
     }
   }

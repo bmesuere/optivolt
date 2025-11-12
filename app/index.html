@@ -29,9 +29,6 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <!-- Pattern fills for striped forecast bars -->
   <script src="https://cdn.jsdelivr.net/npm/patternomaly@1.3.2/dist/patternomaly.min.js"></script>
-  <!-- HiGHS UMD (defines global `Module`) -->
-  <script src="https://lovasoa.github.io/highs-js/highs.js"></script>
-
   <meta name="color-scheme" content="light dark">
 </head>
 
@@ -233,43 +230,6 @@
               <input id="etaD" type="number"
                 class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
             </label>
-          </div>
-        </section>
-
-        <!-- Victron VRM -->
-        <section id="card-vrm" class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
-          <div class="mb-2 flex items-center justify-between">
-            <h2 class="text-base font-semibold">Victron VRM</h2>
-            <span id="badge-vrm" class="text-xs text-ink-soft"></span>
-          </div>
-          <p class="text-xs text-ink-soft mb-4">
-            Enter your VRM site id and API token. The token is <b>stored only in this browser</b> and used directly by this page.
-          </p>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <label class="text-sm">Site id
-              <input id="vrm-site" type="text" inputmode="numeric" autocomplete="off"
-                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-            <label class="text-sm">API token
-              <input id="vrm-token" type="password" autocomplete="off"
-                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-            <label class="text-sm md:col-span-2">Proxy base URL
-              <input id="vrm-proxy" type="url" placeholder="https://your-proxy.example.com"
-                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
-              <p class="mt-1 text-[11px] text-slate-500">
-                Browsers block direct calls to the VRM API due to CORS. Use a small proxy that forwards requests and adds CORS headers.
-  See <a href="https://github.com/bmesuere/optivolt#using-a-cloudflare-worker-as-a-cors-proxy" target="_blank" rel="noopener" class="underline">how to set up a Cloudflare Worker proxy</a> or use the default.
-              </p>
-            </label>
-            <div class="md:col-span-2">
-              <button id="vrm-clear" type="button"
-                class="inline-flex items-center gap-1.5 text-sm text-sky-700 underline-offset-4 hover:underline dark:text-sky-300">
-                <span aria-hidden="true">🧹</span>
-                <span>Clear credentials</span>
-              </button>
-            </div>
           </div>
         </section>
       </div>
