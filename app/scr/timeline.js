@@ -1,4 +1,3 @@
-// app/timeline.js
 // Canonical timeline state for the current dataset.
 let _activeTimestampsMs = null;
 
@@ -10,17 +9,6 @@ export function getActiveTimestampsMs() {
 /** Overwrite the canonical timestamps (defensive copy), or clear with null/undefined. */
 export function setActiveTimestampsMs(arr) {
   _activeTimestampsMs = Array.isArray(arr) ? arr.slice() : null;
-}
-
-/** Format Date -> "YYYY-MM-DDTHH:MM" for `<input type="datetime-local">` */
-export function toLocalDatetimeLocal(dt) {
-  const pad = (n) => String(n).padStart(2, "0");
-  const yyyy = dt.getFullYear();
-  const mm = pad(dt.getMonth() + 1);
-  const dd = pad(dt.getDate());
-  const HH = pad(dt.getHours());
-  const MM = pad(dt.getMinutes());
-  return `${yyyy}-${mm}-${dd}T${HH}:${MM}`;
 }
 
 /**
@@ -68,29 +56,4 @@ export function runParseSolutionWithTiming(result, cfg, parseSolution, tsStartVa
   const { rows, timestampsMs } = parseSolution(result, cfg, hints);
   setActiveTimestampsMs(timestampsMs); // keep canonical timeline synced
   return { rows, timestampsMs };
-}
-
-/**
- * If a forecast payload provides explicit timestamps, adopt them as canonical and (optionally)
- * return a value suitable for a datetime-local input to persist the first slot.
- * @param {{timestamps?: number[]}} fc
- * @returns {{adopted:boolean, firstInputValue:string|null}}
- */
-export function adoptTimelineFromForecast(fc) {
-  if (Array.isArray(fc?.timestamps) && fc.timestamps.length > 0) {
-    setActiveTimestampsMs(fc.timestamps);
-    const firstMs = fc.timestamps[0];
-    return { adopted: true, firstInputValue: toLocalDatetimeLocal(new Date(firstMs)) };
-  }
-  setActiveTimestampsMs(null);
-  return { adopted: false, firstInputValue: null };
-}
-
-/** Return ms timestamp floored to the last quarter (00/15/30/45) in local time.
- */
-export function lastQuarterMs(baseDate = new Date()) {
-  const d = new Date(baseDate);
-  const q = Math.floor(d.getMinutes() / 15) * 15;
-  d.setMinutes(q, 0, 0);
-  return d.getTime();
 }

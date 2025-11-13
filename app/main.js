@@ -7,15 +7,12 @@ import {
 } from "./scr/charts.js";
 import { renderTable } from "./scr/table.js";
 import {
-  lastQuarterMs,
-  toLocalDatetimeLocal,
   buildTimingHints,
   getActiveTimestampsMs,
   setActiveTimestampsMs,
 } from "./scr/timeline.js";
-import { setSystemFetched } from "./scr/storage.js";
 import { debounce } from "./scr/utils.js";
-import { fetchVrmSettings, fetchVrmTimeseries } from "./scr/api/backend.js";
+import { refreshVrmSettings, refreshVrmSeries } from "./scr/api/backend.js";
 import { DEFAULTS } from "./scr/config.js";
 import { loadInitialConfig, saveConfig } from "./scr/config-store.js";
 import { requestRemoteSolve } from "./scr/api/solver.js";
@@ -115,8 +112,8 @@ function wireGlobalInputs() {
 }
 
 function wireVrmInputs() {
-  els.vrmFetchSettings?.addEventListener("click", onFetchVRMSettings);
-  els.vrmFetchForecasts?.addEventListener("click", onFetchVRMForecasts);
+  els.vrmFetchSettings?.addEventListener("click", onRefreshVrmSettings);
+  els.vrmFetchForecasts?.addEventListener("click", onRefreshVrmSeries);
 }
 
 // ---------- UI <-> config ----------
@@ -176,79 +173,27 @@ function hydrateUI(obj) {
 }
 
 // ---------- Actions ----------
-async function onFetchVRMSettings() {
+async function onRefreshVrmSettings() {
   try {
-    if (els.status) els.status.textContent = "Fetching VRM settings…";
-    const s = await fetchVrmSettings();
-
-    setIfFinite(els.cap, s.batteryCapacity_Wh);
-    setIfFinite(els.pdis, s.dischargePower_W || s.limits?.batteryDischargeLimit_W);
-    setIfFinite(els.pchg, s.chargePower_W || s.limits?.batteryChargeLimit_W);
-    setIfFinite(els.gimp, s.maxPowerFromGrid_W || s.limits?.gridImportLimit_W);
-    setIfFinite(els.gexp, s.maxPowerToGrid_W || s.limits?.gridExportLimit_W);
-
-    if (Number.isFinite(s.batteryCosts_cents_per_kWh)) {
-      els.bwear.value = s.batteryCosts_cents_per_kWh;
-    }
-
-    await persistConfig();
-    if (els.status) els.status.textContent = "Settings loaded from VRM.";
-    setSystemFetched(true);
-    await onRun();
+    if (els.status) els.status.textContent = "Refreshing system settings from VRM…";
+    const payload = await refreshVrmSettings();
+    const saved = payload?.settings || {};
+    hydrateUI({ ...DEFAULTS, ...saved });
+    if (els.status) els.status.textContent = "System settings saved from VRM.";
   } catch (err) {
     console.error(err);
     if (els.status) els.status.textContent = `VRM error: ${err.message}`;
   }
 }
 
-async function onFetchVRMForecasts() {
+async function onRefreshVrmSeries() {
   try {
-    if (els.status) els.status.textContent = "Fetching VRM forecasts, prices & SoC…";
-    const timeseries = await fetchVrmTimeseries();
-    const fc = timeseries?.forecasts ?? {};
-    const pr = timeseries?.prices ?? {};
-    const soc = timeseries?.soc;
-
-    // Decide the optimizer start time: last quarter (local)
-    const quarterStartMs = lastQuarterMs(new Date());
-    if (els.tsStart) {
-      els.tsStart.value = toLocalDatetimeLocal(new Date(quarterStartMs));
-    }
-
-    // Determine step and compute offset (how many slots to drop from full-hour → quarter)
-    const stepMin = num(els.step?.value, fc.step_minutes || 15); // keep user's step if set; else VRM or 15
-    const fullHourStartMs = Array.isArray(fc.timestamps) && fc.timestamps.length > 0
-      ? Number(fc.timestamps[0])
-      : (() => { const d = new Date(); d.setMinutes(0, 0, 0); return d.getTime(); })();
-
-    let offsetSlots = Math.floor((quarterStartMs - fullHourStartMs) / (stepMin * 60 * 1000));
-    if (!Number.isFinite(offsetSlots) || offsetSlots < 0) offsetSlots = 0;
-    // Clamp to at most 3 if step=15 and we only shifted within the same hour
-    if (stepMin === 15) offsetSlots = Math.min(offsetSlots, 3);
-
-    // Slice helpers
-    const slice = (arr) => (Array.isArray(arr) ? arr.slice(offsetSlots) : []);
-
-    // Fill the per-slot series from VRM, but starting at the last quarter
-    if (els.tLoad) els.tLoad.value = slice(fc.load_W).join(",");
-    if (els.tPV) els.tPV.value = slice(fc.pv_W).join(",");
-    if (els.tIC) els.tIC.value = slice(pr.importPrice_cents_per_kwh).join(",");
-    if (els.tEC) els.tEC.value = slice(pr.exportPrice_cents_per_kwh).join(",");
-
-    if (soc && Number.isFinite(soc.soc_percent)) {
-      const clamped = Math.max(0, Math.min(100, Number(soc.soc_percent)));
-      if (els.initsoc) els.initsoc.value = String(clamped);
-    }
-
-    await persistConfig();
-
-    if (els.status) {
-      els.status.textContent = soc && Number.isFinite(soc.soc_percent)
-        ? `Forecasts, prices & SoC loaded from VRM (SoC ${soc.soc_percent}%).`
-        : "Forecasts & prices loaded from VRM (SoC unavailable).";
-    }
-
-    await onRun();
+    if (els.status) els.status.textContent = "Refreshing time series from VRM…";
+    const payload = await refreshVrmSeries();
+    const saved = payload?.settings || {};
+    hydrateUI({ ...DEFAULTS, ...saved });
+    if (els.status) els.status.textContent = "Time series saved from VRM.";
+    await onRun(); // re-solve with the freshly persisted series
   } catch (err) {
     console.error(err);
     if (els.status) els.status.textContent = `VRM error: ${err.message}`;
@@ -371,4 +316,3 @@ function queuePersistSnapshot() {
 // ---------- small utils ----------
 function parseSeries(s) { return (s || "").split(/[\s,]+/).map(Number).filter((x) => Number.isFinite(x)); }
 function num(val, fallback) { const n = Number(val); return Number.isFinite(n) ? n : fallback; }
-function setIfFinite(input, v) { if (Number.isFinite(v) && input) input.value = String(v); }

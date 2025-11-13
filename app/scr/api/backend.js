@@ -1,13 +1,9 @@
 import { postJson } from "./client.js";
 
-export async function fetchVrmSettings() {
-  const payload = await postJson("/vrm/settings", {});
-  if (payload && typeof payload === "object" && payload.settings && typeof payload.settings === "object") {
-    return payload.settings;
-  }
-  return {};
+// Server-side actions (clean)
+export function refreshVrmSettings() {
+  return postJson("/vrm/refresh-settings", {});
 }
-
-export function fetchVrmTimeseries() {
-  return postJson("/vrm/timeseries", {});
+export function refreshVrmSeries() {
+  return postJson("/vrm/refresh-series", {});
 }
