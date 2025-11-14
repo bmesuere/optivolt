@@ -6,11 +6,7 @@ POST http://localhost:3000/calculate
 Content-Type: application/json
 
 {
-  "timing": {
-    "startMs": 1731465600000,   // optional
-    "stepMin": 15               // optional
-    // "timestampsMs": [ ... ]  // optional explicit timeline
-  }
+  "updateData": true
 }
 
 ### Settings (confirm what /calculate will read)

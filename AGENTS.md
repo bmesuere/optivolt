@@ -42,7 +42,7 @@ All routes are implemented in `api/`. Important ones:
 
 - `GET /settings` — returns the persisted settings or the defaults from `lib/default-settings.json` when `settings.json` is missing.
 - `POST /settings` — accepts a single JSON object, writes it to `DATA_DIR/settings.json` (no partial updates).
-- `POST /calculate` — ignores the request body; builds the LP config and timing entirely from persisted settings:
+- `POST /calculate` — ignores the request body; builds the LP config and timing entirely from persisted settings, runs the solver, and returns the computed results (including schedules, costs, and any relevant diagnostics) as a JSON response.
 
 ## PR / testing notes
 - Prefer small, focused commits with descriptive messages.

@@ -1,4 +1,3 @@
-// api/services/data-store.js
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDataDir, readJson, writeJson } from './json-store.js';
@@ -30,7 +29,7 @@ export async function saveData(data) {
 }
 
 /**
- * Optional: read only the defaults (no fallback).
+ * Read only the defaults (no fallback).
  */
 export async function loadDefaultData() {
   return readJson(DEFAULT_PATH);

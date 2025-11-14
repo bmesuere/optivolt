@@ -7,7 +7,6 @@ import { parseSolution } from '../../lib/parse-solution.js';
 import { toHttpError } from '../http-errors.js';
 import { getSolverInputs } from '../services/solver-input-service.js';
 import { refreshSeriesFromVrmAndPersist } from '../services/vrm-refresh.js';
-import { loadData } from '../services/data-store.js';
 
 const router = express.Router();
 
@@ -32,7 +31,7 @@ router.post('/', async (req, res, next) => {
         await refreshSeriesFromVrmAndPersist();
       } catch (vrmError) {
         // Don't kill the calculation; just log the error and proceed with old data
-        console.error("Failed to refresh VRM data before calculation:", vrmError.message);
+        console.error("Failed to refresh VRM data before calculation:", vrmError?.message ?? String(vrmError));
         // We could throw here, but user might want to calculate with stale data
         // if VRM is down. Let's proceed.
       }

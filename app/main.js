@@ -7,7 +7,7 @@ import {
 } from "./scr/charts.js";
 import { renderTable } from "./scr/table.js";
 import { debounce } from "./scr/utils.js";
-import { refreshVrmSettings } from "./scr/api/backend.js"; // Removed refreshVrmSeries
+import { refreshVrmSettings } from "./scr/api/backend.js";
 import { loadInitialConfig, saveConfig } from "./scr/config-store.js";
 import { requestRemoteSolve } from "./scr/api/solver.js";
 
@@ -179,8 +179,6 @@ async function onRefreshVrmSettings() {
   }
 }
 
-// REMOVED onRefreshVrmSeries()
-
 // ---------- Main compute ----------
 async function onRun() {
   // Cancel any pending auto-save to avoid double writes
@@ -217,7 +215,7 @@ async function onRun() {
     if (els.objective) {
       els.objective.textContent = Number.isFinite(objectiveValue) ? objectiveValue.toFixed(2) : "—";
     }
-    if (els.status) els.status.textContent = ` ${statusText}`;
+    if (els.status) els.status.textContent = `${statusText}`;
 
     // Only the few chart/table scalars are read from inputs (already hydrated from /settings)
     const cfgForViz = {
