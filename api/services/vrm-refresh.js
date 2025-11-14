@@ -1,5 +1,6 @@
 import { VRMClient } from '../../lib/vrm-api.js';
 import { loadSettings, saveSettings } from './settings-store.js';
+import { loadData, saveData } from './data-store.js';
 
 function createClientFromEnv() {
   const installationId = (process.env.VRM_INSTALLATION_ID ?? '').trim();
@@ -63,13 +64,15 @@ export async function refreshSettingsFromVrmAndPersist() {
  */
 export async function refreshSeriesFromVrmAndPersist() {
   const client = createClientFromEnv();
+
+  // --- fetch VRM data in parallel ---
   const [forecasts, prices, soc] = await Promise.all([
-    client.fetchForecasts(), // { step_minutes, timestamps, load_W, pv_W, ... }
-    client.fetchPrices(),    // { importPrice_cents_per_kwh, exportPrice_cents_per_kwh, ... }
-    client.fetchCurrentSoc() // { soc_percent, timestampMs }
+    client.fetchForecasts(),
+    client.fetchPrices(),
+    client.fetchCurrentSoc(),
   ]);
 
-  // --- quarter alignment ---
+  // --- quarter alignment (unchanged logic) ---
   const quarterStartMs = lastQuarterMs(new Date());
   const stepMin = Number(forecasts?.step_minutes ?? 15);
 
@@ -90,30 +93,37 @@ export async function refreshSeriesFromVrmAndPersist() {
 
   const slice = (arr) => (Array.isArray(arr) ? arr.slice(offsetSlots) : []);
 
-  const base = await loadSettings();
+  // Load previous settings/data for fallback
+  const [baseSettings, baseData] = await Promise.all([loadSettings(), loadData()]);
 
   const load_W = slice(forecasts?.load_W);
   const pv_W = slice(forecasts?.pv_W);
   const importPrice = slice(prices?.importPrice_cents_per_kwh);
   const exportPrice = slice(prices?.exportPrice_cents_per_kwh);
 
-  const merged = {
-    ...base,
-    stepSize_m: stepMin || 15,
+  // Build new data snapshot
+  const nextData = {
+    ...baseData,
     tsStart: toLocalDatetimeLocal(new Date(quarterStartMs)),
 
-    // Time-series as arrays (data layer)
-    load_W: load_W.length ? load_W : base.load_W || [],
-    pv_W: pv_W.length ? pv_W : base.pv_W || [],
-    importPrice: importPrice.length ? importPrice : base.importPrice || [],
-    exportPrice: exportPrice.length ? exportPrice : base.exportPrice || [],
+    // Time series as arrays (data layer)
+    load_W: load_W.length ? load_W : baseData.load_W || [],
+    pv_W: pv_W.length ? pv_W : baseData.pv_W || [],
+    importPrice: importPrice.length ? importPrice : baseData.importPrice || [],
+    exportPrice: exportPrice.length ? exportPrice : baseData.exportPrice || [],
 
-    // Current SoC is part of "data"
+    // Current SoC lives primarily in data.json
     initialSoc_percent: Number.isFinite(soc?.soc_percent)
       ? soc.soc_percent
-      : base.initialSoc_percent,
+      : (baseData.initialSoc_percent ?? baseSettings.initialSoc_percent),
   };
 
-  await saveSettings(merged);
-  return merged;
+  await saveData(nextData);
+
+  // Optionally keep stepSize_m in settings in sync with VRM step
+  const nextSettings = {
+    ...baseSettings,
+    stepSize_m: stepMin || baseSettings.stepSize_m || 15,
+  };
+  await saveSettings(nextSettings);
 }

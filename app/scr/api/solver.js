@@ -1,6 +1,6 @@
 import { postJson } from "./client.js";
 
-export function requestRemoteSolve() {
-  // Server builds config & timing from /settings only
-  return postJson("/calculate", {});
+export function requestRemoteSolve(body = {}) {
+  // Pass the body (which may contain `updateData: true`)
+  return postJson("/calculate", body);
 }

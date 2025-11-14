@@ -1,8 +1,7 @@
 import express from 'express';
 import { HttpError, assertCondition, toHttpError } from '../http-errors.js';
 import {
-  refreshSettingsFromVrmAndPersist,
-  refreshSeriesFromVrmAndPersist
+  refreshSettingsFromVrmAndPersist
 } from '../services/vrm-refresh.js';
 
 const router = express.Router();
@@ -26,17 +25,6 @@ router.post('/refresh-settings', async (_req, res, next) => {
     res.json({ message: 'System settings updated from VRM and saved.', settings: saved });
   } catch (error) {
     next(asHttp(error, 'Failed to refresh VRM system settings'));
-  }
-});
-
-// Refresh only time-series + SoC (persist) — now includes server-side quarter alignment
-router.post('/refresh-series', async (_req, res, next) => {
-  try {
-    validateEnvOrThrow();
-    const saved = await refreshSeriesFromVrmAndPersist();
-    res.json({ message: 'Time-series updated from VRM and saved.', settings: saved });
-  } catch (error) {
-    next(asHttp(error, 'Failed to refresh VRM time series'));
   }
 });
 

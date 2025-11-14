@@ -7,7 +7,7 @@ import {
 } from "./scr/charts.js";
 import { renderTable } from "./scr/table.js";
 import { debounce } from "./scr/utils.js";
-import { refreshVrmSettings, refreshVrmSeries } from "./scr/api/backend.js";
+import { refreshVrmSettings } from "./scr/api/backend.js"; // Removed refreshVrmSeries
 import { loadInitialConfig, saveConfig } from "./scr/config-store.js";
 import { requestRemoteSolve } from "./scr/api/solver.js";
 
@@ -16,6 +16,7 @@ const $ = (sel) => document.querySelector(sel);
 const els = {
   // actions
   run: $("#run"),
+  updateDataBeforeRun: $("#update-data-before-run"),
 
   // numeric inputs
   step: $("#step"),
@@ -47,7 +48,6 @@ const els = {
 
   // VRM section
   vrmFetchSettings: $("#vrm-fetch-settings"),
-  vrmFetchForecasts: $("#vrm-fetch-forecasts"),
 };
 
 // ---------- State ----------
@@ -65,7 +65,7 @@ async function boot() {
   hydrateUI(initialConfig);
 
   wireGlobalInputs();
-  wireVrmInputs();
+  wireVrmSettingInput();
 
   if (els.status) {
     els.status.textContent =
@@ -83,9 +83,10 @@ function wireGlobalInputs() {
     debounceRun();
   };
 
-  // Auto-save whenever anything changes (except the table toggler)
+  // Auto-save whenever anything changes (except table toggler and new checkbox)
   for (const el of document.querySelectorAll("input, select, textarea")) {
     if (el === els.tableKwh) continue;
+    if (el === els.updateDataBeforeRun) continue; // Checkbox doesn't trigger auto-save
     el.addEventListener("input", handleChange);
     el.addEventListener("change", handleChange);
   }
@@ -100,9 +101,9 @@ function wireGlobalInputs() {
   els.tableKwh?.addEventListener("change", onRun);
 }
 
-function wireVrmInputs() {
+// Only wires the settings button now
+function wireVrmSettingInput() {
   els.vrmFetchSettings?.addEventListener("click", onRefreshVrmSettings);
-  els.vrmFetchForecasts?.addEventListener("click", onRefreshVrmSeries);
 }
 
 // ---------- UI <-> settings snapshot ----------
@@ -127,6 +128,7 @@ function snapshotUI() {
 
     // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
+    // Note: updateDataBeforeRun is not part of the persisted settings
   };
 }
 
@@ -177,19 +179,7 @@ async function onRefreshVrmSettings() {
   }
 }
 
-async function onRefreshVrmSeries() {
-  try {
-    if (els.status) els.status.textContent = "Refreshing time series from VRM…";
-    const payload = await refreshVrmSeries();
-    const saved = payload?.settings || {};
-    hydrateUI(saved);
-    if (els.status) els.status.textContent = "Time series saved from VRM.";
-    await onRun(); // re-solve with freshly persisted series
-  } catch (err) {
-    console.error(err);
-    if (els.status) els.status.textContent = `VRM error: ${err.message}`;
-  }
-}
+// REMOVED onRefreshVrmSeries()
 
 // ---------- Main compute ----------
 async function onRun() {
@@ -205,12 +195,24 @@ async function onRun() {
     // Persist current inputs to /settings; server will read these
     await persistConfig();
 
-    // Solve with server-only settings/timing
-    const result = await requestRemoteSolve();
+    // Check if data refresh is needed
+    const updateData = !!els.updateDataBeforeRun?.checked;
+
+    // Solve with server-only settings/timing, passing the update flag
+    const result = await requestRemoteSolve({ updateData });
+
     const rows = Array.isArray(result?.rows) ? result.rows : [];
     const timestampsMs = Array.isArray(result?.timestampsMs) ? result.timestampsMs : [];
     const objectiveValue = Number(result?.objectiveValue);
     const statusText = result?.status || "OK";
+
+    // Update SoC and tsStart from result
+    if (result.initialSoc_percent != null) {
+      setIfDef(els.initsoc, result.initialSoc_percent);
+    }
+    if (result.tsStart != null) {
+      setIfDef(els.tsStart, result.tsStart);
+    }
 
     if (els.objective) {
       els.objective.textContent = Number.isFinite(objectiveValue) ? objectiveValue.toFixed(2) : "—";
@@ -268,6 +270,11 @@ function queuePersistSnapshot() {
 // small utils
 function setIfDef(el, v) {
   if (!el) return;
+  // Allow setting 0
+  if (v === 0) {
+    el.value = "0";
+    return;
+  }
   if (v == null || (typeof v === "string" && v.length === 0)) return;
   el.value = String(v);
 }

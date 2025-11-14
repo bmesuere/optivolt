@@ -99,10 +99,35 @@
             </label>
           </div>
 
+          <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+             <label class="text-sm">Current SoC (%)
+              <input id="initsoc" type="number" readonly
+                class="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 p-2 text-sm shadow-sm
+                      text-slate-700 dark:border-white/10 dark:bg-slate-900/40 dark:text-slate-100
+                      cursor-default"
+              />
+            </label>
+            <label class="text-sm">Start time
+              <input id="ts-start" type="datetime-local" readonly
+                class="mt-1 w-full rounded border p-2 text-sm
+                      border-slate-200 bg-slate-50 text-slate-900 shadow-sm
+                      focus:outline-none
+                      dark:border-white/10 dark:bg-slate-900/40 dark:text-slate-100
+                      [color-scheme:light] dark:[color-scheme:dark] appearance-none"
+              />
+            </label>
+          </div>
+
+          <!-- Update Data Checkbox -->
+          <label class="mt-4 flex items-center gap-2 text-sm">
+            <input id="update-data-before-run" type="checkbox" class="rounded border-slate-300 dark:border-white/10 dark:bg-slate-800" checked>
+            <span class="text-ink-soft">Update data before recompute</span>
+          </label>
+
           <!-- Recompute BELOW fields -->
           <div class="mt-4">
             <button id="run"
-              class="rounded-pill bg-sky-600 px-4 py-2 text-white shadow-soft hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+              class="w-full rounded-pill bg-sky-600 px-4 py-2 text-white shadow-soft hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50 sm:w-auto">
               Recompute
             </button>
           </div>
@@ -113,43 +138,6 @@
           </div>
         </section>
 
-        <!-- Data -->
-        <section id="card-data" class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
-          <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-base font-semibold">Data</h2>
-            <button id="vrm-fetch-forecasts" type="button"
-              class="inline-flex items-center gap-2 rounded-pill border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
-              <!-- autorenew icon -->
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24"><title>autorenew</title><path d="M12,6V9L16,5L12,1V4A8,8 0 0,0 4,12C4,13.57 4.46,15.03 5.24,16.26L6.7,14.8C6.25,13.97 6,13 6,12A6,6 0 0,1 12,6M18.76,7.74L17.3,9.2C17.74,10.04 18,11 18,12A6,6 0 0,1 12,18V15L8,19L12,23V20A8,8 0 0,0 20,12C20,10.43 19.54,8.97 18.76,7.74Z"/></svg>
-              <span>Update</span>
-            </button>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <label class="text-sm">Current SoC (%)
-              <input id="initsoc" type="number" readonly
-                class="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 p-2 text-sm shadow-sm
-                      text-slate-700 dark:border-white/10 dark:bg-slate-900/40 dark:text-slate-100
-                      cursor-default"
-              />
-            </label>
-
-            <label class="text-sm md:col-span-2">Start time
-              <input id="ts-start" type="datetime-local" readonly
-                class="mt-1 w-full rounded border p-2 text-sm
-                      border-slate-200 bg-slate-50 text-slate-900 shadow-sm
-                      focus:outline-none
-                      dark:border-white/10 dark:bg-slate-900/40 dark:text-slate-100
-                      [color-scheme:light] dark:[color-scheme:dark] appearance-none"
-              />
-              <p class="mt-1 text-[11px] text-slate-500">
-                First slot timestamp from VRM.
-              </p>
-            </label>
-
-          </div>
-        </section>
-
         <!-- System settings (Fixed) -->
         <section id="card-system" class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
           <div class="mb-3 flex items-center justify-between">
@@ -157,7 +145,7 @@
             <button id="vrm-fetch-settings" type="button"
               class="inline-flex items-center gap-2 rounded-pill border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
               <!-- autorenew icon -->
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24"><title>autorenew</title><path d="M12,6V9L16,5L12,1V4A8,8 0 0,0 4,12C4,13.57 4.46,15.03 5.24,16.26L6.7,14.8C6.25,13.97 6,13 6,12A6,6 0 0,1 12,6M18.76,7.74L17.3,9.2C17.74,10.04 18,11 18,12A6,6 0 0,1 12,18V15L8,19L12,23V20A8,8 0 0,0 20,12C20,10.43 19.54,8.97 18.76,7.74Z"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24"><title>autorenew</title><path fill="currentColor" d="M12,6V9L16,5L12,1V4A8,8 0 0,0 4,12C4,13.57 4.46,15.03 5.24,16.26L6.7,14.8C6.25,13.97 6,13 6,12A6,6 0 0,1 12,6M18.76,7.74L17.3,9.2C17.74,10.04 18,11 18,12A6,6 0 0,1 12,18V15L8,19L12,23V20A8,8 0 0,0 20,12C20,10.43 19.54,8.97 18.76,7.74Z"/></svg>
               <span class="hidden sm:inline">Fetch settings</span>
             </button>
           </div>

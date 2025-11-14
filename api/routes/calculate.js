@@ -5,7 +5,9 @@ import { mapRowsToDess } from '../../lib/dess-mapper.js';
 import { buildLP } from '../../lib/build-lp.js';
 import { parseSolution } from '../../lib/parse-solution.js';
 import { toHttpError } from '../http-errors.js';
-import { getEffectiveConfigAndHints } from '../services/config-service.js';
+import { getSolverInputs } from '../services/solver-input-service.js';
+import { refreshSeriesFromVrmAndPersist } from '../services/vrm-refresh.js';
+import { loadData } from '../services/data-store.js';
 
 const router = express.Router();
 
@@ -20,10 +22,24 @@ async function getHighsInstance() {
   return highsPromise;
 }
 
-router.post('/', async (_req, res, next) => {
+router.post('/', async (req, res, next) => {
   try {
-    // Server-only: build both cfg and timing from persisted settings
-    const { cfg, hints } = await getEffectiveConfigAndHints();
+    const shouldUpdateData = !!req.body?.updateData;
+
+    if (shouldUpdateData) {
+      try {
+        // Fetch from VRM and save to data.json
+        await refreshSeriesFromVrmAndPersist();
+      } catch (vrmError) {
+        // Don't kill the calculation; just log the error and proceed with old data
+        console.error("Failed to refresh VRM data before calculation:", vrmError.message);
+        // We could throw here, but user might want to calculate with stale data
+        // if VRM is down. Let's proceed.
+      }
+    }
+
+    // This will read the freshly persisted data (if updated)
+    const { cfg, hints } = await getSolverInputs();
 
     const lpText = buildLP(cfg);
     const highs = await getHighsInstance();
@@ -33,7 +49,18 @@ router.post('/', async (_req, res, next) => {
     const { perSlot } = mapRowsToDess(rows, cfg);
     for (let i = 0; i < rows.length; i++) rows[i].dess = perSlot[i];
 
-    res.json({ status: result.Status, objectiveValue: result.ObjectiveValue, rows, timestampsMs });
+    // Re-load data to get the tsStart string (which might have been updated)
+    const data = await loadData();
+
+    res.json({
+      status: result.Status,
+      objectiveValue: result.ObjectiveValue,
+      rows,
+      timestampsMs,
+      // Add the new fields for the UI
+      initialSoc_percent: cfg.initialSoc_percent,
+      tsStart: data.tsStart,
+    });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to calculate plan'));
   }

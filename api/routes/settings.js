@@ -4,16 +4,6 @@ import { loadSettings, saveSettings } from '../services/settings-store.js';
 
 const router = express.Router();
 
-// Keys that belong to the "data" layer and should *not* be overwritten by the UI.
-const DATA_KEYS = new Set([
-  'load_W',
-  'pv_W',
-  'importPrice',
-  'exportPrice',
-  'initialSoc_percent',
-  'tsStart',
-]);
-
 router.get('/', async (_req, res, next) => {
   try {
     const settings = await loadSettings();
@@ -32,19 +22,11 @@ router.post('/', async (req, res, next) => {
       'settings payload must be an object',
     );
 
-    const prev = await loadSettings();
+    const prevSettings = await loadSettings();
+    const mergedSettings = { ...prevSettings, ...incoming };
+    await saveSettings(mergedSettings);
 
-    // Drop any attempted writes to data fields
-    const cleaned = {};
-    for (const [key, value] of Object.entries(incoming)) {
-      if (DATA_KEYS.has(key)) continue;
-      cleaned[key] = value;
-    }
-
-    const merged = { ...prev, ...cleaned };
-    await saveSettings(merged);
-
-    res.json({ message: 'Settings saved successfully.', settings: merged });
+    res.json({ message: 'Settings saved successfully.', settings: mergedSettings });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to save settings'));
   }
