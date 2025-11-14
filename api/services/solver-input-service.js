@@ -164,5 +164,5 @@ export async function getSolverInputs() {
   const [settings, data] = await Promise.all([loadSettings(), loadData()]);
   const cfg = buildSolverConfigFromSettings(settings, data);
   const hints = buildTimelineHints(settings, data);
-  return { cfg, hints };
+  return { cfg, hints, data };
 }

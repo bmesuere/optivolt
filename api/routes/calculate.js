@@ -39,7 +39,7 @@ router.post('/', async (req, res, next) => {
     }
 
     // This will read the freshly persisted data (if updated)
-    const { cfg, hints } = await getSolverInputs();
+    const { cfg, hints, data } = await getSolverInputs();
 
     const lpText = buildLP(cfg);
     const highs = await getHighsInstance();
@@ -48,9 +48,6 @@ router.post('/', async (req, res, next) => {
     const { rows, timestampsMs } = parseSolution(result, cfg, hints);
     const { perSlot } = mapRowsToDess(rows, cfg);
     for (let i = 0; i < rows.length; i++) rows[i].dess = perSlot[i];
-
-    // Re-load data to get the tsStart string (which might have been updated)
-    const data = await loadData();
 
     res.json({
       status: result.Status,

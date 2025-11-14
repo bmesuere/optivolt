@@ -58,10 +58,10 @@
 
   <!-- Main -->
   <main class="mx-auto max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3">
-    <!-- Settings (independent scroll on large) -->
+    <!-- Settings (now scrolls with the page) -->
     <aside class="lg:col-span-1">
       <div id="sidebar-stack"
-          class="space-y-6 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
+           class="space-y-6 lg:pr-1">
 
         <!-- Settings (Algorithm) -->
         <section id="card-algo" class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
@@ -100,7 +100,7 @@
           </div>
 
           <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-             <label class="text-sm">Current SoC (%)
+            <label class="text-sm">Current SoC (%)
               <input id="initsoc" type="number" readonly
                 class="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 p-2 text-sm shadow-sm
                       text-slate-700 dark:border-white/10 dark:bg-slate-900/40 dark:text-slate-100
@@ -172,12 +172,12 @@
                 class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
             </label>
 
-            <!-- Row 3: Charge/Discharge -->
-            <label class="text-sm">Maximum charge speed (W)
+            <!-- Row 3: Battery power limits -->
+            <label class="text-sm">Max charge (W)
               <input id="pchg" type="number"
                 class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
             </label>
-            <label class="text-sm">Maximum discharge speed (W)
+            <label class="text-sm">Max discharge (W)
               <input id="pdis" type="number"
                 class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
             </label>
@@ -202,7 +202,6 @@
                 class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
             </label>
 
-
             <label class="text-sm">Step (min)
               <input id="step" type="number"
                 class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
@@ -212,10 +211,7 @@
       </div>
     </aside>
 
-
-
-
-    <!-- Results (stacked vertically, no side-by-side charts) -->
+    <!-- Results (charts) -->
     <section class="lg:col-span-2 space-y-6 min-w-0">
       <div class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
         <h3 class="mb-3 text-base font-semibold">Power flows</h3>
@@ -244,7 +240,10 @@
           <canvas id="loadpv" class="h-full w-full"></canvas>
         </div>
       </div>
+    </section>
 
+    <!-- Full-width table -->
+    <section class="lg:col-span-3">
       <div class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark overflow-auto">
         <h3 class="mb-3 text-base font-semibold">Schedule table</h3>
         <div class="mb-2 flex items-center justify-between gap-3">
@@ -262,6 +261,7 @@
       </div>
     </section>
   </main>
+
 
   <footer class="mx-auto max-w-7xl px-4 py-8 text-center text-xs text-ink-soft">
     Built with HiGHS (WASM) + Chart.js + Tailwind. Changes run instantly.

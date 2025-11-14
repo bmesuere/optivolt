@@ -1,18 +1,14 @@
-import fs from 'node:fs/promises';
+// api/services/settings-store.js
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveDataDir, readJson, writeJson } from './json-store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Allow overriding via env (e.g. Home Assistant mounts persistent state at /data)
-const DATA_DIR = path.resolve(process.env.DATA_DIR ?? path.resolve(__dirname, '../../data'));
+const DATA_DIR = resolveDataDir();
 const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
 const DEFAULT_PATH = path.resolve(__dirname, '../../lib/default-settings.json');
-
-async function readJson(filePath) {
-  const txt = await fs.readFile(filePath, 'utf8');
-  return JSON.parse(txt);
-}
 
 /**
  * Load stored settings or fall back to defaults.
@@ -31,9 +27,7 @@ export async function loadSettings() {
  * Persist settings to DATA_DIR/settings.json (pretty-printed).
  */
 export async function saveSettings(settings) {
-  const data = `${JSON.stringify(settings, null, 2)}\n`;
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(SETTINGS_PATH, data, 'utf8');
+  await writeJson(SETTINGS_PATH, settings);
 }
 
 /**
