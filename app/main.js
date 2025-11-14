@@ -6,40 +6,50 @@ import {
   drawLoadPvGrouped,
 } from "./scr/charts.js";
 import { renderTable } from "./scr/table.js";
-import {
-  buildTimingHints,
-  getActiveTimestampsMs,
-  setActiveTimestampsMs,
-} from "./scr/timeline.js";
 import { debounce } from "./scr/utils.js";
 import { refreshVrmSettings, refreshVrmSeries } from "./scr/api/backend.js";
-import { DEFAULTS } from "./scr/config.js";
 import { loadInitialConfig, saveConfig } from "./scr/config-store.js";
 import { requestRemoteSolve } from "./scr/api/solver.js";
+
 // ---------- DOM ----------
 const $ = (sel) => document.querySelector(sel);
 const els = {
   // actions
   run: $("#run"),
-  restore: $("#restore"),
 
   // numeric inputs
-  step: $("#step"), cap: $("#cap"),
-  minsoc: $("#minsoc"), maxsoc: $("#maxsoc"), initsoc: $("#initsoc"),
-  pchg: $("#pchg"), pdis: $("#pdis"),
-  gimp: $("#gimp"), gexp: $("#gexp"),
-  etaC: $("#etaC"), etaD: $("#etaD"),
-  bwear: $("#bwear"), terminal: $("#terminal"), terminalCustom: $("#terminal-custom"),
+  step: $("#step"),
+  cap: $("#cap"),
+  minsoc: $("#minsoc"),
+  maxsoc: $("#maxsoc"),
+  initsoc: $("#initsoc"),
+  pchg: $("#pchg"),
+  pdis: $("#pdis"),
+  gimp: $("#gimp"),
+  gexp: $("#gexp"),
+  etaC: $("#etaC"),
+  etaD: $("#etaD"),
+  bwear: $("#bwear"),
+  terminal: $("#terminal"),
+  terminalCustom: $("#terminal-custom"),
 
   // textareas
-  tLoad: $("#ts-load"), tPV: $("#ts-pv"), tIC: $("#ts-ic"), tEC: $("#ts-ec"), tsStart: $("#ts-start"),
+  tLoad: $("#ts-load"),
+  tPV: $("#ts-pv"),
+  tIC: $("#ts-ic"),
+  tEC: $("#ts-ec"),
+  tsStart: $("#ts-start"),
 
   // charts + status
-  flows: $("#flows"), soc: $("#soc"), prices: $("#prices"), loadpv: $("#loadpv"),
+  flows: $("#flows"),
+  soc: $("#soc"),
+  prices: $("#prices"),
+  loadpv: $("#loadpv"),
   table: $("#table"),
   tableKwh: $("#table-kwh"),
   tableUnit: $("#table-unit"),
-  status: $("#status"), objective: $("#objective"),
+  status: $("#status"),
+  objective: $("#objective"),
 
   // VRM section
   vrmFetchSettings: $("#vrm-fetch-settings"),
@@ -48,16 +58,15 @@ const els = {
 
 // ---------- State ----------
 const debounceRun = debounce(onRun, 250);
-const persistConfigDebounced = debounce(
-  (cfg) => { void persistConfig(cfg); },
-  600,
-);
+const persistConfigDebounced = debounce((cfg) => {
+  void persistConfig(cfg);
+}, 600);
 
 // ---------- Boot ----------
 boot();
 
 async function boot() {
-  const { config: initialConfig, source: initialSource } = await loadInitialConfig(DEFAULTS);
+  const { config: initialConfig, source } = await loadInitialConfig();
 
   hydrateUI(initialConfig);
 
@@ -65,10 +74,8 @@ async function boot() {
   wireVrmInputs();
 
   if (els.status) {
-    const note = initialSource === "api"
-      ? "Loaded settings from API."
-      : "Using defaults (API settings unavailable).";
-    els.status.textContent = note;
+    els.status.textContent =
+      source === "api" ? "Loaded settings from API." : "No settings yet (use the VRM buttons).";
   }
 
   // Initial compute
@@ -82,9 +89,8 @@ function wireGlobalInputs() {
     debounceRun();
   };
 
-  // Auto-save whenever anything changes
+  // Auto-save whenever anything changes (except the table toggler)
   for (const el of document.querySelectorAll("input, select, textarea")) {
-    // tableKwh has its own change handler below, so we exclude it from auto-save/debounce here
     if (el === els.tableKwh) continue;
     el.addEventListener("input", handleChange);
     el.addEventListener("change", handleChange);
@@ -101,14 +107,6 @@ function wireGlobalInputs() {
     await persistConfig();
     onRun();
   });
-
-  // Restore defaults
-  els.restore?.addEventListener("click", async () => {
-    hydrateUI(DEFAULTS);
-    await persistConfig();
-    onRun();
-  });
-
 }
 
 function wireVrmInputs() {
@@ -116,58 +114,63 @@ function wireVrmInputs() {
   els.vrmFetchForecasts?.addEventListener("click", onRefreshVrmSeries);
 }
 
-// ---------- UI <-> config ----------
+// ---------- UI <-> settings snapshot ----------
 function snapshotUI() {
   return {
-    stepSize_m: num(els.step?.value, DEFAULTS.stepSize_m),
-    batteryCapacity_Wh: num(els.cap?.value, DEFAULTS.batteryCapacity_Wh),
-    minSoc_percent: num(els.minsoc?.value, DEFAULTS.minSoc_percent),
-    maxSoc_percent: num(els.maxsoc?.value, DEFAULTS.maxSoc_percent),
-    initialSoc_percent: num(els.initsoc?.value, DEFAULTS.initialSoc_percent),
-    maxChargePower_W: num(els.pchg?.value, DEFAULTS.maxChargePower_W),
-    maxDischargePower_W: num(els.pdis?.value, DEFAULTS.maxDischargePower_W),
-    maxGridImport_W: num(els.gimp?.value, DEFAULTS.maxGridImport_W),
-    maxGridExport_W: num(els.gexp?.value, DEFAULTS.maxGridExport_W),
-    chargeEfficiency_percent: num(els.etaC?.value, DEFAULTS.chargeEfficiency_percent),
-    dischargeEfficiency_percent: num(els.etaD?.value, DEFAULTS.dischargeEfficiency_percent),
-    batteryCost_cent_per_kWh: num(els.bwear?.value, DEFAULTS.batteryCost_cent_per_kWh),
-    terminalSocValuation: els.terminal?.value || DEFAULTS.terminalSocValuation,
-    terminalSocCustomPrice_cents_per_kWh: num(els.terminalCustom?.value, DEFAULTS.terminalSocCustomPrice_cents_per_kWh),
+    // scalars
+    stepSize_m: num(els.step?.value),
+    batteryCapacity_Wh: num(els.cap?.value),
+    minSoc_percent: num(els.minsoc?.value),
+    maxSoc_percent: num(els.maxsoc?.value),
+    initialSoc_percent: num(els.initsoc?.value),
+    maxChargePower_W: num(els.pchg?.value),
+    maxDischargePower_W: num(els.pdis?.value),
+    maxGridImport_W: num(els.gimp?.value),
+    maxGridExport_W: num(els.gexp?.value),
+    chargeEfficiency_percent: num(els.etaC?.value),
+    dischargeEfficiency_percent: num(els.etaD?.value),
+    batteryCost_cent_per_kWh: num(els.bwear?.value),
+    terminalSocValuation: els.terminal?.value || "zero",
+    terminalSocCustomPrice_cents_per_kWh: num(els.terminalCustom?.value),
 
+    // series as TEXT (server parses *_txt or concrete arrays)
     load_W_txt: els.tLoad?.value ?? "",
     pv_W_txt: els.tPV?.value ?? "",
     importPrice_txt: els.tIC?.value ?? "",
     exportPrice_txt: els.tEC?.value ?? "",
+
+    // optional timeline hint
     tsStart: els.tsStart?.value || "",
+
+    // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
   };
 }
 
-function hydrateUI(obj) {
-  if (els.step) els.step.value = obj.stepSize_m ?? DEFAULTS.stepSize_m;
-  if (els.cap) els.cap.value = obj.batteryCapacity_Wh ?? DEFAULTS.batteryCapacity_Wh;
-  if (els.minsoc) els.minsoc.value = obj.minSoc_percent ?? DEFAULTS.minSoc_percent;
-  if (els.maxsoc) els.maxsoc.value = obj.maxSoc_percent ?? DEFAULTS.maxSoc_percent;
-  if (els.initsoc) els.initsoc.value = obj.initialSoc_percent ?? DEFAULTS.initialSoc_percent;
+function hydrateUI(obj = {}) {
+  // only set when present; otherwise keep current input values/HTML defaults
+  setIfDef(els.step, obj.stepSize_m);
+  setIfDef(els.cap, obj.batteryCapacity_Wh);
+  setIfDef(els.minsoc, obj.minSoc_percent);
+  setIfDef(els.maxsoc, obj.maxSoc_percent);
+  setIfDef(els.initsoc, obj.initialSoc_percent);
+  setIfDef(els.pchg, obj.maxChargePower_W);
+  setIfDef(els.pdis, obj.maxDischargePower_W);
+  setIfDef(els.gimp, obj.maxGridImport_W);
+  setIfDef(els.gexp, obj.maxGridExport_W);
+  setIfDef(els.etaC, obj.chargeEfficiency_percent);
+  setIfDef(els.etaD, obj.dischargeEfficiency_percent);
+  setIfDef(els.bwear, obj.batteryCost_cent_per_kWh);
+  if (els.terminal && obj.terminalSocValuation != null) els.terminal.value = String(obj.terminalSocValuation);
+  setIfDef(els.terminalCustom, obj.terminalSocCustomPrice_cents_per_kWh);
 
-  if (els.pchg) els.pchg.value = obj.maxChargePower_W ?? DEFAULTS.maxChargePower_W;
-  if (els.pdis) els.pdis.value = obj.maxDischargePower_W ?? DEFAULTS.maxDischargePower_W;
-  if (els.gimp) els.gimp.value = obj.maxGridImport_W ?? DEFAULTS.maxGridImport_W;
-  if (els.gexp) els.gexp.value = obj.maxGridExport_W ?? DEFAULTS.maxGridExport_W;
+  if (els.tLoad && obj.load_W_txt != null) els.tLoad.value = String(obj.load_W_txt);
+  if (els.tPV && obj.pv_W_txt != null) els.tPV.value = String(obj.pv_W_txt);
+  if (els.tIC && obj.importPrice_txt != null) els.tIC.value = String(obj.importPrice_txt);
+  if (els.tEC && obj.exportPrice_txt != null) els.tEC.value = String(obj.exportPrice_txt);
+  if (els.tsStart && obj.tsStart != null) els.tsStart.value = String(obj.tsStart);
 
-  if (els.etaC) els.etaC.value = obj.chargeEfficiency_percent ?? DEFAULTS.chargeEfficiency_percent;
-  if (els.etaD) els.etaD.value = obj.dischargeEfficiency_percent ?? DEFAULTS.dischargeEfficiency_percent;
-
-  if (els.bwear) els.bwear.value = obj.batteryCost_cent_per_kWh ?? DEFAULTS.batteryCost_cent_per_kWh;
-  if (els.terminal) els.terminal.value = obj.terminalSocValuation ?? DEFAULTS.terminalSocValuation;
-  if (els.terminalCustom) els.terminalCustom.value = obj.terminalSocCustomPrice_cents_per_kWh ?? DEFAULTS.terminalSocCustomPrice_cents_per_kWh;
-
-  if (els.tLoad) els.tLoad.value = obj.load_W_txt ?? DEFAULTS.load_W_txt;
-  if (els.tPV) els.tPV.value = obj.pv_W_txt ?? DEFAULTS.pv_W_txt;
-  if (els.tIC) els.tIC.value = obj.importPrice_txt ?? DEFAULTS.importPrice_txt;
-  if (els.tEC) els.tEC.value = obj.exportPrice_txt ?? DEFAULTS.exportPrice_txt;
-  if (els.tsStart) els.tsStart.value = obj.tsStart || "";
-  if (els.tableKwh) els.tableKwh.checked = !!(obj.tableShowKwh ?? DEFAULTS.tableShowKwh);
+  if (els.tableKwh && obj.tableShowKwh != null) els.tableKwh.checked = !!obj.tableShowKwh;
 
   updateTerminalCustomUI();
 }
@@ -178,7 +181,7 @@ async function onRefreshVrmSettings() {
     if (els.status) els.status.textContent = "Refreshing system settings from VRM…";
     const payload = await refreshVrmSettings();
     const saved = payload?.settings || {};
-    hydrateUI({ ...DEFAULTS, ...saved });
+    hydrateUI(saved);
     if (els.status) els.status.textContent = "System settings saved from VRM.";
   } catch (err) {
     console.error(err);
@@ -191,9 +194,9 @@ async function onRefreshVrmSeries() {
     if (els.status) els.status.textContent = "Refreshing time series from VRM…";
     const payload = await refreshVrmSeries();
     const saved = payload?.settings || {};
-    hydrateUI({ ...DEFAULTS, ...saved });
+    hydrateUI(saved);
     if (els.status) els.status.textContent = "Time series saved from VRM.";
-    await onRun(); // re-solve with the freshly persisted series
+    await onRun(); // re-solve with freshly persisted series
   } catch (err) {
     console.error(err);
     if (els.status) els.status.textContent = `VRM error: ${err.message}`;
@@ -203,90 +206,46 @@ async function onRefreshVrmSeries() {
 // ---------- Main compute ----------
 async function onRun() {
   try {
-    const cfg = uiToConfig();
+    // Persist current inputs to /settings; server will read these
     await persistConfig();
 
-    const timing = buildTimingHints(cfg, {
-      candidate: getActiveTimestampsMs(),
-      tsStartValue: els.tsStart?.value || "",
-    });
-
-    const result = await requestRemoteSolve({ config: cfg, timing });
-    const rows = Array.isArray(result.rows) ? result.rows : [];
-    const statusText = result.status || "OK";
-    const objectiveValue = Number(result.objectiveValue);
-
-    let timestampsMs = Array.isArray(result.timestampsMs) ? result.timestampsMs.slice() : null;
-    if (!Array.isArray(timestampsMs) || timestampsMs.length !== rows.length) {
-      timestampsMs = Array.isArray(timing.timestampsMs) && timing.timestampsMs.length === rows.length
-        ? timing.timestampsMs.slice()
-        : [];
-    }
-    if (Array.isArray(timestampsMs) && timestampsMs.length === rows.length) {
-      setActiveTimestampsMs(timestampsMs);
-    } else {
-      setActiveTimestampsMs(null);
-    }
+    // Solve with server-only settings/timing
+    const result = await requestRemoteSolve();
+    const rows = Array.isArray(result?.rows) ? result.rows : [];
+    const timestampsMs = Array.isArray(result?.timestampsMs) ? result.timestampsMs : [];
+    const objectiveValue = Number(result?.objectiveValue);
+    const statusText = result?.status || "OK";
 
     if (els.objective) {
-      els.objective.textContent = Number.isFinite(objectiveValue)
-        ? objectiveValue.toFixed(2)
-        : "—";
+      els.objective.textContent = Number.isFinite(objectiveValue) ? objectiveValue.toFixed(2) : "—";
     }
     if (els.status) els.status.textContent = ` ${statusText}`;
 
+    // Only the few chart/table scalars are read from inputs (already hydrated from /settings)
+    const cfgForViz = {
+      stepSize_m: Number(els.step?.value) || 15,
+      batteryCapacity_Wh: Number(els.cap?.value) || 20480,
+    };
+
     renderTable({
       rows,
-      cfg,
+      cfg: cfgForViz,
       timestampsMs,
       targets: { table: els.table, tableUnit: els.tableUnit },
       showKwh: !!els.tableKwh?.checked,
     });
 
-    renderAllCharts(rows, cfg, timestampsMs);
+    renderAllCharts(rows, cfgForViz, timestampsMs);
   } catch (err) {
     console.error(err);
     if (els.status) els.status.textContent = `Error: ${err.message}`;
   }
 }
 
+
 // ---------- Helpers ----------
-function uiToConfig() {
-  const load_W = parseSeries(els.tLoad?.value);
-  const pv_W = parseSeries(els.tPV?.value);
-  const importPrice = parseSeries(els.tIC?.value);
-  const exportPrice = parseSeries(els.tEC?.value);
-
-  const T = Math.min(load_W.length, pv_W.length, importPrice.length, exportPrice.length);
-  if (T === 0) throw new Error("No data in time series.");
-  const clip = (a) => a.slice(0, T);
-
-  return {
-    load_W: clip(load_W),
-    pv_W: clip(pv_W),
-    importPrice: clip(importPrice),
-    exportPrice: clip(exportPrice),
-
-    stepSize_m: num(els.step?.value, DEFAULTS.stepSize_m),
-    batteryCapacity_Wh: num(els.cap?.value, DEFAULTS.batteryCapacity_Wh),
-    minSoc_percent: num(els.minsoc?.value, DEFAULTS.minSoc_percent),
-    maxSoc_percent: num(els.maxsoc?.value, DEFAULTS.maxSoc_percent),
-    initialSoc_percent: num(els.initsoc?.value, DEFAULTS.initialSoc_percent),
-
-    maxChargePower_W: num(els.pchg?.value, DEFAULTS.maxChargePower_W),
-    maxDischargePower_W: num(els.pdis?.value, DEFAULTS.maxDischargePower_W),
-    maxGridImport_W: num(els.gimp?.value, DEFAULTS.maxGridImport_W),
-    maxGridExport_W: num(els.gexp?.value, DEFAULTS.maxGridExport_W),
-    chargeEfficiency_percent: num(els.etaC?.value, DEFAULTS.chargeEfficiency_percent),
-    dischargeEfficiency_percent: num(els.etaD?.value, DEFAULTS.dischargeEfficiency_percent),
-    batteryCost_cent_per_kWh: num(els.bwear?.value, DEFAULTS.batteryCost_cent_per_kWh),
-    terminalSocValuation: els.terminal?.value || DEFAULTS.terminalSocValuation,
-    terminalSocCustomPrice_cents_per_kWh: num(els.terminalCustom?.value, DEFAULTS.terminalSocCustomPrice_cents_per_kWh),
-  };
-}
-
 function updateTerminalCustomUI() {
-  const isCustom = (els.terminal?.value === "custom");
+  const isCustom = els.terminal?.value === "custom";
   if (els.terminalCustom) els.terminalCustom.disabled = !isCustom;
 }
 
@@ -298,14 +257,11 @@ function renderAllCharts(rows, cfg, timestampsMs) {
 }
 
 async function persistConfig(cfg = snapshotUI()) {
-  const payload = (cfg && typeof cfg.load_W_txt === "string") ? cfg : snapshotUI();
   try {
-    await saveConfig(payload);
+    await saveConfig(cfg);
   } catch (error) {
     console.error("Failed to persist settings", error);
-    if (els.status) {
-      els.status.textContent = `Settings error: ${error.message}`;
-    }
+    if (els.status) els.status.textContent = `Settings error: ${error.message}`;
   }
 }
 
@@ -313,6 +269,13 @@ function queuePersistSnapshot() {
   persistConfigDebounced(snapshotUI());
 }
 
-// ---------- small utils ----------
-function parseSeries(s) { return (s || "").split(/[\s,]+/).map(Number).filter((x) => Number.isFinite(x)); }
-function num(val, fallback) { const n = Number(val); return Number.isFinite(n) ? n : fallback; }
+// small utils
+function setIfDef(el, v) {
+  if (!el) return;
+  if (v == null || (typeof v === "string" && v.length === 0)) return;
+  el.value = String(v);
+}
+function num(val) {
+  const n = Number(val);
+  return Number.isFinite(n) ? n : null;
+}

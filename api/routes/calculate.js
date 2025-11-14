@@ -20,35 +20,15 @@ async function getHighsInstance() {
   return highsPromise;
 }
 
-function parseTimingHints(timing = {}) {
-  if (typeof timing !== 'object' || timing === null) return {};
-  const startMs = Number(timing.startMs);
-  const stepMin = Number(timing.stepMin);
-  const timestampsMs = Array.isArray(timing.timestampsMs)
-    ? timing.timestampsMs.map((v) => Number(v)).filter(Number.isFinite)
-    : undefined;
-  return {
-    timestampsMs: timestampsMs?.length ? timestampsMs : undefined,
-    startMs: Number.isFinite(startMs) ? startMs : undefined,
-    stepMin: Number.isFinite(stepMin) ? stepMin : undefined,
-  };
-}
-
-router.post('/', async (req, res, next) => {
+router.post('/', async (_req, res, next) => {
   try {
-    // 1) Build config from server-side settings
-    const { cfg, hints: settingsHints } = await getEffectiveConfigAndHints();
+    // Server-only: build both cfg and timing from persisted settings
+    const { cfg, hints } = await getEffectiveConfigAndHints();
 
-    // 2) Optional client timing overrides (timestamps/start/step) – data stays server-side
-    const clientHints = parseTimingHints(req.body?.timing);
-    const hints = { ...settingsHints, ...clientHints };
-
-    // 3) Solve
     const lpText = buildLP(cfg);
     const highs = await getHighsInstance();
     const result = highs.solve(lpText);
 
-    // 4) Decode + DESS mapping
     const { rows, timestampsMs } = parseSolution(result, cfg, hints);
     const { perSlot } = mapRowsToDess(rows, cfg);
     for (let i = 0; i < rows.length; i++) rows[i].dess = perSlot[i];

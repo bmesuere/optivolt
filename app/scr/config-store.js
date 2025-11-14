@@ -1,12 +1,16 @@
 import { fetchStoredSettings, saveStoredSettings } from "./api/settings.js";
 
-export async function loadInitialConfig(defaults) {
+// Load exactly what the API has; do not merge client defaults anymore.
+export async function loadInitialConfig() {
   try {
     const data = await fetchStoredSettings();
-    return { config: { ...defaults, ...data }, source: "api" };
+    // If /settings doesn’t exist yet, handler returns server defaults.
+    // Otherwise, it’s the user’s persisted snapshot.
+    return { config: data || {}, source: "api" };
   } catch (error) {
     console.error("Failed to load settings from API", error);
-    return { config: { ...defaults }, source: "defaults" };
+    // Stay minimal: return empty config; inputs keep their HTML values/placeholders.
+    return { config: {}, source: "api-error" };
   }
 }
 
