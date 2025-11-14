@@ -72,20 +72,3 @@ export function postJson(path, payload = {}, init = {}) {
     body: JSON.stringify(payload),
   });
 }
-
-export function deleteJson(path, init = {}) {
-  return requestJson(path, {
-    ...init,
-    method: "DELETE",
-    headers: jsonHeaders(init.headers ?? {}),
-  });
-}
-
-export function putJson(path, payload = {}, init = {}) {
-  return requestJson(path, {
-    ...init,
-    method: "PUT",
-    headers: jsonHeaders(init.headers ?? {}),
-    body: JSON.stringify(payload),
-  });
-}

@@ -32,12 +32,6 @@ const els = {
   bwear: $("#bwear"),
   terminal: $("#terminal"),
   terminalCustom: $("#terminal-custom"),
-
-  // textareas
-  tLoad: $("#ts-load"),
-  tPV: $("#ts-pv"),
-  tIC: $("#ts-ic"),
-  tEC: $("#ts-ec"),
   tsStart: $("#ts-start"),
 
   // charts + status
@@ -103,10 +97,7 @@ function wireGlobalInputs() {
   els.run?.addEventListener("click", onRun);
 
   // Units toggle recompute
-  els.tableKwh?.addEventListener("change", async () => {
-    await persistConfig();
-    onRun();
-  });
+  els.tableKwh?.addEventListener("change", onRun);
 }
 
 function wireVrmInputs() {
@@ -117,12 +108,11 @@ function wireVrmInputs() {
 // ---------- UI <-> settings snapshot ----------
 function snapshotUI() {
   return {
-    // scalars
+    // scalars (SYSTEM)
     stepSize_m: num(els.step?.value),
     batteryCapacity_Wh: num(els.cap?.value),
     minSoc_percent: num(els.minsoc?.value),
     maxSoc_percent: num(els.maxsoc?.value),
-    initialSoc_percent: num(els.initsoc?.value),
     maxChargePower_W: num(els.pchg?.value),
     maxDischargePower_W: num(els.pdis?.value),
     maxGridImport_W: num(els.gimp?.value),
@@ -130,30 +120,23 @@ function snapshotUI() {
     chargeEfficiency_percent: num(els.etaC?.value),
     dischargeEfficiency_percent: num(els.etaD?.value),
     batteryCost_cent_per_kWh: num(els.bwear?.value),
+
+    // ALGORITHM
     terminalSocValuation: els.terminal?.value || "zero",
     terminalSocCustomPrice_cents_per_kWh: num(els.terminalCustom?.value),
-
-    // series as TEXT (server parses *_txt or concrete arrays)
-    load_W_txt: els.tLoad?.value ?? "",
-    pv_W_txt: els.tPV?.value ?? "",
-    importPrice_txt: els.tIC?.value ?? "",
-    exportPrice_txt: els.tEC?.value ?? "",
-
-    // optional timeline hint
-    tsStart: els.tsStart?.value || "",
 
     // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
   };
 }
 
+
 function hydrateUI(obj = {}) {
-  // only set when present; otherwise keep current input values/HTML defaults
+  // SYSTEM
   setIfDef(els.step, obj.stepSize_m);
   setIfDef(els.cap, obj.batteryCapacity_Wh);
   setIfDef(els.minsoc, obj.minSoc_percent);
   setIfDef(els.maxsoc, obj.maxSoc_percent);
-  setIfDef(els.initsoc, obj.initialSoc_percent);
   setIfDef(els.pchg, obj.maxChargePower_W);
   setIfDef(els.pdis, obj.maxDischargePower_W);
   setIfDef(els.gimp, obj.maxGridImport_W);
@@ -161,16 +144,21 @@ function hydrateUI(obj = {}) {
   setIfDef(els.etaC, obj.chargeEfficiency_percent);
   setIfDef(els.etaD, obj.dischargeEfficiency_percent);
   setIfDef(els.bwear, obj.batteryCost_cent_per_kWh);
-  if (els.terminal && obj.terminalSocValuation != null) els.terminal.value = String(obj.terminalSocValuation);
-  setIfDef(els.terminalCustom, obj.terminalSocCustomPrice_cents_per_kWh);
 
-  if (els.tLoad && obj.load_W_txt != null) els.tLoad.value = String(obj.load_W_txt);
-  if (els.tPV && obj.pv_W_txt != null) els.tPV.value = String(obj.pv_W_txt);
-  if (els.tIC && obj.importPrice_txt != null) els.tIC.value = String(obj.importPrice_txt);
-  if (els.tEC && obj.exportPrice_txt != null) els.tEC.value = String(obj.exportPrice_txt);
+  // DATA (display-only)
+  setIfDef(els.initsoc, obj.initialSoc_percent);
   if (els.tsStart && obj.tsStart != null) els.tsStart.value = String(obj.tsStart);
 
-  if (els.tableKwh && obj.tableShowKwh != null) els.tableKwh.checked = !!obj.tableShowKwh;
+  // ALGORITHM
+  if (els.terminal && obj.terminalSocValuation != null) {
+    els.terminal.value = String(obj.terminalSocValuation);
+  }
+  setIfDef(els.terminalCustom, obj.terminalSocCustomPrice_cents_per_kWh);
+
+  // UI-only
+  if (els.tableKwh && obj.tableShowKwh != null) {
+    els.tableKwh.checked = !!obj.tableShowKwh;
+  }
 
   updateTerminalCustomUI();
 }
@@ -205,6 +193,14 @@ async function onRefreshVrmSeries() {
 
 // ---------- Main compute ----------
 async function onRun() {
+  // Cancel any pending auto-save to avoid double writes
+  if (typeof persistConfigDebounced.cancel === "function") {
+    persistConfigDebounced.cancel();
+  }
+
+  if (els.status) {
+    els.status.textContent = "Calculating...";
+  }
   try {
     // Persist current inputs to /settings; server will read these
     await persistConfig();
@@ -223,8 +219,8 @@ async function onRun() {
 
     // Only the few chart/table scalars are read from inputs (already hydrated from /settings)
     const cfgForViz = {
-      stepSize_m: Number(els.step?.value) || 15,
-      batteryCapacity_Wh: Number(els.cap?.value) || 20480,
+      stepSize_m: Number(els.step?.value),
+      batteryCapacity_Wh: Number(els.cap?.value),
     };
 
     renderTable({

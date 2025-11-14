@@ -127,43 +127,26 @@
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <label class="text-sm">Current SoC (%)
-              <input id="initsoc" type="number" value="20"
-                class="mt-1 w-full rounded-md border border-green-400 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-400/40 dark:border-white/10 dark:bg-slate-800" />
-            </label>
-
-            <label class="text-sm">Step (min)
-              <input id="step" type="number" value="15"
-                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+              <input id="initsoc" type="number" readonly
+                class="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 p-2 text-sm shadow-sm
+                      text-slate-700 dark:border-white/10 dark:bg-slate-900/40 dark:text-slate-100
+                      cursor-default"
+              />
             </label>
 
             <label class="text-sm md:col-span-2">Start time
-              <input id="ts-start" type="datetime-local"
-                    class="mt-1 w-full rounded border p-2 text-sm
-           border-slate-200 bg-white text-slate-900 shadow-sm
-           focus:outline-none focus:ring-2 focus:ring-sky-400/40
-           dark:border-white/10 dark:bg-slate-800 dark:text-slate-100
-           [color-scheme:light] dark:[color-scheme:dark] appearance-none"
+              <input id="ts-start" type="datetime-local" readonly
+                class="mt-1 w-full rounded border p-2 text-sm
+                      border-slate-200 bg-slate-50 text-slate-900 shadow-sm
+                      focus:outline-none
+                      dark:border-white/10 dark:bg-slate-900/40 dark:text-slate-100
+                      [color-scheme:light] dark:[color-scheme:dark] appearance-none"
               />
               <p class="mt-1 text-[11px] text-slate-500">
-                First slot timestamp. Filled automatically when loading from VRM.
+                First slot timestamp from VRM.
               </p>
             </label>
 
-            <div class="md:col-span-2 space-y-3">
-              <p class="text-xs font-medium text-ink-soft">Time series (comma or whitespace separated)</p>
-              <label class="block text-sm">Load (W)
-                <textarea id="ts-load" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800"></textarea>
-              </label>
-              <label class="block text-sm">PV (W)
-                <textarea id="ts-pv" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800"></textarea>
-              </label>
-              <label class="block text-sm">Import price (c€/kWh)
-                <textarea id="ts-ic" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800"></textarea>
-              </label>
-              <label class="block text-sm">Export price (c€/kWh)
-                <textarea id="ts-ec" rows="2" class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800"></textarea>
-              </label>
-            </div>
           </div>
         </section>
 
@@ -228,6 +211,12 @@
             </label>
             <label class="text-sm">Discharge efficiency (%)
               <input id="etaD" type="number"
+                class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
+            </label>
+
+
+            <label class="text-sm">Step (min)
+              <input id="step" type="number"
                 class="mt-1 w-full rounded-md border border-slate-200 bg-white p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/40 dark:border-white/10 dark:bg-slate-800" />
             </label>
           </div>
