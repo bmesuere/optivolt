@@ -27,7 +27,10 @@ function toLocalDatetimeLocal(dt) {
 /** Persist relatively static system settings from VRM (no timeseries). */
 export async function refreshSettingsFromVrmAndPersist() {
   const client = createClientFromEnv();
-  const vrmSettings = await client.fetchDynamicEssSettings();
+  const [vrmSettings, vrmMinSoc] = await Promise.all([
+    client.fetchDynamicEssSettings(),
+    client.fetchMinSocLimit()
+  ]);
   const base = await loadSettings();
 
   const merged = {
@@ -52,6 +55,8 @@ export async function refreshSettingsFromVrmAndPersist() {
       base.maxGridExport_W,
     batteryCost_cent_per_kWh:
       vrmSettings?.batteryCosts_cents_per_kWh ?? base.batteryCost_cent_per_kWh,
+    minSoc_percent:
+      vrmMinSoc?.minSoc_pct ?? base.minSoc_percent,
   };
 
   await saveSettings(merged);
