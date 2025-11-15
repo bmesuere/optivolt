@@ -15,6 +15,11 @@ ingress_port: 3000
 panel_title: Optivolt
 panel_icon: mdi:home-battery-outline
 
+ports:
+  "3000/tcp": 3070
+ports_description:
+  "3000/tcp": Web UI & API
+
 # Persist add-on state in /data
 map:
   - data:rw

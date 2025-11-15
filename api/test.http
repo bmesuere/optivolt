@@ -1,13 +1,23 @@
 # Check API status
 GET http://localhost:3000/health
 
-### Calculation (server-sourced data; optional timing hints)
+### Calculation all
 POST http://localhost:3000/calculate
 Content-Type: application/json
 
 {
   "updateData": true
 }
+
+### Calculation next quarter
+POST http://localhost:3000/calculate/next-quarter
+Content-Type: application/json
+
+{
+  "updateData": true
+}
+
+
 
 ### Settings (confirm what /calculate will read)
 GET http://localhost:3000/settings

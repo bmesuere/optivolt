@@ -19,7 +19,6 @@ COPY package.json package-lock.json* ./
 COPY app ./app
 COPY api ./api
 COPY lib ./lib
-COPY scripts ./scripts
 
 # Install deps, build/mirror shared code into /app, then prune dev deps
 RUN npm ci \
