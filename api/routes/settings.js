@@ -1,37 +1,13 @@
 import express from 'express';
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { assertCondition, toHttpError } from '../http-errors.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Allow overriding via env (e.g. Home Assistant mounts persistent state at /data)
-const DATA_DIR = path.resolve(process.env.DATA_DIR ?? path.resolve(__dirname, '../../data'));
-const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
-const DEFAULT_PATH = path.resolve(__dirname, '../../lib/default-settings.json');
+import { loadSettings, saveSettings } from '../services/settings-store.js';
 
 const router = express.Router();
 
-async function readJson(filePath) {
-  const data = await fs.readFile(filePath, 'utf8');
-  return JSON.parse(data);
-}
-
-router.get('/', async (req, res, next) => {
+router.get('/', async (_req, res, next) => {
   try {
-    try {
-      const settings = await readJson(SETTINGS_PATH);
-      res.json(settings);
-      return;
-    } catch (error) {
-      if (error?.code !== 'ENOENT') {
-        throw error;
-      }
-    }
-
-    const defaults = await readJson(DEFAULT_PATH);
-    res.json(defaults);
+    const settings = await loadSettings();
+    res.json(settings || {});
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to read settings'));
   }
@@ -39,13 +15,18 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const settings = req.body ?? {};
-    assertCondition(settings && typeof settings === 'object' && !Array.isArray(settings), 400, 'settings payload must be an object');
+    const incoming = req.body ?? {};
+    assertCondition(
+      incoming && typeof incoming === 'object' && !Array.isArray(incoming),
+      400,
+      'settings payload must be an object',
+    );
 
-    const data = `${JSON.stringify(settings, null, 2)}\n`;
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(SETTINGS_PATH, data, 'utf8');
-    res.json({ message: 'Settings saved successfully.' });
+    const prevSettings = await loadSettings();
+    const mergedSettings = { ...prevSettings, ...incoming };
+    await saveSettings(mergedSettings);
+
+    res.json({ message: 'Settings saved successfully.', settings: mergedSettings });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to save settings'));
   }

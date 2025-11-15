@@ -1,51 +1,30 @@
 import express from 'express';
-
 import { HttpError, assertCondition, toHttpError } from '../http-errors.js';
-import { VRMClient } from '../../lib/vrm-api.js';
+import {
+  refreshSettingsFromVrmAndPersist
+} from '../services/vrm-refresh.js';
 
 const router = express.Router();
 
-function createClient() {
+function validateEnvOrThrow() {
   const installationId = (process.env.VRM_INSTALLATION_ID ?? '').trim();
   const token = (process.env.VRM_TOKEN ?? '').trim();
-
   assertCondition(installationId.length > 0, 400, 'VRM Site ID not configured in add-on settings');
   assertCondition(token.length > 0, 400, 'VRM API token not configured in add-on settings');
-
-  return new VRMClient({
-    installationId,
-    token,
-  });
 }
-
-function normalizeVrmError(error, message) {
-  const status = error instanceof HttpError ? error.statusCode : 502;
+function asHttp(error, message, defaultStatus = 502) {
+  const status = error instanceof HttpError ? error.statusCode : defaultStatus;
   return toHttpError(error, status, message);
 }
 
-
-router.post('/settings', async (req, res, next) => {
+// Refresh only static-ish system settings (persist)
+router.post('/refresh-settings', async (_req, res, next) => {
   try {
-    const client = createClient();
-    const settings = await client.fetchDynamicEssSettings();
-    res.json({ settings });
+    validateEnvOrThrow();
+    const saved = await refreshSettingsFromVrmAndPersist();
+    res.json({ message: 'System settings updated from VRM and saved.', settings: saved });
   } catch (error) {
-    next(normalizeVrmError(error, 'Failed to fetch VRM settings'));
-  }
-});
-
-router.post('/timeseries', async (req, res, next) => {
-  try {
-    const client = createClient();
-    const [forecasts, prices, soc] = await Promise.all([
-      client.fetchForecasts(),
-      client.fetchPrices(),
-      client.fetchCurrentSoc(),
-    ]);
-
-    res.json({ forecasts, prices, soc });
-  } catch (error) {
-    next(normalizeVrmError(error, 'Failed to fetch VRM data'));
+    next(asHttp(error, 'Failed to refresh VRM system settings'));
   }
 });
 

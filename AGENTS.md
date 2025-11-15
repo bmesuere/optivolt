@@ -1,13 +1,48 @@
 # Optivolt agent guide
 
-## Front-end layout
-- The public web app lives in the `app/` directory. `main.js` is the module entry point and re-exports logic from `app/scr/`.
-- The browser talks to the Express API through helpers in `app/scr/api/`. Reuse `client.js` for shared request/response handling and group endpoint-specific helpers (e.g. settings, solver, VRM proxy) into separate modules there.
-- Persisted UI settings must stay compatible with `DEFAULTS` in `app/scr/config.js`. Use `snapshotUI()` when saving browser settings so the `_txt` fields remain strings.
+## High-level model
 
-## API
-- When changing API endpoints, keep the request/response contracts in sync with the browser client. `/calculate` accepts `{ config, timing }` and returns `{ status, objectiveValue, rows, timestampsMs }`.
-- `/settings` stores plain JSON snapshots from the browser. Maintain backwards compatibility when updating the schema.
+- The **server** owns the persisted settings in `DATA_DIR/settings.json`.
+- The **UI** is just a view/editor for:
+  - long-lived **system settings** (battery, grid limits, slot duration, …),
+  - short-lived **data** (load / PV / price time series, SoC),
+  - tunable **algorithm settings** (terminal SoC valuation, future knobs).
+- The **LP config** (`lib/build-lp.js`) is derived _only_ from the persisted settings on the server; the client never sends LP parameters anymore.
+
+Default values live in `lib/default-settings.json`.
+If `settings.json` is missing, the server returns these defaults.
+
+## Front-end layout
+- Static UI lives in `app/index.html` and `app/main.js`.
+- Browser-side modules under `app/scr/`:
+
+  - `app/scr/api/client.js` — low-level `getJson` / `postJson`.
+  - `app/scr/api/settings.js` — `/settings` helpers.
+  - `app/scr/api/solver.js` — `/calculate` helper (no config in the body).
+  - `app/scr/config-store.js` — loads and saves the current settings snapshot via the API.
+  - `app/scr/charts.js`, `app/scr/table.js` — visualization only.
+  - `app/scr/utils.js` — small utilities (e.g. debounce).
+
+### Settings on the client
+
+- On boot, `loadInitialConfig()` calls `GET /settings` and returns `{ config, source }`
+- `hydrateUI(config)` writes the scalar & algorithm settings into form fields.
+- Time-series **data** (load, PV, prices, SoC) are **not editable** in the form in the target design; they’re fetched from VRM and shown via graphs/table only.
+- `snapshotUI()` only collects:
+  - **system settings** (battery capacity, step size, grid/battery limits, …),
+  - **algorithm settings** (terminal SoC mode, custom price, …),
+  - UI-only bits (e.g. `tableShowKwh`).
+
+Snapshots are saved via `POST /settings` when inputs change, using debounced auto-save, and immediately before a recompute.
+
+
+## API routes
+
+All routes are implemented in `api/`. Important ones:
+
+- `GET /settings` — returns the persisted settings or the defaults from `lib/default-settings.json` when `settings.json` is missing.
+- `POST /settings` — accepts a single JSON object, writes it to `DATA_DIR/settings.json` (no partial updates).
+- `POST /calculate` — ignores the request body; builds the LP config and timing entirely from persisted settings, runs the solver, and returns the computed results (including schedules, costs, and any relevant diagnostics) as a JSON response.
 
 ## PR / testing notes
 - Prefer small, focused commits with descriptive messages.

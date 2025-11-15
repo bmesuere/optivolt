@@ -4,7 +4,9 @@ import highsFactory from 'highs';
 import { mapRowsToDess } from '../../lib/dess-mapper.js';
 import { buildLP } from '../../lib/build-lp.js';
 import { parseSolution } from '../../lib/parse-solution.js';
-import { assertCondition, toHttpError } from '../http-errors.js';
+import { toHttpError } from '../http-errors.js';
+import { getSolverInputs } from '../services/solver-input-service.js';
+import { refreshSeriesFromVrmAndPersist } from '../services/vrm-refresh.js';
 
 const router = express.Router();
 
@@ -16,49 +18,45 @@ async function getHighsInstance() {
       throw error;
     });
   }
-
   return highsPromise;
-}
-
-function parseTimingHints(timing = {}) {
-  if (typeof timing !== 'object' || timing === null) {
-    return {};
-  }
-
-  const startMs = Number(timing.startMs);
-  const stepMin = Number(timing.stepMin);
-
-  const timestampsMs = Array.isArray(timing.timestampsMs)
-    ? timing.timestampsMs.map((value) => Number(value)).filter(Number.isFinite)
-    : undefined;
-
-  return {
-    timestampsMs: timestampsMs?.length ? timestampsMs : undefined,
-    startMs: Number.isFinite(startMs) ? startMs : undefined,
-    stepMin: Number.isFinite(stepMin) ? stepMin : undefined,
-  };
 }
 
 router.post('/', async (req, res, next) => {
   try {
-    const body = req.body ?? {};
-    const cfg = body.config ?? body;
+    const shouldUpdateData = !!req.body?.updateData;
 
-    assertCondition(cfg && typeof cfg === 'object' && !Array.isArray(cfg), 400, 'config payload must be an object');
+    if (shouldUpdateData) {
+      try {
+        // Fetch from VRM and save to data.json
+        await refreshSeriesFromVrmAndPersist();
+      } catch (vrmError) {
+        // Don't kill the calculation; just log the error and proceed with old data
+        console.error("Failed to refresh VRM data before calculation:", vrmError?.message ?? String(vrmError));
+        // We could throw here, but user might want to calculate with stale data
+        // if VRM is down. Let's proceed.
+      }
+    }
+
+    // This will read the freshly persisted data (if updated)
+    const { cfg, hints, data } = await getSolverInputs();
 
     const lpText = buildLP(cfg);
     const highs = await getHighsInstance();
     const result = highs.solve(lpText);
 
-    const hints = parseTimingHints(body.timing);
     const { rows, timestampsMs } = parseSolution(result, cfg, hints);
-
     const { perSlot } = mapRowsToDess(rows, cfg);
-    for (let i = 0; i < rows.length; i += 1) {
-      rows[i].dess = perSlot[i];
-    }
+    for (let i = 0; i < rows.length; i++) rows[i].dess = perSlot[i];
 
-    res.json({ status: result.Status, objectiveValue: result.ObjectiveValue, rows, timestampsMs });
+    res.json({
+      status: result.Status,
+      objectiveValue: result.ObjectiveValue,
+      rows,
+      timestampsMs,
+      // Add the new fields for the UI
+      initialSoc_percent: cfg.initialSoc_percent,
+      tsStart: data.tsStart,
+    });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to calculate plan'));
   }
