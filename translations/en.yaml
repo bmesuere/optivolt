@@ -8,3 +8,19 @@ configuration:
     name: VRM API token
     description: >
       A Personal Access Token from Victron VRM (Preferences → Integrations).
+  mqtt_host:
+    name: Victron MQTT Host
+    description: >
+      The hostname or IP address of the Victron MQTT broker. Default is `venus.local`.
+  mqtt_port:
+    name: Victron MQTT Port
+    description: >
+      The port number of the Victron MQTT broker. Default is `1883`.
+  mqtt_username:
+    name: Victron MQTT Username
+    description: >
+      The username to connect to the Victron MQTT broker. Not needed by default.
+  mqtt_password:
+    name: Victron MQTT Password
+    description: >
+      The password to connect to the Victron MQTT broker. Not needed by default.
