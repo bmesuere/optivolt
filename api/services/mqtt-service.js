@@ -72,24 +72,22 @@ export async function readVictronSocLimits({ timeoutMs } = {}) {
 export async function setDynamicEssSchedule(
   rows,
   slotCount,
-  { firstTimestampMs, stepSeconds = 900, batteryCapacity_Wh },
+  { batteryCapacity_Wh },
 ) {
   const client = getVictronClient();
   const serial = await client.getSerial();
 
   const nSlots = Math.min(slotCount, rows.length);
   const tasks = [];
+  const stepSeconds = (rows[1].timestampMs - rows[0].timestampMs) / 1000;
 
   for (let i = 0; i < nSlots; i += 1) {
     const row = rows[i];
 
-    const startMs = firstTimestampMs + i * stepSeconds * 1000;
-    const startEpoch = Math.round(startMs / 1000);
-
     const socTargetPercent = Math.round((row.dess.socTarget_Wh / batteryCapacity_Wh) * 100);
 
     const slot = {
-      startEpoch,
+      startEpoch: Math.round(row.timestampMs / 1000),
       durationSeconds: stepSeconds,
       strategy: row.dess.strategy,
       flags: row.dess.flags,

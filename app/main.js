@@ -200,7 +200,6 @@ async function onRun() {
     const result = await requestRemoteSolve({ updateData });
 
     const rows = Array.isArray(result?.rows) ? result.rows : [];
-    const timestampsMs = Array.isArray(result?.timestampsMs) ? result.timestampsMs : [];
     const objectiveValue = Number(result?.objectiveValue);
     const statusText = result?.status || "OK";
 
@@ -226,12 +225,11 @@ async function onRun() {
     renderTable({
       rows,
       cfg: cfgForViz,
-      timestampsMs,
       targets: { table: els.table, tableUnit: els.tableUnit },
       showKwh: !!els.tableKwh?.checked,
     });
 
-    renderAllCharts(rows, cfgForViz, timestampsMs);
+    renderAllCharts(rows, cfgForViz);
   } catch (err) {
     console.error(err);
     if (els.status) els.status.textContent = `Error: ${err.message}`;
@@ -245,11 +243,11 @@ function updateTerminalCustomUI() {
   if (els.terminalCustom) els.terminalCustom.disabled = !isCustom;
 }
 
-function renderAllCharts(rows, cfg, timestampsMs) {
-  drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, timestampsMs);
-  drawSocChart(els.soc, rows, cfg.batteryCapacity_Wh, cfg.stepSize_m, timestampsMs);
-  drawPricesStepLines(els.prices, rows, cfg.stepSize_m, timestampsMs);
-  drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m, timestampsMs);
+function renderAllCharts(rows, cfg) {
+  drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m);
+  drawSocChart(els.soc, rows, cfg.batteryCapacity_Wh, cfg.stepSize_m);
+  drawPricesStepLines(els.prices, rows, cfg.stepSize_m);
+  drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m);
 }
 
 async function persistConfig(cfg = snapshotUI()) {

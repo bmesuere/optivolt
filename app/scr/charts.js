@@ -171,7 +171,9 @@ function dsBar(label, data, color, stack) {
 // 1) Power flows bar chart (signed kWh, stacked)
 // -----------------------------------------------------------------------------
 
-export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, timestampsMs = []) {
+export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15) {
+  const timestampsMs = rows.map(r => r.timestampMs);
+
   const { labels, ticksCb, tooltipTitleCb, gridCb } =
     buildTimeAxisFromTimestamps(timestampsMs);
 
@@ -260,7 +262,8 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, timestamp
 // 2) SoC line chart (%)
 // -----------------------------------------------------------------------------
 
-export function drawSocChart(canvas, rows, batteryCapacity_Wh = 20480, _stepSize_m = 15, timestampsMs = []) {
+export function drawSocChart(canvas, rows, batteryCapacity_Wh = 20480, _stepSize_m = 15) {
+  const timestampsMs = rows.map(r => r.timestampMs);
   const { labels, ticksCb, tooltipTitleCb, gridCb } =
     buildTimeAxisFromTimestamps(timestampsMs);
 
@@ -322,7 +325,8 @@ export function drawSocChart(canvas, rows, batteryCapacity_Wh = 20480, _stepSize
 // 3) Buy/Sell price chart (stepped line)
 // -----------------------------------------------------------------------------
 
-export function drawPricesStepLines(canvas, rows, _stepSize_m = 15, timestampsMs = []) {
+export function drawPricesStepLines(canvas, rows, _stepSize_m = 15) {
+  const timestampsMs = rows.map(r => r.timestampMs);
   const { labels, ticksCb, tooltipTitleCb, gridCb } =
     buildTimeAxisFromTimestamps(timestampsMs);
 
@@ -396,7 +400,7 @@ export function drawPricesStepLines(canvas, rows, _stepSize_m = 15, timestampsMs
 // 4) Forecast grouped bars (hourly aggregation, shared axis style)
 // -----------------------------------------------------------------------------
 
-export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15, timestampsMs = []) {
+export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
   // We aggregate 4×15min slots into hourly buckets for display.
   // Internally: convert each slot load/pv from W to kWh, then SUM per hour.
 
@@ -409,7 +413,8 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15, timestampsMs = 
   const hourMap = new Map();
 
   for (let i = 0; i < rows.length; i++) {
-    const ms = timestampsMs[i];
+    const row = rows[i];
+    const ms = row.timestampMs;
     const dt = new Date(ms);
     const hourStartLocal = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), dt.getHours(), 0, 0, 0);
     const hourMs = hourStartLocal.getTime();

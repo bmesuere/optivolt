@@ -13,7 +13,7 @@ import { SOLUTION_COLORS } from "./charts.js";
  * @param {HTMLElement}  [opts.targets.tableUnit] - element for the "Units: ..." label
  * @param {boolean}      opts.showKwh             - whether to display kWh instead of W
  */
-export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
+export function renderTable({ rows, cfg, targets, showKwh }) {
   const { table, tableUnit } = targets || {};
   if (!table || !Array.isArray(rows) || rows.length === 0) return;
 
@@ -25,7 +25,8 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
   const W2kWh = (x) => (Number(x) || 0) * h / 1000;
 
   // human-readable time labels
-  const timesDisp = timestampsMs.map(ms => {
+  const timesDisp = rows.map(row => {
+    const ms = row.timestampMs;
     const dt = new Date(ms);
     const HH = String(dt.getHours()).padStart(2, "0");
     const MM = String(dt.getMinutes()).padStart(2, "0");

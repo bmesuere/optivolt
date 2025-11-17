@@ -57,29 +57,25 @@ async function computePlan({ updateData = false } = {}) {
   const highs = await getHighsInstance();
   const result = highs.solve(lpText);
 
-  const { rows, timestampsMs } = parseSolution(result, cfg, hints);
+  const { rows } = parseSolution(result, cfg, hints);
   const { perSlot } = mapRowsToDess(rows, cfg);
 
   for (let i = 0; i < rows.length; i++) {
     rows[i].dess = perSlot[i];
   }
 
-  return { cfg, data, result, rows, timestampsMs };
+  return { cfg, data, result, rows };
 }
 
 /**
  * Write the plan to Victron via MQTT.
  */
-async function writePlanToVictron(cfg, rows, timestampsMs) {
-  const firstTimestampMs = timestampsMs[0];
-  const stepSeconds = Number(cfg.stepSize_m) * 60;
+async function writePlanToVictron(cfg, rows) {
   const batteryCapacity_Wh = cfg.batteryCapacity_Wh;
 
   const slotCount = Math.min(DESS_SLOTS, rows.length);
 
   await setDynamicEssSchedule(rows, slotCount, {
-    firstTimestampMs,
-    stepSeconds,
     batteryCapacity_Wh,
   });
 }
@@ -100,19 +96,18 @@ router.post('/', async (req, res, next) => {
     const shouldUpdateData = !!req.body?.updateData;
     const writeToVictron = !!req.body?.writeToVictron;
 
-    const { cfg, data, result, rows, timestampsMs } = await computePlan({
+    const { cfg, data, result, rows } = await computePlan({
       updateData: shouldUpdateData,
     });
 
     if (writeToVictron) {
-      await writePlanToVictron(cfg, rows, timestampsMs);
+      await writePlanToVictron(cfg, rows);
     }
 
     res.json({
       status: result.Status,
       objectiveValue: result.ObjectiveValue,
       rows,
-      timestampsMs,
       // For UI – this reflects the SoC from the data layer (MQTT-backed)
       initialSoc_percent: cfg.initialSoc_percent,
       tsStart: data.tsStart,
@@ -140,7 +135,7 @@ router.post('/next-quarter', async (req, res, next) => {
     const shouldUpdateData = !!req.body?.updateData;
     const writeToVictron = !!req.body?.writeToVictron;
 
-    const { cfg, data, result, rows, timestampsMs } = await computePlan({
+    const { cfg, data, result, rows } = await computePlan({
       updateData: shouldUpdateData,
     });
 
@@ -148,20 +143,14 @@ router.post('/next-quarter', async (req, res, next) => {
       throw new Error('Solver returned empty plan');
     }
 
-    if (!Array.isArray(timestampsMs) || timestampsMs.length === 0) {
-      throw new Error('Missing timestamps for plan');
-    }
-
     if (writeToVictron) {
-      await writePlanToVictron(cfg, rows, timestampsMs);
+      await writePlanToVictron(cfg, rows);
     }
 
     const firstRow = rows[0];
     const firstDess = firstRow.dess || {};
 
     const slotIndex = 0;
-    const timestampMs = timestampsMs[slotIndex];
-    const timestampIso = new Date(timestampMs).toISOString();
 
     const tsStart = data.tsStart ?? null;
     const stepSize_m = cfg.stepSize_m ?? null;
@@ -188,8 +177,6 @@ router.post('/next-quarter', async (req, res, next) => {
       tsStart,
       stepSize_m,
       slotIndex,
-      timestampMs,
-      timestampIso,
 
       strategy,
       strategyCode,
