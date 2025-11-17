@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Same DATA_DIR convention as settings-store
 const DATA_DIR = resolveDataDir();
 const DATA_PATH = path.join(DATA_DIR, 'data.json');
-const DEFAULT_PATH = path.resolve(__dirname, '../../lib/default-data.json');
+const DEFAULT_PATH = path.resolve(__dirname, '../defaults/default-data.json');
 
 /**
  * Load stored data or fall back to defaults.
