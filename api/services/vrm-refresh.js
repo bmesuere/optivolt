@@ -1,7 +1,7 @@
 import { VRMClient } from '../../lib/vrm-api.js';
 import { loadSettings, saveSettings } from './settings-store.js';
 import { loadData, saveData } from './data-store.js';
-import { readVictronSocPercent } from './mqtt-service.js';
+import { readVictronSocPercent, readVictronSocLimits } from './mqtt-service.js';
 
 function createClientFromEnv() {
   const installationId = (process.env.VRM_INSTALLATION_ID ?? '').trim();
@@ -28,10 +28,16 @@ function toLocalDatetimeLocal(dt) {
 /** Persist relatively static system settings from VRM (no timeseries). */
 export async function refreshSettingsFromVrmAndPersist() {
   const client = createClientFromEnv();
-  const [vrmSettings, vrmMinSoc] = await Promise.all([
+
+  const [vrmSettings, socLimits] = await Promise.all([
     client.fetchDynamicEssSettings(),
-    client.fetchMinSocLimit()
+    // Prefer MQTT for SoC limits; fall back gracefully if it fails.
+    readVictronSocLimits({ timeoutMs: 5000 }).catch((err) => {
+      console.error('Failed to read SoC limits from MQTT:', err?.message ?? String(err));
+      return null;
+    }),
   ]);
+
   const base = await loadSettings();
 
   const merged = {
@@ -56,8 +62,12 @@ export async function refreshSettingsFromVrmAndPersist() {
       base.maxGridExport_W,
     batteryCost_cent_per_kWh:
       vrmSettings?.batteryCosts_cents_per_kWh ?? base.batteryCost_cent_per_kWh,
+
+    // SoC limits now come from MQTT (if available), otherwise keep existing.
     minSoc_percent:
-      vrmMinSoc?.minSoc_pct ?? base.minSoc_percent,
+      (socLimits?.minSoc_percent ?? base.minSoc_percent),
+    maxSoc_percent:
+      (socLimits?.maxSoc_percent ?? base.maxSoc_percent),
   };
 
   await saveSettings(merged);
@@ -123,7 +133,7 @@ export async function refreshSeriesFromVrmAndPersist() {
     importPrice: importPrice.length ? importPrice : baseData.importPrice || [],
     exportPrice: exportPrice.length ? exportPrice : baseData.exportPrice || [],
 
-    // Current SoC now comes from MQTT
+    // Current SoC comes from MQTT
     initialSoc_percent: Number.isFinite(socPercent)
       ? socPercent
       : (baseData.initialSoc_percent ?? baseSettings.initialSoc_percent),

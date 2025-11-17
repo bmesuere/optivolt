@@ -46,6 +46,19 @@ export async function readVictronSocPercent({ timeoutMs } = {}) {
 }
 
 /**
+ * Read ESS SoC limits (min/max %) from MQTT.
+ * Returns { minSoc_percent: number | null, maxSoc_percent: number | null }.
+ */
+export async function readVictronSocLimits({ timeoutMs } = {}) {
+  const client = getVictronClient();
+  const res = await client.readSocLimitsPercent({ timeoutMs });
+  return {
+    minSoc_percent: res?.minSoc_percent ?? null,
+    maxSoc_percent: res?.maxSoc_percent ?? null,
+  };
+}
+
+/**
  * High-level Dynamic ESS schedule writer.
  *
  * rows: optimizer rows like the example you gave
