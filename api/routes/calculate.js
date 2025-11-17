@@ -1,5 +1,3 @@
-// api/routes/calculate.js
-
 import express from 'express';
 import highsFactory from 'highs';
 
@@ -9,8 +7,12 @@ import { parseSolution } from '../../lib/parse-solution.js';
 import { toHttpError } from '../http-errors.js';
 import { getSolverInputs } from '../services/solver-input-service.js';
 import { refreshSeriesFromVrmAndPersist } from '../services/vrm-refresh.js';
+import { setDynamicEssSchedule } from '../services/mqtt-service.js';
 
 const router = express.Router();
+
+// How many slots we push into Dynamic ESS
+const DESS_SLOTS = 4;
 
 let highsPromise;
 async function getHighsInstance() {
@@ -98,6 +100,23 @@ async function computePlan({ updateData = false, overrideInitialSoc_percent } = 
   return { cfg, data, result, rows, timestampsMs };
 }
 
+/**
+ * Write the plan to Victron via MQTT.
+ */
+async function writePlanToVictron(cfg, rows, timestampsMs) {
+  const firstTimestampMs = timestampsMs[0];
+  const stepSeconds = Number(cfg.stepSize_m) * 60;
+  const batteryCapacity_Wh = cfg.batteryCapacity_Wh;
+
+  const slotCount = Math.min(DESS_SLOTS, rows.length);
+
+  await setDynamicEssSchedule(rows, slotCount, {
+    firstTimestampMs,
+    stepSeconds,
+    batteryCapacity_Wh,
+  });
+}
+
 // ------------------------- Existing /calculate -------------------------
 
 /**
@@ -106,18 +125,24 @@ async function computePlan({ updateData = false, overrideInitialSoc_percent } = 
  * Optional body:
  * {
  *   "updateData": true,
- *   "socNow_percent": 52.3   // optional override for initial SoC (0–100)
+ *   "socNow_percent": 52.3,   // optional override for initial SoC (0–100)
+ *   "writeToVictron": true    // optional: write schedule to Victron
  * }
  */
 router.post('/', async (req, res, next) => {
   try {
     const shouldUpdateData = !!req.body?.updateData;
     const overrideInitialSoc_percent = parseSocOverridePercent(req.body);
+    const writeToVictron = !!req.body?.writeToVictron;
 
     const { cfg, data, result, rows, timestampsMs } = await computePlan({
       updateData: shouldUpdateData,
       overrideInitialSoc_percent,
     });
+
+    if (writeToVictron) {
+      await writePlanToVictron(cfg, rows, timestampsMs);
+    }
 
     res.json({
       status: result.Status,
@@ -141,36 +166,17 @@ router.post('/', async (req, res, next) => {
  * Optional body:
  * {
  *   "updateData": true,
- *   "socNow_percent": 52.3   // optional override for initial SoC (0–100)
+ *   "socNow_percent": 52.3,   // optional override for initial SoC (0–100)
+ *   "writeToVictron": true    // optional: write schedule to Victron
  * }
  *
- * Returns a compact summary for the first slot ("next quarter"):
- * {
- *   status: "OPTIMAL",
- *   objectiveValue: 123.45,
- *   tsStart: "2024-01-01T10:15",
- *   stepSize_m: 15,
- *   slotIndex: 0,
- *   timestampMs: 1704104100000,
- *   timestampIso: "...",
- *
- *   strategy: "pro_battery",
- *   strategyCode: 2,
- *   restrictions: "grid_to_battery",
- *   restrictionsCode: 1,
- *   feedin: "allowed",
- *   feedinCode: 1,
- *   feedinAllowed: true,
- *
- *   socNow_percent: 52.3,         // reflects override if given
- *   socTarget_percent: 80.0,
- *   batteryCapacity_Wh: 20480
- * }
+ * Returns a compact summary for the first slot ("next quarter").
  */
 router.post('/next-quarter', async (req, res, next) => {
   try {
     const shouldUpdateData = !!req.body?.updateData;
     const overrideInitialSoc_percent = parseSocOverridePercent(req.body);
+    const writeToVictron = !!req.body?.writeToVictron;
 
     const { cfg, data, result, rows, timestampsMs } = await computePlan({
       updateData: shouldUpdateData,
@@ -181,12 +187,16 @@ router.post('/next-quarter', async (req, res, next) => {
       throw new Error('Solver returned empty plan');
     }
 
-    const firstRow = rows[0];
-    const firstDess = firstRow.dess || {};
-
     if (!Array.isArray(timestampsMs) || timestampsMs.length === 0) {
       throw new Error('Missing timestamps for plan');
     }
+
+    if (writeToVictron) {
+      await writePlanToVictron(cfg, rows, timestampsMs);
+    }
+
+    const firstRow = rows[0];
+    const firstDess = firstRow.dess || {};
 
     const slotIndex = 0;
     const timestampMs = timestampsMs[slotIndex];
@@ -198,24 +208,13 @@ router.post('/next-quarter', async (req, res, next) => {
     const batteryCapacity_Wh = cfg.batteryCapacity_Wh;
     const socNow_percent = cfg.initialSoc_percent;
 
-    const targetWh =
-      typeof firstDess.socTarget_Wh === 'number'
-        ? firstDess.socTarget_Wh
-        : firstRow.soc;
+    const targetWh = typeof firstDess.socTarget_Wh === 'number' ? firstDess.socTarget_Wh : firstRow.soc;
 
-    const socTarget_percent =
-      batteryCapacity_Wh > 0
-        ? (targetWh / batteryCapacity_Wh) * 100
-        : null;
+    const socTarget_percent = batteryCapacity_Wh > 0 ? (targetWh / batteryCapacity_Wh) * 100 : null;
 
-    const strategyCode =
-      typeof firstDess.strategy === 'number' ? firstDess.strategy : Strategy.unknown;
-    const restrictionsCode =
-      typeof firstDess.restrictions === 'number'
-        ? firstDess.restrictions
-        : Restrictions.unknown;
-    const feedinCode =
-      typeof firstDess.feedin === 'number' ? firstDess.feedin : -1;
+    const strategyCode = typeof firstDess.strategy === 'number' ? firstDess.strategy : Strategy.unknown;
+    const restrictionsCode = typeof firstDess.restrictions === 'number' ? firstDess.restrictions : Restrictions.unknown;
+    const feedinCode = typeof firstDess.feedin === 'number' ? firstDess.feedin : -1;
 
     const strategy = strategyName(strategyCode);
     const restrictions = restrictionsName(restrictionsCode);

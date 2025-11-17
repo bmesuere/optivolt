@@ -27,7 +27,15 @@ map:
 options:
   site_id: ""
   vrm_token: ""
+  mqtt_host: "venus.local"
+  mqtt_port: 1883
+  mqtt_username: ""
+  mqtt_password: ""
 
 schema:
   site_id: str
   vrm_token: password
+  mqtt_host: str
+  mqtt_port: int
+  mqtt_username: str
+  mqtt_password: password
