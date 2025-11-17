@@ -14,8 +14,7 @@ POST http://localhost:3000/calculate/next-quarter
 Content-Type: application/json
 
 {
-  "updateData": true,
-  "socNow_percent": 52.3
+  "updateData": true
 }
 
 

@@ -1,6 +1,7 @@
 import { VRMClient } from '../../lib/vrm-api.js';
 import { loadSettings, saveSettings } from './settings-store.js';
 import { loadData, saveData } from './data-store.js';
+import { readVictronSocPercent } from './mqtt-service.js';
 
 function createClientFromEnv() {
   const installationId = (process.env.VRM_INSTALLATION_ID ?? '').trim();
@@ -64,17 +65,22 @@ export async function refreshSettingsFromVrmAndPersist() {
 }
 
 /**
- * Fetch VRM series, align to last quarter, and
- * PERSIST only series + tsStart/step + SoC (data layer).
+ * Fetch VRM series (load + PV + prices), align to last quarter,
+ * and persist only series + tsStart/step + SoC (data layer).
+ *
+ * SoC comes from MQTT instead of the VRM API.
  */
 export async function refreshSeriesFromVrmAndPersist() {
   const client = createClientFromEnv();
 
-  // --- fetch VRM data in parallel ---
-  const [forecasts, prices, soc] = await Promise.all([
+  // --- fetch VRM series + MQTT SoC in parallel ---
+  const [forecasts, prices, socPercent] = await Promise.all([
     client.fetchForecasts(),
     client.fetchPrices(),
-    client.fetchCurrentSoc(),
+    readVictronSocPercent({ timeoutMs: 5000 }).catch((err) => {
+      console.error('Failed to read SoC from MQTT:', err?.message ?? String(err));
+      return null;
+    }),
   ]);
 
   // --- quarter alignment (unchanged logic) ---
@@ -117,9 +123,9 @@ export async function refreshSeriesFromVrmAndPersist() {
     importPrice: importPrice.length ? importPrice : baseData.importPrice || [],
     exportPrice: exportPrice.length ? exportPrice : baseData.exportPrice || [],
 
-    // Current SoC lives primarily in data.json
-    initialSoc_percent: Number.isFinite(soc?.soc_percent)
-      ? soc.soc_percent
+    // Current SoC now comes from MQTT
+    initialSoc_percent: Number.isFinite(socPercent)
+      ? socPercent
       : (baseData.initialSoc_percent ?? baseSettings.initialSoc_percent),
   };
 

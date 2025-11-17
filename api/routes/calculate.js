@@ -26,37 +26,9 @@ async function getHighsInstance() {
 }
 
 /**
- * Small helper to parse an optional SoC override from the request body.
- * Expects a percentage in [0, 100]. Returns a number or undefined.
- */
-function parseSocOverridePercent(body) {
-  if (!body) return undefined;
-
-  const raw = body.socNow_percent;
-
-  if (raw === undefined || raw === null || raw === '') {
-    return undefined;
-  }
-
-  const num = Number(raw);
-  if (!Number.isFinite(num)) {
-    console.warn('Ignoring socNow_percent override (not a finite number):', raw);
-    return undefined;
-  }
-
-  if (num < 0 || num > 100) {
-    console.warn('Ignoring socNow_percent override outside 0–100%:', num);
-    return undefined;
-  }
-
-  return num;
-}
-
-/**
  * Shared pipeline:
  *  - optionally refresh VRM data
  *  - load settings + data
- *  - (optionally) override initial SoC with caller-provided value
  *  - build LP
  *  - solve
  *  - parse solution
@@ -64,7 +36,7 @@ function parseSocOverridePercent(body) {
  *
  * Returns { cfg, data, result, rows, timestampsMs }.
  */
-async function computePlan({ updateData = false, overrideInitialSoc_percent } = {}) {
+async function computePlan({ updateData = false } = {}) {
   if (updateData) {
     try {
       // Fetch from VRM and save to data.json
@@ -80,11 +52,6 @@ async function computePlan({ updateData = false, overrideInitialSoc_percent } = 
 
   // This will read the (possibly freshly) persisted data
   const { cfg, hints, data } = await getSolverInputs();
-
-  // Optional: let the caller override the initial SoC derived from VRM
-  if (typeof overrideInitialSoc_percent === 'number') {
-    cfg.initialSoc_percent = overrideInitialSoc_percent;
-  }
 
   const lpText = buildLP(cfg);
   const highs = await getHighsInstance();
@@ -125,19 +92,16 @@ async function writePlanToVictron(cfg, rows, timestampsMs) {
  * Optional body:
  * {
  *   "updateData": true,
- *   "socNow_percent": 52.3,   // optional override for initial SoC (0–100)
  *   "writeToVictron": true    // optional: write schedule to Victron
  * }
  */
 router.post('/', async (req, res, next) => {
   try {
     const shouldUpdateData = !!req.body?.updateData;
-    const overrideInitialSoc_percent = parseSocOverridePercent(req.body);
     const writeToVictron = !!req.body?.writeToVictron;
 
     const { cfg, data, result, rows, timestampsMs } = await computePlan({
       updateData: shouldUpdateData,
-      overrideInitialSoc_percent,
     });
 
     if (writeToVictron) {
@@ -149,7 +113,7 @@ router.post('/', async (req, res, next) => {
       objectiveValue: result.ObjectiveValue,
       rows,
       timestampsMs,
-      // For UI – this will now reflect the override if provided
+      // For UI – this reflects the SoC from the data layer (MQTT-backed)
       initialSoc_percent: cfg.initialSoc_percent,
       tsStart: data.tsStart,
     });
@@ -166,7 +130,6 @@ router.post('/', async (req, res, next) => {
  * Optional body:
  * {
  *   "updateData": true,
- *   "socNow_percent": 52.3,   // optional override for initial SoC (0–100)
  *   "writeToVictron": true    // optional: write schedule to Victron
  * }
  *
@@ -175,12 +138,10 @@ router.post('/', async (req, res, next) => {
 router.post('/next-quarter', async (req, res, next) => {
   try {
     const shouldUpdateData = !!req.body?.updateData;
-    const overrideInitialSoc_percent = parseSocOverridePercent(req.body);
     const writeToVictron = !!req.body?.writeToVictron;
 
     const { cfg, data, result, rows, timestampsMs } = await computePlan({
       updateData: shouldUpdateData,
-      overrideInitialSoc_percent,
     });
 
     if (!Array.isArray(rows) || rows.length === 0) {

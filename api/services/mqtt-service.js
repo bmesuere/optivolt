@@ -36,6 +36,16 @@ export async function writeVictronSetting(relativePath, value) {
 }
 
 /**
+ * Read the current battery SoC (%) from MQTT.
+ * Returns a number in [0, 100] or null if unavailable.
+ */
+export async function readVictronSocPercent({ timeoutMs } = {}) {
+  const client = getVictronClient();
+  const res = await client.readSocPercent({ timeoutMs });
+  return res?.soc_percent ?? null;
+}
+
+/**
  * High-level Dynamic ESS schedule writer.
  *
  * rows: optimizer rows like the example you gave
