@@ -1,0 +1,93 @@
+import { VictronMqttClient } from '../../lib/victron-mqtt.js';
+
+let victronClient = null;
+
+function getVictronClient() {
+  if (!victronClient) {
+    const host = process.env.MQTT_HOST || 'venus.local';
+    const port = process.env.MQTT_PORT ? Number(process.env.MQTT_PORT) : 1883;
+    const username = process.env.MQTT_USERNAME || '';
+    const password = process.env.MQTT_PASSWORD || '';
+
+    victronClient = new VictronMqttClient({
+      host,
+      port,
+      username,
+      password,
+    });
+  }
+
+  return victronClient;
+}
+
+export async function getVictronSerial() {
+  const client = getVictronClient();
+  return client.getSerial();
+}
+
+export async function readVictronSetting(relativePath, { timeoutMs } = {}) {
+  const client = getVictronClient();
+  return client.readSetting(relativePath, { timeoutMs });
+}
+
+export async function writeVictronSetting(relativePath, value) {
+  const client = getVictronClient();
+  await client.writeSetting(relativePath, value);
+}
+
+/**
+ * High-level Dynamic ESS schedule writer.
+ *
+ * rows: optimizer rows like the example you gave
+ * slotCount: how many slots to push (starting from rows[0])
+ *
+ * options:
+ *   - firstTimestampMs : ms since epoch for rows[0]
+ *   - stepSeconds      : duration of each slot (default 900)
+ *   - batteryCapacity_Wh : battery capacity in Wh, used to compute SoC %
+ */
+export async function setDynamicEssSchedule(
+  rows,
+  slotCount,
+  { firstTimestampMs, stepSeconds = 900, batteryCapacity_Wh },
+) {
+  const client = getVictronClient();
+  const serial = await client.getSerial();
+
+  const nSlots = Math.min(slotCount, rows.length);
+  const tasks = [];
+
+  for (let i = 0; i < nSlots; i += 1) {
+    const row = rows[i];
+
+    const startMs = firstTimestampMs + i * stepSeconds * 1000;
+    const startEpoch = Math.round(startMs / 1000);
+
+    const socTargetPercent = Math.round((row.dess.socTarget_Wh / batteryCapacity_Wh) * 100);
+
+    const slot = {
+      startEpoch,
+      durationSeconds: stepSeconds,
+      strategy: row.dess.strategy,
+      flags: row.dess.flags,
+      socTarget: socTargetPercent,
+      restrictions: row.dess.restrictions,
+      allowGridFeedIn: Number(row.dess.feedin),
+    };
+    console.log(`[victron-service] Writing slot ${i}:`, slot);
+    //tasks.push(client.writeScheduleSlot(i, slot, { serial }));
+  }
+
+  await Promise.all(tasks);
+
+  return {
+    serial,
+    slotsWritten: nSlots,
+  };
+}
+
+export async function shutdownVictronClient() {
+  if (!victronClient) return;
+  await victronClient.close();
+  victronClient = null;
+}
