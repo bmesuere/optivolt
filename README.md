@@ -27,8 +27,6 @@ app/                 # static web UI (index.html, main.js, app/scr/**)
 api/                 # Express server (index.js + routes)
 lib/                 # core logic: LP builder, parser, DESS, VRM client, defaults
 addon/               # Home Assistant add-on wrapper (s6, run scripts)
-cli/                 # small CLI helper for local smoke tests
-examples/            # LP and config examples
 translations/        # i18n strings for the HA addon settings
 Dockerfile           # image for HA add-on / container use
 config.yaml          # Home Assistant add-on manifest
