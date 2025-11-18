@@ -1,14 +1,14 @@
 /* global Chart */
 
 export const SOLUTION_COLORS = {
-  b2g: "rgb(15, 192, 216)",
-  pv2g: "rgb(247, 171, 62)",
-  pv2b: "rgb(139, 201, 100)",
-  pv2l: "rgb(212, 222, 95)",
-  b2l: "rgb(71, 144, 208)",
-  g2l: "rgb(233, 122, 131)",
-  g2b: "rgb(225, 142, 233)",
-  soc: "rgb(71, 144, 208)"
+  b2g: "rgb(15, 192, 216)",   // Battery to Grid (teal-ish)
+  pv2g: "rgb(247, 171, 62)",  // Solar to Grid (amber)
+  pv2b: "rgb(139, 201, 100)", // Solar to Battery (green)
+  pv2l: "rgb(212, 222, 95)",  // Solar to Consumption (yellow-green)
+  b2l: "rgb(71, 144, 208)",   // Battery to Consumption (blue)
+  g2l: "rgb(233, 122, 131)",  // Grid to Consumption (red)
+  g2b: "rgb(225, 142, 233)",  // Grid to Battery (purple)
+  soc: "rgb(71, 144, 208)"    // SoC line color = battery-ish blue
 };
 
 const toRGBA = (rgb, alpha = 1) => {

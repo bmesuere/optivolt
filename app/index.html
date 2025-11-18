@@ -32,10 +32,10 @@
   <meta name="color-scheme" content="light dark">
 </head>
 
-<body class="min-h-full overflow-x-hidden bg-fixed bg-gradient-to-b from-slate-50 to-slate-100 text-ink dark:from-slate-900 dark:to-slate-950 dark:text-slate-100">
+<body class="min-h-full w-full bg-fixed bg-gradient-to-b from-slate-50 to-slate-100 text-ink dark:from-slate-900 dark:to-slate-950 dark:text-slate-100">
   <!-- Header -->
   <header class="border-b border-white/60 dark:border-white/5 bg-white/70 dark:bg-slate-900/60 backdrop-blur">
-    <div class="mx-auto max-w-7xl px-4 py-2 sm:py-3 flex items-center justify-between">
+    <div class="mx-auto w-full max-w-7xl px-4 py-2 sm:py-3 flex items-center justify-between">
       <h1 class="text-2xl font-semibold tracking-tight">Optivolt DESS</h1>
       <div class="flex items-center gap-2">
         <!-- Appearance icon button -->
@@ -57,9 +57,9 @@
   </header>
 
   <!-- Main -->
-  <main class="mx-auto max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3">
+  <main class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3">
     <!-- Settings (now scrolls with the page) -->
-    <aside class="lg:col-span-1">
+    <aside class="lg:col-span-1 min-w-0">
       <div id="sidebar-stack"
            class="space-y-6 lg:pr-1">
 
@@ -243,7 +243,7 @@
     </section>
 
     <!-- Full-width table -->
-    <section class="lg:col-span-3">
+    <section class="lg:col-span-3 min-w-0">
       <div class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark overflow-auto">
         <h3 class="mb-3 text-base font-semibold">Schedule table</h3>
         <div class="mb-2 flex items-center justify-between gap-3">
@@ -263,7 +263,7 @@
   </main>
 
 
-  <footer class="mx-auto max-w-7xl px-4 py-8 text-center text-xs text-ink-soft">
+  <footer class="mx-auto w-full max-w-7xl px-4 py-8 text-center text-xs text-ink-soft">
     Built with HiGHS (WASM) + Chart.js + Tailwind. Changes run instantly.
   </footer>
 
