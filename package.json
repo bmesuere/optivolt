@@ -13,7 +13,7 @@
   "license": "MIT",
   "author": "Bart Mesuere",
   "type": "module",
-  "main": "cli/index.js",
+  "main": "api/index.js",
   "scripts": {
     "api": "node ./api/index.js",
     "dev": "dotenv -e .env.local -- nodemon --ignore 'data/' ./api/index.js",

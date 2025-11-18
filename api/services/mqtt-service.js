@@ -59,7 +59,7 @@ export async function readVictronSocLimits({ timeoutMs } = {}) {
 }
 
 /**
- * High-level Dynamic ESS schedule writer.
+ * High-level Dynamic ESS schedule builder.
  *
  * rows: optimizer rows like the example you gave
  * slotCount: how many slots to push (starting from rows[0])
@@ -91,8 +91,7 @@ export async function setDynamicEssSchedule(rows, slotCount) {
       restrictions: row.dess.restrictions,
       allowGridFeedIn: Number(row.dess.feedin),
     };
-    console.log(`[victron-service] Writing slot ${i}:`, slot);
-    //tasks.push(client.writeScheduleSlot(i, slot, { serial }));
+    tasks.push(client.writeScheduleSlot(i, slot, { serial }));
   }
 
   await Promise.all(tasks);
