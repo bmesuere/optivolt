@@ -61,10 +61,6 @@ const els = {
   avgImport: $("#avg-import-cent"),
   tippingPoint: $("#tipping-point-cent"),
 
-  loadSplitGridBar: $("#load-split-grid-bar"),
-  loadSplitBattBar: $("#load-split-batt-bar"),
-  loadSplitPvBar: $("#load-split-pv-bar"),
-
   // VRM section
   vrmFetchSettings: $("#vrm-fetch-settings"),
 };
@@ -397,44 +393,6 @@ function updateSummaryUI(summary) {
   [gridEl, battEl, pvEl].forEach(el => {
     el.style.opacity = "1";
   });
-}
-
-
-function updateLoadSplitBars(gridKWh, battKWh, pvKWh) {
-  const g = Number(gridKWh);
-  const b = Number(battKWh);
-  const p = Number(pvKWh);
-
-  const values = [
-    Number.isFinite(g) && g > 0 ? g : 0,
-    Number.isFinite(b) && b > 0 ? b : 0,
-    Number.isFinite(p) && p > 0 ? p : 0,
-  ];
-  const total = values[0] + values[1] + values[2];
-
-  const bars = [
-    els.loadSplitGridBar,
-    els.loadSplitBattBar,
-    els.loadSplitPvBar,
-  ];
-
-  if (!total || !Number.isFinite(total)) {
-    for (const bar of bars) {
-      if (!bar) continue;
-      bar.style.width = "0%";
-      bar.style.opacity = "0";
-    }
-    return;
-  }
-
-  for (let i = 0; i < bars.length; i++) {
-    const bar = bars[i];
-    if (!bar) continue;
-    const v = values[i];
-    const pct = v <= 0 ? 0 : (v / total) * 100;
-    bar.style.width = `${pct.toFixed(1)}%`;
-    bar.style.opacity = pct > 0 ? "1" : "0";
-  }
 }
 
 // small utils
