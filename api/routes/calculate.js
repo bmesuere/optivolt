@@ -1,7 +1,7 @@
 import express from 'express';
 import highsFactory from 'highs';
 
-import { mapRowsToDess, Strategy, Restrictions, FeedIn } from '../../lib/dess-mapper.js';
+import { mapRowsToDess } from '../../lib/dess-mapper.js';
 import { buildLP } from '../../lib/build-lp.js';
 import { parseSolution } from '../../lib/parse-solution.js';
 import { toHttpError } from '../http-errors.js';
@@ -104,7 +104,6 @@ router.post('/', async (req, res, next) => {
       status: result.Status,
       objectiveValue: result.ObjectiveValue,
       rows,
-      // For UI – this reflects the SoC from the data layer (MQTT-backed)
       initialSoc_percent: cfg.initialSoc_percent,
       tsStart: data.tsStart,
     });
@@ -112,118 +111,5 @@ router.post('/', async (req, res, next) => {
     next(toHttpError(error, 500, 'Failed to calculate plan'));
   }
 });
-
-// ------------------- New /calculate/next-quarter ----------------------
-
-/**
- * POST /calculate/next-quarter
- *
- * Optional body:
- * {
- *   "updateData": true,
- *   "writeToVictron": true    // optional: write schedule to Victron
- * }
- *
- * Returns a compact summary for the first slot ("next quarter").
- */
-router.post('/next-quarter', async (req, res, next) => {
-  try {
-    const shouldUpdateData = !!req.body?.updateData;
-    const writeToVictron = !!req.body?.writeToVictron;
-
-    const { cfg, data, result, rows } = await computePlan({
-      updateData: shouldUpdateData,
-    });
-
-    if (!Array.isArray(rows) || rows.length === 0) {
-      throw new Error('Solver returned empty plan');
-    }
-
-    if (writeToVictron) {
-      await writePlanToVictron(rows);
-    }
-
-    const firstRow = rows[0];
-    const firstDess = firstRow.dess || {};
-
-    const slotIndex = 0;
-
-    const tsStart = data.tsStart ?? null;
-    const stepSize_m = cfg.stepSize_m ?? null;
-
-    const batteryCapacity_Wh = cfg.batteryCapacity_Wh;
-    const socNow_percent = cfg.initialSoc_percent;
-    const socTarget_percent = firstDess.socTarget_percent ?? null;
-
-    const strategyCode = typeof firstDess.strategy === 'number' ? firstDess.strategy : Strategy.unknown;
-    const restrictionsCode = typeof firstDess.restrictions === 'number' ? firstDess.restrictions : Restrictions.unknown;
-    const feedinCode = typeof firstDess.feedin === 'number' ? firstDess.feedin : -1;
-
-    const strategy = strategyName(strategyCode);
-    const restrictions = restrictionsName(restrictionsCode);
-    const feedin = feedinName(feedinCode);
-
-    res.json({
-      status: result.Status,
-      objectiveValue: result.ObjectiveValue,
-
-      tsStart,
-      stepSize_m,
-      slotIndex,
-
-      strategy,
-      strategyCode,
-      restrictions,
-      restrictionsCode,
-      feedin,
-      feedinCode,
-      feedinAllowed: feedinCode === FeedIn.allowed,
-
-      socNow_percent,
-      socTarget_percent,
-      batteryCapacity_Wh,
-    });
-  } catch (error) {
-    next(toHttpError(error, 500, 'Failed to calculate next quarter plan'));
-  }
-});
-
-// ---------------------- small mapping helpers ------------------------
-
-function strategyName(code) {
-  switch (code) {
-    case Strategy.targetSoc:
-      return 'target_soc';
-    case Strategy.selfConsumption:
-      return 'self_consumption';
-    case Strategy.proBattery:
-      return 'pro_battery';
-    case Strategy.proGrid:
-      return 'pro_grid';
-    default:
-      return 'unknown';
-  }
-}
-
-function restrictionsName(code) {
-  switch (code) {
-    case Restrictions.none:
-      return 'none';
-    case Restrictions.gridToBattery:
-      return 'grid_to_battery';
-    case Restrictions.batteryToGrid:
-      return 'battery_to_grid';
-    case Restrictions.both:
-      return 'both';
-    default:
-      return 'unknown';
-  }
-}
-
-function feedinName(code) {
-  if (code === FeedIn.allowed) return 'allowed';
-  if (code === FeedIn.blocked) return 'blocked';
-  return 'unknown';
-}
 
 export default router;
