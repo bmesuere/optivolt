@@ -262,13 +262,12 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15) {
 // 2) SoC line chart (%)
 // -----------------------------------------------------------------------------
 
-export function drawSocChart(canvas, rows, batteryCapacity_Wh = 20480, _stepSize_m = 15) {
+export function drawSocChart(canvas, rows, _stepSize_m = 15) {
   const timestampsMs = rows.map(r => r.timestampMs);
   const { labels, ticksCb, tooltipTitleCb, gridCb } =
     buildTimeAxisFromTimestamps(timestampsMs);
 
-  const cap = Math.max(1e-9, Number(batteryCapacity_Wh));
-  const socPct = rows.map(r => (r.soc / cap) * 100);
+  const socPct = rows.map(r => r.soc_percent);
 
   if (canvas._chart) canvas._chart.destroy();
   canvas._chart = new Chart(canvas.getContext("2d"), {

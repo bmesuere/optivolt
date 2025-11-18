@@ -245,7 +245,7 @@ function updateTerminalCustomUI() {
 
 function renderAllCharts(rows, cfg) {
   drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m);
-  drawSocChart(els.soc, rows, cfg.batteryCapacity_Wh, cfg.stepSize_m);
+  drawSocChart(els.soc, rows, cfg.stepSize_m);
   drawPricesStepLines(els.prices, rows, cfg.stepSize_m);
   drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m);
 }

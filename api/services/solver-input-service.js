@@ -139,7 +139,7 @@ export function buildSolverConfigFromSettings(settings, data = {}) {
 }
 
 // Timeline info derived from data.tsStart + settings.stepSize_m
-export function buildTimelineHints(settings, data = {}) {
+export function getTimingData(settings, data = {}) {
   const stepMin = numOrThrow(settings.stepSize_m, 'stepSize_m');
 
   const rawTs =
@@ -163,6 +163,6 @@ export function buildTimelineHints(settings, data = {}) {
 export async function getSolverInputs() {
   const [settings, data] = await Promise.all([loadSettings(), loadData()]);
   const cfg = buildSolverConfigFromSettings(settings, data);
-  const hints = buildTimelineHints(settings, data);
-  return { cfg, hints, data };
+  const timing = getTimingData(settings, data);
+  return { cfg, timing, data };
 }

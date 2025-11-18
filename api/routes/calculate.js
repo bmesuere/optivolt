@@ -51,13 +51,13 @@ async function computePlan({ updateData = false } = {}) {
   }
 
   // This will read the (possibly freshly) persisted data
-  const { cfg, hints, data } = await getSolverInputs();
+  const { cfg, timing, data } = await getSolverInputs();
 
   const lpText = buildLP(cfg);
   const highs = await getHighsInstance();
   const result = highs.solve(lpText);
 
-  const { rows } = parseSolution(result, cfg, hints);
+  const rows = parseSolution(result, cfg, timing);
   const { perSlot } = mapRowsToDess(rows, cfg);
 
   for (let i = 0; i < rows.length; i++) {
@@ -70,14 +70,10 @@ async function computePlan({ updateData = false } = {}) {
 /**
  * Write the plan to Victron via MQTT.
  */
-async function writePlanToVictron(cfg, rows) {
-  const batteryCapacity_Wh = cfg.batteryCapacity_Wh;
-
+async function writePlanToVictron(rows) {
   const slotCount = Math.min(DESS_SLOTS, rows.length);
 
-  await setDynamicEssSchedule(rows, slotCount, {
-    batteryCapacity_Wh,
-  });
+  await setDynamicEssSchedule(rows, slotCount);
 }
 
 // ------------------------- Existing /calculate -------------------------
@@ -101,7 +97,7 @@ router.post('/', async (req, res, next) => {
     });
 
     if (writeToVictron) {
-      await writePlanToVictron(cfg, rows);
+      await writePlanToVictron(rows);
     }
 
     res.json({
@@ -144,7 +140,7 @@ router.post('/next-quarter', async (req, res, next) => {
     }
 
     if (writeToVictron) {
-      await writePlanToVictron(cfg, rows);
+      await writePlanToVictron(rows);
     }
 
     const firstRow = rows[0];
@@ -157,10 +153,7 @@ router.post('/next-quarter', async (req, res, next) => {
 
     const batteryCapacity_Wh = cfg.batteryCapacity_Wh;
     const socNow_percent = cfg.initialSoc_percent;
-
-    const targetWh = typeof firstDess.socTarget_Wh === 'number' ? firstDess.socTarget_Wh : firstRow.soc;
-
-    const socTarget_percent = batteryCapacity_Wh > 0 ? (targetWh / batteryCapacity_Wh) * 100 : null;
+    const socTarget_percent = firstDess.socTarget_percent ?? null;
 
     const strategyCode = typeof firstDess.strategy === 'number' ? firstDess.strategy : Strategy.unknown;
     const restrictionsCode = typeof firstDess.restrictions === 'number' ? firstDess.restrictions : Restrictions.unknown;

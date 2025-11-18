@@ -17,9 +17,6 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
   const { table, tableUnit } = targets || {};
   if (!table || !Array.isArray(rows) || rows.length === 0) return;
 
-  // battery capacity (for SoC%)
-  const cap = Math.max(1e-9, Number(cfg?.batteryCapacity_Wh ?? 20480));
-
   // slot duration for W→kWh conversion
   const h = Math.max(0.000001, Number(cfg?.stepSize_m ?? 15) / 60); // hours per slot
   const W2kWh = (x) => (Number(x) || 0) * h / 1000;
@@ -60,7 +57,7 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
     { key: "imp", headerHtml: "Grid<br>import", fmt: x => fmtEnergy(x), tip: "Grid Import" },
     { key: "exp", headerHtml: "Grid<br>export", fmt: x => fmtEnergy(x), tip: "Grid Export" },
 
-    { key: "soc", headerHtml: "SoC", fmt: w => pct0(w / cap) + "%" },
+    { key: "soc_percent", headerHtml: "SoC", fmt: x => intThin(x) + "%" },
 
     {
       key: "dess_strategy",
@@ -87,8 +84,8 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
       key: "dess_soc_target",
       headerHtml: "Soc→",
       fmt: (_, ri) => {
-        const targetWh = rows[ri]?.dess?.socTarget_Wh ?? 0;
-        return pct0(targetWh / cap) + "%";
+        const targetPct = rows[ri]?.dess?.socTarget_percent;
+        return intThin(targetPct) + "%";
       },
       tip: "Target SoC at end of slot",
     },
