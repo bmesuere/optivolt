@@ -89,7 +89,7 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
     <thead>
       <tr class="align-bottom">
         ${cols.map(c =>
-    `<th class="px-2 py-1 border-b font-medium text-right align-bottom" ${c.tip ? `title="${escapeHtml(c.tip)}"` : ""}>${c.headerHtml}</th>`
+    `<th class="px-2 py-1 border-b font-medium text-right align-bottom border-slate-200/80 dark:border-slate-700/70 bg-slate-50 dark:bg-slate-900" ${c.tip ? `title="${escapeHtml(c.tip)}"` : ""}>${c.headerHtml}</th>`
   ).join("")}
       </tr>
     </thead>`;
@@ -104,10 +104,10 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
       const raw = c.key === "time" ? null : r[c.key];
       const displayVal = c.key === "time" ? timeLabel : c.fmt(raw, ri);
       const styleAttr = styleForCell(c.key, raw); // only applies to flow columns with > 0
-      return `<td ${styleAttr} class="px-2 py-1 border-b text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${displayVal}</td>`;
+      return `<td ${styleAttr} class="px-2 py-1 text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${displayVal}</td>`;
     }).join("");
 
-    return `<tr>${tds}</tr>`;
+    return `<tr class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 ">${tds}</tr>`;
   }).join("")}
     </tbody>`;
 

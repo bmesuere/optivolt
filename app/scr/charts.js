@@ -17,20 +17,6 @@ const toRGBA = (rgb, alpha = 1) => {
 };
 const dim = (rgb) => toRGBA(rgb, 0.6);
 
-const legendSquare = {
-  position: "bottom",
-  labels: {
-    usePointStyle: true,
-    pointStyle: "rect",
-    boxWidth: 10,
-    padding: 12,
-    font: (_ctx) => ({
-      size: 12,
-      family: getComputedStyle(document.documentElement).fontFamily
-    })
-  }
-};
-
 // ---------------------- Time & Axis Helpers ----------------------
 
 function fmtHHMM(dt) {
@@ -100,6 +86,23 @@ function buildTimeAxisFromTimestamps(timestampsMs) {
  * Allows overriding specific sections via `overrides`.
  */
 function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacked = false }, overrides = {}) {
+  const theme = getChartTheme();
+
+  const legendSquare = {
+    position: "bottom",
+    labels: {
+      color: theme.axisTickColor,
+      usePointStyle: true,
+      pointStyle: "rect",
+      boxWidth: 10,
+      padding: 12,
+      font: (_ctx) => ({
+        size: 12,
+        family: getComputedStyle(document.documentElement).fontFamily
+      })
+    }
+  };
+
   // Deep merge for plugins/scales is often needed, but simple spread works for this specific file structure
   const options = {
     maintainAspectRatio: false,
@@ -118,6 +121,7 @@ function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacked = fal
       x: {
         stacked,
         ticks: {
+          color: theme.axisTickColor,
           callback: ticksCb,
           autoSkip: false,
           maxRotation: 0,
@@ -128,6 +132,12 @@ function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacked = fal
       y: {
         stacked,
         beginAtZero: true,
+        ticks: { color: theme.axisTickColor },
+        grid: {
+          color: theme.gridColor,
+          drawTicks: false,
+          zeroLineColor: theme.zeroLineColor
+        },
         title: { display: !!yTitle, text: yTitle },
         // If specific charts need Y overrides (like max: 100), merge them here:
         ...(overrides.scales?.y || {})
@@ -135,6 +145,22 @@ function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacked = fal
     }
   };
   return options;
+}
+
+function getChartTheme() {
+  const dark = document.documentElement.classList.contains('dark');
+  if (dark) {
+    return {
+      axisTickColor: 'rgba(226, 232, 240, 0.9)',    // slate-200-ish
+      gridColor: 'rgba(148, 163, 184, 0.28)',       // slate-400-ish, soft
+      zeroLineColor: 'rgba(148, 163, 184, 0.6)',    // a bit stronger
+    };
+  }
+  return {
+    axisTickColor: 'rgba(71, 85, 105, 0.95)',       // slate-600-ish
+    gridColor: 'rgba(148, 163, 184, 0.22)',         // light grey grid
+    zeroLineColor: 'rgba(148, 163, 184, 0.6)',
+  };
 }
 
 /**

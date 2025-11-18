@@ -1,5 +1,6 @@
 // Import shared logic
 import {
+  SOLUTION_COLORS,
   drawFlowsBarStackSigned,
   drawSocChart,
   drawPricesStepLines,
@@ -17,13 +18,13 @@ const els = {
   // actions
   run: $("#run"),
   updateDataBeforeRun: $("#update-data-before-run"),
+  pushToVictron: $("#push-to-victron"),
 
   // numeric inputs
   step: $("#step"),
   cap: $("#cap"),
   minsoc: $("#minsoc"),
   maxsoc: $("#maxsoc"),
-  initsoc: $("#initsoc"),
   pchg: $("#pchg"),
   pdis: $("#pdis"),
   gimp: $("#gimp"),
@@ -33,7 +34,10 @@ const els = {
   bwear: $("#bwear"),
   terminal: $("#terminal"),
   terminalCustom: $("#terminal-custom"),
-  tsStart: $("#ts-start"),
+
+  // plan metadata
+  planSocNow: $("#plan-soc-now"),
+  planTsStart: $("#plan-ts-start"),
 
   // charts + status
   flows: $("#flows"),
@@ -44,7 +48,22 @@ const els = {
   tableKwh: $("#table-kwh"),
   tableUnit: $("#table-unit"),
   status: $("#status"),
-  objective: $("#objective"),
+
+  // summary fields
+  sumLoad: $("#sum-load-kwh"),
+  sumPv: $("#sum-pv-kwh"),
+  sumLoadGrid: $("#sum-load-grid-kwh"),
+  sumLoadBatt: $("#sum-load-batt-kwh"),
+  sumLoadPv: $("#sum-load-pv-kwh"),
+  loadSplitGridBar: $("#load-split-grid-bar"),
+  loadSplitBattBar: $("#load-split-batt-bar"),
+  loadSplitPvBar: $("#load-split-pv-bar"),
+  avgImport: $("#avg-import-cent"),
+  tippingPoint: $("#tipping-point-cent"),
+
+  loadSplitGridBar: $("#load-split-grid-bar"),
+  loadSplitBattBar: $("#load-split-batt-bar"),
+  loadSplitPvBar: $("#load-split-pv-bar"),
 
   // VRM section
   vrmFetchSettings: $("#vrm-fetch-settings"),
@@ -83,10 +102,11 @@ function wireGlobalInputs() {
     debounceRun();
   };
 
-  // Auto-save whenever anything changes (except table toggler and new checkbox)
+  // Auto-save whenever anything changes (except table toggler and run options)
   for (const el of document.querySelectorAll("input, select, textarea")) {
     if (el === els.tableKwh) continue;
     if (el === els.updateDataBeforeRun) continue; // Checkbox doesn't trigger auto-save
+    if (el === els.pushToVictron) continue; // Checkbox doesn't trigger auto-save
     el.addEventListener("input", handleChange);
     el.addEventListener("change", handleChange);
   }
@@ -128,10 +148,9 @@ function snapshotUI() {
 
     // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
-    // Note: updateDataBeforeRun is not part of the persisted settings
+    // Note: updateDataBeforeRun / pushToVictron are not part of the persisted settings
   };
 }
-
 
 function hydrateUI(obj = {}) {
   // SYSTEM
@@ -147,9 +166,8 @@ function hydrateUI(obj = {}) {
   setIfDef(els.etaD, obj.dischargeEfficiency_percent);
   setIfDef(els.bwear, obj.batteryCost_cent_per_kWh);
 
-  // DATA (display-only)
-  setIfDef(els.initsoc, obj.initialSoc_percent);
-  if (els.tsStart && obj.tsStart != null) els.tsStart.value = String(obj.tsStart);
+  // DATA (display-only metadata)
+  updatePlanMeta(obj.initialSoc_percent, obj.tsStart);
 
   // ALGORITHM
   if (els.terminal && obj.terminalSocValuation != null) {
@@ -187,34 +205,44 @@ async function onRun() {
   }
 
   if (els.status) {
-    els.status.textContent = "Calculating...";
+    els.status.textContent = "Calculating…";
   }
   try {
     // Persist current inputs to /settings; server will read these
     await persistConfig();
 
-    // Check if data refresh is needed
+    // Run options
     const updateData = !!els.updateDataBeforeRun?.checked;
+    const writeToVictron = !!els.pushToVictron?.checked;
 
-    // Solve with server-only settings/timing, passing the update flag
-    const result = await requestRemoteSolve({ updateData });
+    // Solve with server-only settings/timing, passing the flags
+    const result = await requestRemoteSolve({ updateData, writeToVictron });
 
     const rows = Array.isArray(result?.rows) ? result.rows : [];
-    const objectiveValue = Number(result?.objectiveValue);
-    const statusText = result?.status || "OK";
+    const solverStatus =
+      typeof result?.solverStatus === "string" ? result.solverStatus : "OK";
 
     // Update SoC and tsStart from result
-    if (result.initialSoc_percent != null) {
-      setIfDef(els.initsoc, result.initialSoc_percent);
-    }
-    if (result.tsStart != null) {
-      setIfDef(els.tsStart, result.tsStart);
-    }
+    updatePlanMeta(result.initialSoc_percent, result.tsStart);
 
-    if (els.objective) {
-      els.objective.textContent = Number.isFinite(objectiveValue) ? objectiveValue.toFixed(2) : "—";
+    // Update summary if present
+    updateSummaryUI(result.summary);
+
+    if (els.status) {
+      const nonOptimal =
+        typeof solverStatus === "string" &&
+        solverStatus.toLowerCase() !== "optimal";
+
+      let label;
+      if (nonOptimal) {
+        label = `Plan status: ${solverStatus}`;
+      } else if (writeToVictron) {
+        label = "Plan updated and sent to Victron.";
+      } else {
+        label = "Plan updated.";
+      }
+      els.status.textContent = label;
     }
-    if (els.status) els.status.textContent = `${statusText}`;
 
     // Only the few chart/table scalars are read from inputs (already hydrated from /settings)
     const cfgForViz = {
@@ -233,6 +261,8 @@ async function onRun() {
   } catch (err) {
     console.error(err);
     if (els.status) els.status.textContent = `Error: ${err.message}`;
+    // In error, clear summary so it doesn't look "fresh"
+    updateSummaryUI(null);
   }
 }
 
@@ -263,18 +293,183 @@ function queuePersistSnapshot() {
   persistConfigDebounced(snapshotUI());
 }
 
+// Plan metadata helper
+function updatePlanMeta(initialSoc_percent, tsStart) {
+  if (els.planSocNow) {
+    if (initialSoc_percent == null || !Number.isFinite(Number(initialSoc_percent))) {
+      els.planSocNow.textContent = "—";
+    } else {
+      const n = Number(initialSoc_percent);
+      els.planSocNow.textContent = String(Math.round(n));
+    }
+  }
+
+  if (els.planTsStart) {
+    if (!tsStart) {
+      els.planTsStart.textContent = "—";
+    } else {
+      const raw = String(tsStart);
+      let display = raw;
+      if (raw.includes("T")) {
+        const [datePart, timePart] = raw.split("T");
+        const [y, m, d] = datePart.split("-");
+        if (y && m && d && timePart) {
+          display = `${d}/${m} ${timePart}`;
+        }
+      }
+      els.planTsStart.textContent = display;
+    }
+  }
+}
+
+// Summary helper
+function updateSummaryUI(summary) {
+  if (!summary) {
+    setText(els.sumLoad, "—");
+    setText(els.sumPv, "—");
+    setText(els.sumLoadGrid, "—");
+    setText(els.sumLoadBatt, "—");
+    setText(els.sumLoadPv, "—");
+    setText(els.avgImport, "—");
+    setText(els.tippingPoint, "—");
+
+    // reset mini bar
+    if (els.loadSplitGridBar && els.loadSplitBattBar && els.loadSplitPvBar) {
+      [els.loadSplitGridBar, els.loadSplitBattBar, els.loadSplitPvBar].forEach(el => {
+        el.style.width = "0%";
+        el.style.opacity = "0";
+      });
+    }
+    return;
+  }
+
+  const {
+    loadTotal_kWh,
+    pvTotal_kWh,
+    loadFromGrid_kWh,
+    loadFromBattery_kWh,
+    loadFromPv_kWh,
+    avgImportPrice_cents_per_kWh,
+    firstSegmentTippingPoint_cents_per_kWh,
+  } = summary;
+
+  setText(els.sumLoad, formatKWh(loadTotal_kWh));
+  setText(els.sumPv, formatKWh(pvTotal_kWh));
+  setText(els.sumLoadGrid, formatKWh(loadFromGrid_kWh));
+  setText(els.sumLoadBatt, formatKWh(loadFromBattery_kWh));
+  setText(els.sumLoadPv, formatKWh(loadFromPv_kWh));
+  setText(els.avgImport, formatCentsPerKWh(avgImportPrice_cents_per_kWh));
+  setText(els.tippingPoint, formatCentsPerKWh(firstSegmentTippingPoint_cents_per_kWh));
+
+  const total =
+    (Number(loadFromGrid_kWh) || 0) +
+    (Number(loadFromBattery_kWh) || 0) +
+    (Number(loadFromPv_kWh) || 0);
+
+  const gridEl = els.loadSplitGridBar;
+  const battEl = els.loadSplitBattBar;
+  const pvEl = els.loadSplitPvBar;
+
+  if (!gridEl || !battEl || !pvEl) return;
+
+  if (total <= 0) {
+    // nothing to show
+    [gridEl, battEl, pvEl].forEach(el => {
+      el.style.width = "0%";
+      el.style.opacity = "0";
+    });
+    return;
+  }
+
+  const gridPct = (Number(loadFromGrid_kWh) || 0) / total * 100;
+  const battPct = (Number(loadFromBattery_kWh) || 0) / total * 100;
+  const pvPct = (Number(loadFromPv_kWh) || 0) / total * 100;
+
+  gridEl.style.width = `${gridPct}%`;
+  battEl.style.width = `${battPct}%`;
+  pvEl.style.width = `${pvPct}%`;
+
+  // match flows chart colors: g2l, b2l, pv2l
+  gridEl.style.backgroundColor = SOLUTION_COLORS.g2l;
+  battEl.style.backgroundColor = SOLUTION_COLORS.b2l;
+  pvEl.style.backgroundColor = SOLUTION_COLORS.pv2l;
+
+  [gridEl, battEl, pvEl].forEach(el => {
+    el.style.opacity = "1";
+  });
+}
+
+
+function updateLoadSplitBars(gridKWh, battKWh, pvKWh) {
+  const g = Number(gridKWh);
+  const b = Number(battKWh);
+  const p = Number(pvKWh);
+
+  const values = [
+    Number.isFinite(g) && g > 0 ? g : 0,
+    Number.isFinite(b) && b > 0 ? b : 0,
+    Number.isFinite(p) && p > 0 ? p : 0,
+  ];
+  const total = values[0] + values[1] + values[2];
+
+  const bars = [
+    els.loadSplitGridBar,
+    els.loadSplitBattBar,
+    els.loadSplitPvBar,
+  ];
+
+  if (!total || !Number.isFinite(total)) {
+    for (const bar of bars) {
+      if (!bar) continue;
+      bar.style.width = "0%";
+      bar.style.opacity = "0";
+    }
+    return;
+  }
+
+  for (let i = 0; i < bars.length; i++) {
+    const bar = bars[i];
+    if (!bar) continue;
+    const v = values[i];
+    const pct = v <= 0 ? 0 : (v / total) * 100;
+    bar.style.width = `${pct.toFixed(1)}%`;
+    bar.style.opacity = pct > 0 ? "1" : "0";
+  }
+}
+
 // small utils
 function setIfDef(el, v) {
   if (!el) return;
-  // Allow setting 0
   if (v === 0) {
-    el.value = "0";
+    if ("value" in el) el.value = "0";
+    else el.textContent = "0";
     return;
   }
   if (v == null || (typeof v === "string" && v.length === 0)) return;
-  el.value = String(v);
+  const s = String(v);
+  if ("value" in el) el.value = s;
+  else el.textContent = s;
 }
+
 function num(val) {
   const n = Number(val);
   return Number.isFinite(n) ? n : null;
+}
+
+function setText(el, txt) {
+  if (!el) return;
+  el.textContent = txt;
+}
+
+function formatKWh(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "—";
+  if (Math.abs(n) < 0.005) return "0.00 kWh";
+  return `${n.toFixed(2)} kWh`;
+}
+
+function formatCentsPerKWh(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toFixed(2)} c€/kWh`;
 }
