@@ -13,32 +13,24 @@ import { SOLUTION_COLORS } from "./charts.js";
  * @param {HTMLElement}  [opts.targets.tableUnit] - element for the "Units: ..." label
  * @param {boolean}      opts.showKwh             - whether to display kWh instead of W
  */
-export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
+export function renderTable({ rows, cfg, targets, showKwh }) {
   const { table, tableUnit } = targets || {};
   if (!table || !Array.isArray(rows) || rows.length === 0) return;
-
-  // battery capacity (for SoC%)
-  const cap = Math.max(1e-9, Number(cfg?.batteryCapacity_Wh ?? 20480));
 
   // slot duration for W→kWh conversion
   const h = Math.max(0.000001, Number(cfg?.stepSize_m ?? 15) / 60); // hours per slot
   const W2kWh = (x) => (Number(x) || 0) * h / 1000;
 
-  // human-readable time labels
-  const timesDisp = timestampsMs.map(ms => {
-    const dt = new Date(ms);
-    const HH = String(dt.getHours()).padStart(2, "0");
-    const MM = String(dt.getMinutes()).padStart(2, "0");
+  const fmtTime = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const fmtDate = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit" });
 
-    if (dt.getMinutes() === 0) {
-      if (dt.getHours() === 0) {
-        const dd = String(dt.getDate()).padStart(2, "0");
-        const mm = String(dt.getMonth() + 1).padStart(2, "0");
-        return `${dd}/${mm}`;
-      }
-      return `${HH}:00`;
+  const timesDisp = rows.map(row => {
+    const dt = new Date(row.timestampMs);
+    // If minutes and hours are 0, it's midnight -> show Date
+    if (dt.getHours() === 0 && dt.getMinutes() === 0) {
+      return fmtDate.format(dt);
     }
-    return `${HH}:${MM}`;
+    return fmtTime.format(dt);
   });
 
   const cols = [
@@ -49,17 +41,17 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
     { key: "ec", headerHtml: "Export<br>cost", fmt: dec2Thin },
 
     { key: "g2l", headerHtml: "g2l", fmt: x => fmtEnergy(x), tip: "Grid → Load" },
-    { key: "g2b", headerHtml: "g2b", fmt: x => fmtEnergy(x), tip: "Grid → Battery" },
+    { key: "b2l", headerHtml: "b2l", fmt: x => fmtEnergy(x), tip: "Battery → Load" },
+
     { key: "pv2l", headerHtml: "pv2l", fmt: x => fmtEnergy(x), tip: "Solar → Load" },
     { key: "pv2b", headerHtml: "pv2b", fmt: x => fmtEnergy(x), tip: "Solar → Battery" },
     { key: "pv2g", headerHtml: "pv2g", fmt: x => fmtEnergy(x), tip: "Solar → Grid" },
-    { key: "b2l", headerHtml: "b2l", fmt: x => fmtEnergy(x), tip: "Battery → Load" },
+
+    { key: "g2b", headerHtml: "g2b", fmt: x => fmtEnergy(x), tip: "Grid → Battery" },
     { key: "b2g", headerHtml: "b2g", fmt: x => fmtEnergy(x), tip: "Battery → Grid" },
 
     { key: "imp", headerHtml: "Grid<br>import", fmt: x => fmtEnergy(x), tip: "Grid Import" },
     { key: "exp", headerHtml: "Grid<br>export", fmt: x => fmtEnergy(x), tip: "Grid Export" },
-
-    { key: "soc", headerHtml: "SoC", fmt: w => pct0(w / cap) + "%" },
 
     {
       key: "dess_strategy",
@@ -86,8 +78,8 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
       key: "dess_soc_target",
       headerHtml: "Soc→",
       fmt: (_, ri) => {
-        const targetWh = rows[ri]?.dess?.socTarget_Wh ?? 0;
-        return pct0(targetWh / cap) + "%";
+        const targetPct = rows[ri]?.dess?.socTarget_percent;
+        return intThin(targetPct) + "%";
       },
       tip: "Target SoC at end of slot",
     },
@@ -97,7 +89,7 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
     <thead>
       <tr class="align-bottom">
         ${cols.map(c =>
-    `<th class="px-2 py-1 border-b font-medium text-right align-bottom" ${c.tip ? `title="${escapeHtml(c.tip)}"` : ""}>${c.headerHtml}</th>`
+    `<th class="px-2 py-1 border-b font-medium text-right align-bottom border-slate-200/80 dark:border-slate-700/70 bg-slate-50 dark:bg-slate-900" ${c.tip ? `title="${escapeHtml(c.tip)}"` : ""}>${c.headerHtml}</th>`
   ).join("")}
       </tr>
     </thead>`;
@@ -112,10 +104,10 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
       const raw = c.key === "time" ? null : r[c.key];
       const displayVal = c.key === "time" ? timeLabel : c.fmt(raw, ri);
       const styleAttr = styleForCell(c.key, raw); // only applies to flow columns with > 0
-      return `<td ${styleAttr} class="px-2 py-1 border-b text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${displayVal}</td>`;
+      return `<td ${styleAttr} class="px-2 py-1 text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${displayVal}</td>`;
     }).join("");
 
-    return `<tr>${tds}</tr>`;
+    return `<tr class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 ">${tds}</tr>`;
   }).join("")}
     </tbody>`;
 
@@ -167,11 +159,6 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
     return `${groupThin(i)}.${f}`;
   }
 
-  function pct0(x) {
-    const n = (Number(x) || 0) * 100;
-    return groupThin(Math.round(n));
-  }
-
   // rgb(…, …, …) → rgba(…, …, …, a)
   function rgbToRgba(rgb, alpha = 0.16) {
     const m = /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/.exec(rgb || "");
@@ -180,7 +167,6 @@ export function renderTable({ rows, cfg, timestampsMs, targets, showKwh }) {
 
   // Build a style attribute for flow cells that are > 0
   function styleForCell(key, rawValue) {
-    if (key === "soc") return ""; // no special styling for SoC
     const color = SOLUTION_COLORS[key];
     if (!color) return ""; // not a flow column
     const v = Number(rawValue) || 0;

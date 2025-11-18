@@ -1,123 +1,8 @@
 import express from 'express';
-import highsFactory from 'highs';
-
-import { mapRowsToDess, Strategy, Restrictions, FeedIn } from '../../lib/dess-mapper.js';
-import { buildLP } from '../../lib/build-lp.js';
-import { parseSolution } from '../../lib/parse-solution.js';
 import { toHttpError } from '../http-errors.js';
-import { getSolverInputs } from '../services/solver-input-service.js';
-import { refreshSeriesFromVrmAndPersist } from '../services/vrm-refresh.js';
-import { setDynamicEssSchedule } from '../services/mqtt-service.js';
+import { planAndMaybeWrite } from '../services/planner-service.js';
 
 const router = express.Router();
-
-// How many slots we push into Dynamic ESS
-const DESS_SLOTS = 4;
-
-let highsPromise;
-async function getHighsInstance() {
-  if (!highsPromise) {
-    highsPromise = highsFactory({}).catch((error) => {
-      highsPromise = undefined;
-      throw error;
-    });
-  }
-  return highsPromise;
-}
-
-/**
- * Small helper to parse an optional SoC override from the request body.
- * Expects a percentage in [0, 100]. Returns a number or undefined.
- */
-function parseSocOverridePercent(body) {
-  if (!body) return undefined;
-
-  const raw = body.socNow_percent;
-
-  if (raw === undefined || raw === null || raw === '') {
-    return undefined;
-  }
-
-  const num = Number(raw);
-  if (!Number.isFinite(num)) {
-    console.warn('Ignoring socNow_percent override (not a finite number):', raw);
-    return undefined;
-  }
-
-  if (num < 0 || num > 100) {
-    console.warn('Ignoring socNow_percent override outside 0–100%:', num);
-    return undefined;
-  }
-
-  return num;
-}
-
-/**
- * Shared pipeline:
- *  - optionally refresh VRM data
- *  - load settings + data
- *  - (optionally) override initial SoC with caller-provided value
- *  - build LP
- *  - solve
- *  - parse solution
- *  - attach DESS mapping
- *
- * Returns { cfg, data, result, rows, timestampsMs }.
- */
-async function computePlan({ updateData = false, overrideInitialSoc_percent } = {}) {
-  if (updateData) {
-    try {
-      // Fetch from VRM and save to data.json
-      await refreshSeriesFromVrmAndPersist();
-    } catch (vrmError) {
-      // Don't kill the calculation; just log the error and proceed with old data
-      console.error(
-        'Failed to refresh VRM data before calculation:',
-        vrmError?.message ?? String(vrmError),
-      );
-    }
-  }
-
-  // This will read the (possibly freshly) persisted data
-  const { cfg, hints, data } = await getSolverInputs();
-
-  // Optional: let the caller override the initial SoC derived from VRM
-  if (typeof overrideInitialSoc_percent === 'number') {
-    cfg.initialSoc_percent = overrideInitialSoc_percent;
-  }
-
-  const lpText = buildLP(cfg);
-  const highs = await getHighsInstance();
-  const result = highs.solve(lpText);
-
-  const { rows, timestampsMs } = parseSolution(result, cfg, hints);
-  const { perSlot } = mapRowsToDess(rows, cfg);
-
-  for (let i = 0; i < rows.length; i++) {
-    rows[i].dess = perSlot[i];
-  }
-
-  return { cfg, data, result, rows, timestampsMs };
-}
-
-/**
- * Write the plan to Victron via MQTT.
- */
-async function writePlanToVictron(cfg, rows, timestampsMs) {
-  const firstTimestampMs = timestampsMs[0];
-  const stepSeconds = Number(cfg.stepSize_m) * 60;
-  const batteryCapacity_Wh = cfg.batteryCapacity_Wh;
-
-  const slotCount = Math.min(DESS_SLOTS, rows.length);
-
-  await setDynamicEssSchedule(rows, slotCount, {
-    firstTimestampMs,
-    stepSeconds,
-    batteryCapacity_Wh,
-  });
-}
-
-// ------------------------- Existing /calculate -------------------------
 
 /**
  * POST /calculate
@@ -125,164 +10,59 @@ async function writePlanToVictron(cfg, rows, timestampsMs) {
  * Optional body:
  * {
  *   "updateData": true,
- *   "socNow_percent": 52.3,   // optional override for initial SoC (0–100)
  *   "writeToVictron": true    // optional: write schedule to Victron
  * }
  */
 router.post('/', async (req, res, next) => {
   try {
-    const shouldUpdateData = !!req.body?.updateData;
-    const overrideInitialSoc_percent = parseSocOverridePercent(req.body);
-    const writeToVictron = !!req.body?.writeToVictron;
+    const body = req.body ?? {};
+    const shouldUpdateData = !!body.updateData;
+    const shouldWriteToVictron = !!body.writeToVictron;
 
-    const { cfg, data, result, rows, timestampsMs } = await computePlan({
+    // minimal logging: call + parsed parameters
+    logCalculateCall(body, {
       updateData: shouldUpdateData,
-      overrideInitialSoc_percent,
+      writeToVictron: shouldWriteToVictron,
     });
 
-    if (writeToVictron) {
-      await writePlanToVictron(cfg, rows, timestampsMs);
-    }
+    const { cfg, data, result, rows, summary, dessDiagnostics } =
+      await planAndMaybeWrite({
+        updateData: shouldUpdateData,
+        writeToVictron: shouldWriteToVictron,
+      });
 
     res.json({
-      status: result.Status,
+      solverStatus: result.Status,
       objectiveValue: result.ObjectiveValue,
       rows,
-      timestampsMs,
-      // For UI – this will now reflect the override if provided
       initialSoc_percent: cfg.initialSoc_percent,
       tsStart: data.tsStart,
+      summary,
+      dessDiagnostics,
     });
   } catch (error) {
+    logCalculateError(error);
     next(toHttpError(error, 500, 'Failed to calculate plan'));
   }
 });
 
-// ------------------- New /calculate/next-quarter ----------------------
-
-/**
- * POST /calculate/next-quarter
- *
- * Optional body:
- * {
- *   "updateData": true,
- *   "socNow_percent": 52.3,   // optional override for initial SoC (0–100)
- *   "writeToVictron": true    // optional: write schedule to Victron
- * }
- *
- * Returns a compact summary for the first slot ("next quarter").
- */
-router.post('/next-quarter', async (req, res, next) => {
-  try {
-    const shouldUpdateData = !!req.body?.updateData;
-    const overrideInitialSoc_percent = parseSocOverridePercent(req.body);
-    const writeToVictron = !!req.body?.writeToVictron;
-
-    const { cfg, data, result, rows, timestampsMs } = await computePlan({
-      updateData: shouldUpdateData,
-      overrideInitialSoc_percent,
-    });
-
-    if (!Array.isArray(rows) || rows.length === 0) {
-      throw new Error('Solver returned empty plan');
-    }
-
-    if (!Array.isArray(timestampsMs) || timestampsMs.length === 0) {
-      throw new Error('Missing timestamps for plan');
-    }
-
-    if (writeToVictron) {
-      await writePlanToVictron(cfg, rows, timestampsMs);
-    }
-
-    const firstRow = rows[0];
-    const firstDess = firstRow.dess || {};
-
-    const slotIndex = 0;
-    const timestampMs = timestampsMs[slotIndex];
-    const timestampIso = new Date(timestampMs).toISOString();
-
-    const tsStart = data.tsStart ?? null;
-    const stepSize_m = cfg.stepSize_m ?? null;
-
-    const batteryCapacity_Wh = cfg.batteryCapacity_Wh;
-    const socNow_percent = cfg.initialSoc_percent;
-
-    const targetWh = typeof firstDess.socTarget_Wh === 'number' ? firstDess.socTarget_Wh : firstRow.soc;
-
-    const socTarget_percent = batteryCapacity_Wh > 0 ? (targetWh / batteryCapacity_Wh) * 100 : null;
-
-    const strategyCode = typeof firstDess.strategy === 'number' ? firstDess.strategy : Strategy.unknown;
-    const restrictionsCode = typeof firstDess.restrictions === 'number' ? firstDess.restrictions : Restrictions.unknown;
-    const feedinCode = typeof firstDess.feedin === 'number' ? firstDess.feedin : -1;
-
-    const strategy = strategyName(strategyCode);
-    const restrictions = restrictionsName(restrictionsCode);
-    const feedin = feedinName(feedinCode);
-
-    res.json({
-      status: result.Status,
-      objectiveValue: result.ObjectiveValue,
-
-      tsStart,
-      stepSize_m,
-      slotIndex,
-      timestampMs,
-      timestampIso,
-
-      strategy,
-      strategyCode,
-      restrictions,
-      restrictionsCode,
-      feedin,
-      feedinCode,
-      feedinAllowed: feedinCode === FeedIn.allowed,
-
-      socNow_percent,
-      socTarget_percent,
-      batteryCapacity_Wh,
-    });
-  } catch (error) {
-    next(toHttpError(error, 500, 'Failed to calculate next quarter plan'));
-  }
-});
-
-// ---------------------- small mapping helpers ------------------------
-
-function strategyName(code) {
-  switch (code) {
-    case Strategy.targetSoc:
-      return 'target_soc';
-    case Strategy.selfConsumption:
-      return 'self_consumption';
-    case Strategy.proBattery:
-      return 'pro_battery';
-    case Strategy.proGrid:
-      return 'pro_grid';
-    default:
-      return 'unknown';
-  }
+function logCalculateCall(rawBody, parsed) {
+  const timestamp = new Date().toISOString();
+  console.log('[calculate] request', {
+    timestamp,
+    rawBody: rawBody ?? null,
+    parsed,
+  });
 }
 
-function restrictionsName(code) {
-  switch (code) {
-    case Restrictions.none:
-      return 'none';
-    case Restrictions.gridToBattery:
-      return 'grid_to_battery';
-    case Restrictions.batteryToGrid:
-      return 'battery_to_grid';
-    case Restrictions.both:
-      return 'both';
-    default:
-      return 'unknown';
-  }
-}
-
-function feedinName(code) {
-  if (code === FeedIn.allowed) return 'allowed';
-  if (code === FeedIn.blocked) return 'blocked';
-  return 'unknown';
+function logCalculateError(error) {
+  const timestamp = new Date().toISOString();
+  console.error('[calculate] error', {
+    timestamp,
+    message: error?.message,
+    name: error?.name,
+    stack: error?.stack,
+  });
 }
 
 export default router;
