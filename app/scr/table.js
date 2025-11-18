@@ -21,22 +21,16 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
   const h = Math.max(0.000001, Number(cfg?.stepSize_m ?? 15) / 60); // hours per slot
   const W2kWh = (x) => (Number(x) || 0) * h / 1000;
 
-  // human-readable time labels
-  const timesDisp = rows.map(row => {
-    const ms = row.timestampMs;
-    const dt = new Date(ms);
-    const HH = String(dt.getHours()).padStart(2, "0");
-    const MM = String(dt.getMinutes()).padStart(2, "0");
+  const fmtTime = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const fmtDate = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit" });
 
-    if (dt.getMinutes() === 0) {
-      if (dt.getHours() === 0) {
-        const dd = String(dt.getDate()).padStart(2, "0");
-        const mm = String(dt.getMonth() + 1).padStart(2, "0");
-        return `${dd}/${mm}`;
-      }
-      return `${HH}:00`;
+  const timesDisp = rows.map(row => {
+    const dt = new Date(row.timestampMs);
+    // If minutes and hours are 0, it's midnight -> show Date
+    if (dt.getHours() === 0 && dt.getMinutes() === 0) {
+      return fmtDate.format(dt);
     }
-    return `${HH}:${MM}`;
+    return fmtTime.format(dt);
   });
 
   const cols = [
@@ -47,17 +41,17 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
     { key: "ec", headerHtml: "Export<br>cost", fmt: dec2Thin },
 
     { key: "g2l", headerHtml: "g2l", fmt: x => fmtEnergy(x), tip: "Grid → Load" },
-    { key: "g2b", headerHtml: "g2b", fmt: x => fmtEnergy(x), tip: "Grid → Battery" },
+    { key: "b2l", headerHtml: "b2l", fmt: x => fmtEnergy(x), tip: "Battery → Load" },
+
     { key: "pv2l", headerHtml: "pv2l", fmt: x => fmtEnergy(x), tip: "Solar → Load" },
     { key: "pv2b", headerHtml: "pv2b", fmt: x => fmtEnergy(x), tip: "Solar → Battery" },
     { key: "pv2g", headerHtml: "pv2g", fmt: x => fmtEnergy(x), tip: "Solar → Grid" },
-    { key: "b2l", headerHtml: "b2l", fmt: x => fmtEnergy(x), tip: "Battery → Load" },
+
+    { key: "g2b", headerHtml: "g2b", fmt: x => fmtEnergy(x), tip: "Grid → Battery" },
     { key: "b2g", headerHtml: "b2g", fmt: x => fmtEnergy(x), tip: "Battery → Grid" },
 
     { key: "imp", headerHtml: "Grid<br>import", fmt: x => fmtEnergy(x), tip: "Grid Import" },
     { key: "exp", headerHtml: "Grid<br>export", fmt: x => fmtEnergy(x), tip: "Grid Export" },
-
-    { key: "soc_percent", headerHtml: "SoC", fmt: x => intThin(x) + "%" },
 
     {
       key: "dess_strategy",
@@ -165,11 +159,6 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
     return `${groupThin(i)}.${f}`;
   }
 
-  function pct0(x) {
-    const n = (Number(x) || 0) * 100;
-    return groupThin(Math.round(n));
-  }
-
   // rgb(…, …, …) → rgba(…, …, …, a)
   function rgbToRgba(rgb, alpha = 0.16) {
     const m = /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/.exec(rgb || "");
@@ -178,7 +167,6 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
 
   // Build a style attribute for flow cells that are > 0
   function styleForCell(key, rawValue) {
-    if (key === "soc") return ""; // no special styling for SoC
     const color = SOLUTION_COLORS[key];
     if (!color) return ""; // not a flow column
     const v = Number(rawValue) || 0;
