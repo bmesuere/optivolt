@@ -50,3 +50,101 @@ By default the server listens on `http://localhost:3000`.
 - `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD` (optional; required to push Dynamic ESS schedules)
 
 Create a `.env.local` file in the project root to set these variables for local development.
+
+## Installing Optivolt in Home Assistant
+
+This section explains how to install and wire up the Optivolt add-on in Home Assistant.
+
+### 1. Expose the add-on directory over Samba
+
+1. Install the **Samba share** add-on in Home Assistant.
+2. Configure it so that the `/addons` (or `addons/`) directory is available as a network share.
+3. From your laptop/desktop, mount that share. In this example, it is mounted as `/Volumes/addons`.
+
+### 2. Copy the Optivolt files into Home Assistant
+
+On your development machine, copy the contents of your local Optivolt repository into the mounted `addons` share.
+
+Example (macOS / Linux):
+
+```bash
+rsync -av --delete \
+  --exclude 'node_modules' \
+  --exclude '.git' \
+  --exclude '.DS_Store' \
+  ~/Code/optivolt/ /Volumes/addons/optivolt/
+```
+
+This will sync your local `~/Code/optivolt` directory into the `optivolt` add-on directory on Home Assistant, while skipping development artefacts.
+
+### 3. Install the Optivolt add-on in Home Assistant
+
+1. Go to **Settings → Add-ons → Add-on Store**.
+2. Use the menu to **reload** local add-ons if necessary.
+3. Find the **Optivolt** add-on in the list and click **Install**.
+
+### 4. Configure VRM and Victron connection settings
+
+Open the Optivolt add-on configuration panel and enter:
+
+- Your **Victron VRM** credentials / installation ID.
+- The **Victron IP address** on your local network.
+
+Save the configuration.
+
+### 5. Start the add-on and verify data
+
+1. Start the Optivolt add-on.
+2. Open the Optivolt UI (from the add-on page).
+3. Verify that data is being fetched correctly (time series, prices, SoC, etc.). If data does not load, check the logs of the add-on.
+
+### 6. Trigger Optivolt every 15 minutes from Home Assistant
+
+Optivolt exposes a `/calculate/` HTTP endpoint that you can call periodically from Home Assistant.
+
+First, define a `rest_command` in your Home Assistant configuration:
+
+```yaml
+rest_command:
+  optivolt_calculate:
+    url: "http://localhost:3070/calculate/"
+    method: POST
+    content_type: "application/json"
+    payload: >-
+      {
+        "updateData": true,
+        "writeToVictron": true
+      }
+```
+
+Then, create an automation that calls this command every 15 minutes, a few seconds after each quarter hour (to align with the quarter-hour slots):
+
+```yaml
+automation:
+  - alias: "Trigger Optivolt calculate every quarter hour"
+    trigger:
+      - platform: time_pattern
+        minutes: "/15"
+        seconds: 5
+    action:
+      - service: rest_command.optivolt_calculate
+```
+
+Adjust the trigger as needed if you want a specific offset (e.g. 00:00:05, 00:15:05, ...).
+
+### 7. Put DESS into Node-RED mode
+
+To prevent Victron DESS from overwriting the settings that Optivolt writes, set DESS to **Node-RED** mode.
+
+I used the Home Assistant **Victron MQTT extension** to switch DESS into Node-RED mode.
+
+### 8. Work around the Victron price API bug
+
+There is a bug in the Victron API: the **price data is not available** when DESS is *not* in the default mode. To work around this:
+
+- Create a Home Assistant automation that temporarily sets DESS to **default** mode between **13:00 and 14:00** every day.
+- During that window, price data is available and can be fetched; outside of it, DESS can be left in Node-RED mode so Optivolt fully controls the schedule.
+
+Once all these steps are in place, Optivolt should run as an add-on, keep its data and schedules up to date, and continuously steer your Victron system using the optimized plan.
+
+
