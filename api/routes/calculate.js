@@ -25,7 +25,7 @@ router.post('/', async (req, res, next) => {
       writeToVictron: shouldWriteToVictron,
     });
 
-    const { cfg, data, result, rows, summary, dessDiagnostics } =
+    const { cfg, data, result, rows, summary } =
       await planAndMaybeWrite({
         updateData: shouldUpdateData,
         writeToVictron: shouldWriteToVictron,
@@ -38,7 +38,6 @@ router.post('/', async (req, res, next) => {
       initialSoc_percent: cfg.initialSoc_percent,
       tsStart: data.tsStart,
       summary,
-      dessDiagnostics,
     });
   } catch (error) {
     logCalculateError(error);
