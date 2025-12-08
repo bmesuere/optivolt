@@ -231,8 +231,19 @@
 
         <!-- System settings (Fixed) -->
         <section id="card-system" class="rounded-2xl border border-slate-200 bg-card p-5 shadow-soft dark:border-white/10 dark:bg-card-dark">
-          <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-base font-semibold">System settings</h2>
+          <div id="system-settings-header" class="mb-3 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <button
+                id="system-settings-toggle"
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 lg:hidden"
+                aria-expanded="false"
+                aria-controls="system-settings-body"
+              >
+                <svg id="system-settings-toggle-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-5 w-5 transition-transform"><title>chevron</title><path fill="currentColor" d="m12 15l-5-5h10Z"/></svg>
+              </button>
+              <h2 class="text-base font-semibold">System settings</h2>
+            </div>
             <button id="vrm-fetch-settings" type="button" title="Fetch settings from Victron VRM"
               class="inline-flex items-center gap-2 rounded-pill border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
               <!-- autorenew icon -->
@@ -241,7 +252,7 @@
             </button>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div id="system-settings-body" class="grid grid-cols-1 gap-3 md:grid-cols-2 hidden lg:grid">
             <!-- Row 1: Capacity + Battery cost -->
             <label class="text-sm">Battery capacity (Wh)
               <input id="cap" type="number"

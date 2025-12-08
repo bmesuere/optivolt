@@ -63,6 +63,12 @@ const els = {
 
   // VRM section
   vrmFetchSettings: $("#vrm-fetch-settings"),
+
+  // System settings card
+  systemSettingsBody: $("#system-settings-body"),
+  systemSettingsToggle: $("#system-settings-toggle"),
+  systemSettingsToggleIcon: $("#system-settings-toggle-icon"),
+  systemSettingsHeader: $("#system-settings-header"),
 };
 
 // ---------- State ----------
@@ -78,6 +84,8 @@ async function boot() {
   const { config: initialConfig, source } = await loadInitialConfig();
 
   hydrateUI(initialConfig);
+
+  setupSystemCardCollapsible();
 
   wireGlobalInputs();
   wireVrmSettingInput();
@@ -120,6 +128,41 @@ function wireGlobalInputs() {
 // Only wires the settings button now
 function wireVrmSettingInput() {
   els.vrmFetchSettings?.addEventListener("click", onRefreshVrmSettings);
+}
+
+function setupSystemCardCollapsible() {
+  const body = els.systemSettingsBody;
+  const toggle = els.systemSettingsToggle;
+  const icon = els.systemSettingsToggleIcon;
+  const header = els.systemSettingsHeader;
+
+  if (!body || !toggle) return;
+
+  const lgQuery = window.matchMedia("(min-width: 1024px)");
+  let isExpanded = lgQuery.matches;
+
+  const applyState = () => {
+    body.classList.toggle("hidden", !isExpanded);
+    toggle.setAttribute("aria-expanded", String(isExpanded));
+    icon?.classList.toggle("rotate-180", !isExpanded);
+    header?.classList.toggle("mb-3", isExpanded);
+    header?.classList.toggle("mb-0", !isExpanded);
+  };
+
+  const syncToViewport = () => {
+    isExpanded = lgQuery.matches;
+    applyState();
+  };
+
+  syncToViewport();
+
+  toggle.addEventListener("click", () => {
+    if (lgQuery.matches) return;
+    isExpanded = !isExpanded;
+    applyState();
+  });
+
+  lgQuery.addEventListener("change", syncToViewport);
 }
 
 // ---------- UI <-> settings snapshot ----------
