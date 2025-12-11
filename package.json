@@ -17,10 +17,11 @@
   "scripts": {
     "api": "node ./api/index.js",
     "dev": "dotenv -e .env.local -- nodemon --ignore 'data/' ./api/index.js",
+    "test": "vitest",
     "lint": "npx eslint ."
   },
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=22"
   },
   "dependencies": {
     "express": "^5.1.0",
@@ -34,6 +35,9 @@
     "dotenv-cli": "^11.0.0",
     "eslint": "^9.39.1",
     "globals": "^16.5.0",
-    "nodemon": "^3.1.11"
+    "jsdom": "^27.3.0",
+    "nodemon": "^3.1.11",
+    "supertest": "^7.1.4",
+    "vitest": "^4.0.15"
   }
 }
