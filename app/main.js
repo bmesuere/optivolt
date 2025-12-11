@@ -123,6 +123,16 @@ function wireGlobalInputs() {
 
   // Units toggle recompute
   els.tableKwh?.addEventListener("change", onRun);
+
+  // Keyboard shortcut: Ctrl+Enter (or Cmd+Enter) to Recompute
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      // Visual feedback via focus, then click
+      els.run?.focus();
+      els.run?.click();
+    }
+  });
 }
 
 // Only wires the settings button now
@@ -245,6 +255,8 @@ async function onRun() {
 
   if (els.status) {
     els.status.textContent = "Calculating…";
+    // Reset color to neutral
+    els.status.className = "text-sm font-medium text-ink dark:text-slate-100";
   }
   try {
     // Persist current inputs to /settings; server will read these
@@ -273,14 +285,18 @@ async function onRun() {
         solverStatus.toLowerCase() !== "optimal";
 
       let label;
+      let colorClass = "text-emerald-600 dark:text-emerald-400"; // Green for success
+
       if (nonOptimal) {
         label = `Plan status: ${solverStatus}`;
+        colorClass = "text-amber-600 dark:text-amber-400"; // Amber for warning
       } else if (writeToVictron) {
         label = "Plan updated and sent to Victron.";
       } else {
         label = "Plan updated.";
       }
       els.status.textContent = label;
+      els.status.className = `text-sm font-medium ${colorClass}`;
     }
 
     // Only the few chart/table scalars are read from inputs (already hydrated from /settings)
@@ -299,7 +315,10 @@ async function onRun() {
     renderAllCharts(rows, cfgForViz);
   } catch (err) {
     console.error(err);
-    if (els.status) els.status.textContent = `Error: ${err.message}`;
+    if (els.status) {
+      els.status.textContent = `Error: ${err.message}`;
+      els.status.className = "text-sm font-medium text-red-600 dark:text-red-400";
+    }
     // In error, clear summary so it doesn't look "fresh"
     updateSummaryUI(null);
   }

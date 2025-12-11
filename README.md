@@ -23,7 +23,7 @@ Plan and control a home energy system with forecasts, dynamic tariffs, and a day
 - Data (forecasts, prices, SoC) are server-owned: VRM refreshes write to `DATA_DIR/data.json` (defaulting to `api/defaults/default-data.json`) and the solver always reads from this persisted snapshot.
 - Shared logic lives in **`lib/`** (LP builder/parser, DESS mapping, VRM + MQTT clients).
 
-```
+```text
 app/                 # Static web UI (index.html, main.js, app/scr/**)
 api/                 # Express server (routes + services)
 lib/                 # Core logic: LP builder, parser, DESS mapper, VRM + MQTT clients
