@@ -184,4 +184,22 @@ describe('mapRowsToDess', () => {
       expect(perSlot[0].feedin).toBe(FeedIn.allowed);
     });
   });
+
+  describe('Diagnostics (tipping point)', () => {
+    it('stops looking for tipping point when battery reaches max SoC', () => {
+      // T=0: 50% SoC, Grid Usage, Price=10
+      // T=1: 100% SoC, Grid Usage, Price=10 (Boundary!) -> Should end segment here
+      // T=2: 100% SoC, Grid Usage, Price=100 -> Should be in next segment
+      const rows = [
+        { ...baseRow, soc_percent: 50, g2l: 100, ic: 10 },
+        { ...baseRow, soc_percent: 100, g2l: 100, ic: 10 },
+        { ...baseRow, soc_percent: 100, g2l: 100, ic: 100 },
+      ];
+
+      const { diagnostics } = mapRowsToDess(rows, cfg);
+      // If segmented correctly: max price in first segment (T=0, T=1) is 10.
+      // If not segmented (bug): max price is 100.
+      expect(diagnostics.firstSegmentTippingPoint_cents_per_kWh).toBe(10);
+    });
+  });
 });
