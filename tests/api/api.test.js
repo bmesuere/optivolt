@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import app from '../../api/app.js';
 
@@ -31,21 +31,48 @@ const mockSettings = {
 
 const mockData = {
   // 5 hours of data
-  load_W: [500, 500, 500, 500, 500],
-  pv_W: [0, 0, 0, 0, 0],
-  importPrice: [10, 10, 10, 10, 10],
-  exportPrice: [5, 5, 5, 5, 5],
-  tsStart: "2024-01-01T00:00:00.000Z",
+  load: {
+    start: "2024-01-01T00:00:00.000Z",
+    step: 15,
+    values: [500, 500, 500, 500, 500]
+  },
+  pv: {
+    start: "2024-01-01T00:00:00.000Z",
+    step: 15,
+    values: [0, 0, 0, 0, 0]
+  },
+  importPrice: {
+    start: "2024-01-01T00:00:00.000Z",
+    step: 15,
+    values: [10, 10, 10, 10, 10]
+  },
+  exportPrice: {
+    start: "2024-01-01T00:00:00.000Z",
+    step: 15,
+    values: [5, 5, 5, 5, 5]
+  },
+  soc: {
+    timestamp: "2024-01-01T00:00:00.000Z",
+    value: 20
+  },
+  // Legacy field for safety during transition, though not used by new logic
   initialSoc_percent: 20
 };
 
 describe('Integration: API', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
+
     vi.resetAllMocks();
     loadSettings.mockResolvedValue({ ...mockSettings });
     loadData.mockResolvedValue({ ...mockData });
     refreshSeriesFromVrmAndPersist.mockResolvedValue();
     setDynamicEssSchedule.mockResolvedValue();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('GET /health returns 200', async () => {

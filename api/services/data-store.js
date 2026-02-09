@@ -17,7 +17,20 @@ export async function loadData() {
     return await readJson(DATA_PATH);
   } catch (err) {
     if (err?.code !== 'ENOENT') throw err;
-    return readJson(DEFAULT_PATH);
+    const defaults = await readJson(DEFAULT_PATH);
+
+    // Dynamically shift defaults to "start of current hour" so we have full 24h of future data
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    const startTimeStr = now.toISOString();
+
+    if (defaults.load) defaults.load.start = startTimeStr;
+    if (defaults.pv) defaults.pv.start = startTimeStr;
+    if (defaults.importPrice) defaults.importPrice.start = startTimeStr;
+    if (defaults.exportPrice) defaults.exportPrice.start = startTimeStr;
+    if (defaults.soc) defaults.soc.timestamp = startTimeStr;
+
+    return defaults;
   }
 }
 
