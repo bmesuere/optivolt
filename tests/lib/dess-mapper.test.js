@@ -188,16 +188,14 @@ describe('mapRowsToDess', () => {
 
   describe('Segmentation', () => {
     it('creates a segment boundary at max SoC so price lookups are scoped', () => {
-      // Row 0: grid usage at low price, soc at max boundary (100%)
-      // Row 1: no flow, high price, mid-range SoC
-      // Without segmentation, row 1 would see row 0's grid usage at price 10
-      // as tipping point, and ic(50) > 10 -> selfConsumption.
-      // With segmentation, row 0 is at max SoC boundary -> segment break.
+      // Row 0: grid usage at high price (50), soc at max boundary (100%)
+      // Row 1: no flow, medium price (30), mid-range SoC
+      // With segmentation: row 0 at max SoC boundary creates a segment break.
       // Row 1 is in its own segment with no grid usage, tipping point = -Infinity,
-      // and ic(50) > -Infinity -> selfConsumption either way.
+      // and ic(30) > -Infinity -> selfConsumption.
       //
-      // Instead, verify the opposite: row 0 at boundary scopes row 1 away from
-      // row 0's high-price grid usage that would otherwise set a high tipping point.
+      // Without segmentation: row 1 would share a segment with row 0, see its
+      // high-price (50) grid usage as tipping point, and ic(30) <= 50 -> proBattery.
       const rows = [
         {
           ...baseRow,
