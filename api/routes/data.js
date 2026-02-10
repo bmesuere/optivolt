@@ -24,7 +24,12 @@ router.get('/', async (req, res, next) => {
  */
 router.post('/', async (req, res, next) => {
   try {
-    const payload = req.body ?? {};
+    const payload = req.body;
+
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return res.status(400).json({ message: 'Payload must be a JSON object' });
+    }
+
     const currentData = await loadData();
 
     // keys allowed to be updated
@@ -32,15 +37,16 @@ router.post('/', async (req, res, next) => {
     const keysToUpdate = Object.keys(payload).filter(k => allowedKeys.includes(k));
 
     if (keysToUpdate.length === 0) {
-      return res.json({ message: 'No valid data keys provided', keysUpdated: [] });
+      return res.status(400).json({ message: 'No valid data keys provided', keysUpdated: [] });
     }
 
     const nextData = { ...currentData };
 
     for (const key of keysToUpdate) {
       const series = payload[key];
-      // Basic validation
-      if (key !== 'soc') {
+      if (key === 'soc') {
+        validateSoC(series);
+      } else {
         validateSeries(series, key);
       }
       nextData[key] = series;
@@ -60,6 +66,12 @@ function validateSeries(obj, name) {
   // We strictly expect 'values' array now
   if (!Array.isArray(obj.values)) throw new Error(`${name} must contain 'values' array`);
   // Optional: validate step?
+}
+
+function validateSoC(obj) {
+  if (!obj || typeof obj !== 'object') throw new Error('Invalid soc object');
+  if (!Number.isFinite(obj.value)) throw new Error('soc must contain numeric "value"');
+  if (!obj.timestamp || isNaN(Date.parse(obj.timestamp))) throw new Error('soc must contain valid "timestamp" ISO string');
 }
 
 export default router;

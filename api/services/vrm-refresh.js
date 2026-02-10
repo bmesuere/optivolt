@@ -69,37 +69,33 @@ export async function refreshSeriesFromVrmAndPersist() {
 
   const sources = (await loadSettings()).dataSources || {};
 
-  let shouldFetchForecasts = sources.load === 'vrm' || sources.pv === 'vrm';
+  const shouldFetchForecasts = sources.load === 'vrm' || sources.pv === 'vrm';
+  const shouldFetchPrices = sources.prices === 'vrm';
+  const shouldFetchSoc = sources.soc === 'mqtt';
+
+  // Concurrent IO
+  const [forecastsResult, pricesResult, socResult] = await Promise.allSettled([
+    shouldFetchForecasts ? client.fetchForecasts() : Promise.resolve(null),
+    shouldFetchPrices ? client.fetchPrices() : Promise.resolve(null),
+    shouldFetchSoc ? readVictronSocPercent({ timeoutMs: 5000 }) : Promise.resolve(null),
+  ]);
+
   let forecasts = null;
-
   if (shouldFetchForecasts) {
-    try {
-      forecasts = await client.fetchForecasts();
-    } catch (err) {
-      console.error('Failed to fetch forecasts:', err.message);
-    }
+    if (forecastsResult.status === 'fulfilled') forecasts = forecastsResult.value;
+    else console.error('Failed to fetch forecasts:', forecastsResult.reason?.message ?? String(forecastsResult.reason));
   }
 
-  let shouldFetchPrices = sources.prices === 'vrm';
   let prices = null;
-
   if (shouldFetchPrices) {
-    try {
-      prices = await client.fetchPrices();
-    } catch (err) {
-      console.error('Failed to fetch prices:', err.message);
-    }
+    if (pricesResult.status === 'fulfilled') prices = pricesResult.value;
+    else console.error('Failed to fetch prices:', pricesResult.reason?.message ?? String(pricesResult.reason));
   }
 
-  // 3. SoC (from MQTT)
-  let shouldFetchSoc = sources.soc === 'mqtt';
   let socPercent = null;
-
   if (shouldFetchSoc) {
-    socPercent = await readVictronSocPercent({ timeoutMs: 5000 }).catch((err) => {
-      console.error('Failed to read SoC from MQTT:', err?.message ?? String(err));
-      return null;
-    });
+    if (socResult.status === 'fulfilled') socPercent = socResult.value;
+    else console.error('Failed to read SoC from MQTT:', socResult.reason?.message ?? String(socResult.reason));
   }
 
   // Load previous data for fallback (we overwrite specific keys if VRM usage is active)

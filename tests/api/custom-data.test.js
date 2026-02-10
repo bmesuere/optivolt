@@ -1,12 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import bodyParser from 'body-parser';
 import { loadData, saveData } from '../../api/services/data-store.js';
 import { loadSettings, saveSettings } from '../../api/services/settings-store.js';
 import dataRouter from '../../api/routes/data.js';
 import calculateRouter from '../../api/routes/calculate.js';
-import { refreshSeriesFromVrmAndPersist } from '../../api/services/vrm-refresh.js';
 
 // Mock dependencies
 vi.mock('../../api/services/data-store.js');
@@ -31,7 +29,7 @@ vi.mock('../../api/services/planner-service.js', () => ({
 
 
 const app = express();
-app.use(bodyParser.json());
+app.use(express.json());
 app.use('/data', dataRouter);
 app.use('/calculate', calculateRouter);
 
@@ -82,8 +80,7 @@ describe('Custom Data Injection', () => {
       .post('/data')
       .send({ invalidKey: {} });
 
-    expect(res.status).toBe(200); // We return 200 with "No valid data keys provided" message?
-    // Actually implementation returns 200 but keysUpdated is empty. Logic check:
+    expect(res.status).toBe(400);
     expect(res.body.message).toBe('No valid data keys provided');
     expect(saveData).not.toHaveBeenCalled();
   });

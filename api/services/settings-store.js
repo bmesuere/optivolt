@@ -14,11 +14,15 @@ const DEFAULT_PATH = path.resolve(__dirname, '../defaults/default-settings.json'
  * This is the canonical way to read settings everywhere.
  */
 export async function loadSettings() {
+  const defaults = await readJson(DEFAULT_PATH);
   try {
-    return await readJson(SETTINGS_PATH);
+    const settings = await readJson(SETTINGS_PATH);
+    // Deep merge dataSources to ensure new keys (soc: mqtt) are picked up
+    const mergedDataSources = { ...(defaults.dataSources || {}), ...(settings.dataSources || {}) };
+    return { ...defaults, ...settings, dataSources: mergedDataSources };
   } catch (err) {
     if (err?.code !== 'ENOENT') throw err;
-    return readJson(DEFAULT_PATH);
+    return defaults;
   }
 }
 
