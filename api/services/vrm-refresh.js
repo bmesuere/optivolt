@@ -67,19 +67,41 @@ export async function refreshSettingsFromVrmAndPersist() {
 export async function refreshSeriesFromVrmAndPersist() {
   const client = createClientFromEnv();
 
-  // --- fetch VRM series + MQTT SoC in parallel ---
-  const [forecasts, prices, socPercent] = await Promise.all([
-    client.fetchForecasts(),
-    client.fetchPrices(),
-    readVictronSocPercent({ timeoutMs: 5000 }).catch((err) => {
-      console.error('Failed to read SoC from MQTT:', err?.message ?? String(err));
-      return null;
-    }),
+  const settings = await loadSettings();
+  const sources = settings.dataSources || {};
+
+  const shouldFetchForecasts = sources.load === 'vrm' || sources.pv === 'vrm';
+  const shouldFetchPrices = sources.prices === 'vrm';
+  const shouldFetchSoc = sources.soc === 'mqtt';
+
+  // Concurrent IO
+  const [forecastsResult, pricesResult, socResult] = await Promise.allSettled([
+    shouldFetchForecasts ? client.fetchForecasts() : Promise.resolve(null),
+    shouldFetchPrices ? client.fetchPrices() : Promise.resolve(null),
+    shouldFetchSoc ? readVictronSocPercent({ timeoutMs: 5000 }) : Promise.resolve(null),
   ]);
 
-  // Load previous data for fallback (if partial updates were supported, but here we likely overwrite)
-  // Actually we overwrite the specific keys.
-  const [baseSettings, baseData] = await Promise.all([loadSettings(), loadData()]);
+  let forecasts = null;
+  if (shouldFetchForecasts) {
+    if (forecastsResult.status === 'fulfilled') forecasts = forecastsResult.value;
+    else console.error('Failed to fetch forecasts:', forecastsResult.reason?.message ?? String(forecastsResult.reason));
+  }
+
+  let prices = null;
+  if (shouldFetchPrices) {
+    if (pricesResult.status === 'fulfilled') prices = pricesResult.value;
+    else console.error('Failed to fetch prices:', pricesResult.reason?.message ?? String(pricesResult.reason));
+  }
+
+  let socPercent = null;
+  if (shouldFetchSoc) {
+    if (socResult.status === 'fulfilled') socPercent = socResult.value;
+    else console.error('Failed to read SoC from MQTT:', socResult.reason?.message ?? String(socResult.reason));
+  }
+
+  // Load previous data for fallback (we overwrite specific keys if VRM usage is active)
+  const baseData = await loadData();
+  const baseSettings = settings;
 
   // Helper to extract start time safely
   const getStart = (obj, label) => {
@@ -89,34 +111,47 @@ export async function refreshSeriesFromVrmAndPersist() {
     throw new Error(`VRM returned no timestamps for ${label}.`);
   };
 
-  // Build new data structures
-  const load = {
-    start: getStart(forecasts, 'load'),
-    step: forecasts?.step_minutes ?? 15,
-    values: forecasts?.load_W ?? []
-  };
+  // Build new data structures (or keep existing)
 
-  const pv = {
-    start: getStart(forecasts, 'pv'),
-    step: forecasts?.step_minutes ?? 15,
-    values: forecasts?.pv_W ?? []
-  };
+  let load = baseData.load;
+  // If we fetched forecasts AND the user wants VRM load, use it
+  if (shouldFetchForecasts && sources.load !== 'api' && forecasts) {
+    load = {
+      start: getStart(forecasts, 'load'),
+      step: forecasts?.step_minutes ?? 15,
+      values: forecasts?.load_W ?? []
+    };
+  }
 
-  const importPrice = {
-    start: getStart(prices, 'importPrice'),
-    step: prices?.step_minutes ?? 15,
-    values: prices?.importPrice_cents_per_kwh ?? []
-  };
+  let pv = baseData.pv;
+  if (shouldFetchForecasts && sources.pv !== 'api' && forecasts) {
+    pv = {
+      start: getStart(forecasts, 'pv'),
+      step: forecasts?.step_minutes ?? 15,
+      values: forecasts?.pv_W ?? []
+    };
+  }
 
-  const exportPrice = {
-    start: getStart(prices, 'exportPrice'),
-    step: prices?.step_minutes ?? 15,
-    values: prices?.exportPrice_cents_per_kwh ?? []
-  };
+  let importPrice = baseData.importPrice;
+  let exportPrice = baseData.exportPrice;
+  if (shouldFetchPrices && prices) {
+    importPrice = {
+      start: getStart(prices, 'importPrice'),
+      step: prices?.step_minutes ?? 15,
+      values: prices?.importPrice_cents_per_kwh ?? []
+    };
+    exportPrice = {
+      start: getStart(prices, 'exportPrice'),
+      step: prices?.step_minutes ?? 15,
+      values: prices?.exportPrice_cents_per_kwh ?? []
+    };
+  }
 
   const soc = {
-    timestamp: new Date().toISOString(),
-    value: Number.isFinite(socPercent)
+    timestamp: (shouldFetchSoc && Number.isFinite(socPercent))
+      ? new Date().toISOString()
+      : (baseData.soc?.timestamp ?? new Date().toISOString()),
+    value: (shouldFetchSoc && Number.isFinite(socPercent))
       ? socPercent
       : (baseData.soc?.value ?? baseData.initialSoc_percent ?? baseSettings.initialSoc_percent)
   };

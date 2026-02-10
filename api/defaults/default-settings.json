@@ -12,5 +12,11 @@
   "dischargeEfficiency_percent": 95,
   "batteryCost_cent_per_kWh": 2,
   "terminalSocValuation": "zero",
-  "terminalSocCustomPrice_cents_per_kWh": 0
+  "terminalSocCustomPrice_cents_per_kWh": 0,
+  "dataSources": {
+    "prices": "vrm",
+    "load": "vrm",
+    "pv": "vrm",
+    "soc": "mqtt"
+  }
 }
