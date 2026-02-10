@@ -1,14 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { buildSolverConfigFromSettings, getTimingData } from '../../../api/services/solver-input-service.js';
-import * as timeSeriesUtils from '../../../lib/time-series-utils.js';
+import { buildSolverConfigFromSettings } from '../../../api/services/solver-input-service.js';
 
-// We will mock extractWindow to spy on it or to control behavior if needed,
-// but primarily we want to test the logic AROUND it (now/end calculation).
-// However, since we haven't refactored solver-input-service yet, these tests will FAIL initially
-// if we run them against the current implementation.
-// BUT, the goal is to implement the refactor to MAKE them pass.
-// So we write the test for the DESIRED behavior.
-
+/**
+ * These tests verify the "Smart Reader" logic in solver-input-service.js.
+ *
+ * They verify that:
+ * 1. The solver horizon starts at the current 15-minute slot (now).
+ * 2. The solver horizon ends based on the SHORTEST available data stream.
+ *    (We no longer slice data during writing; we slice during reading).
+ *
+ * This ensures that if we have 24h of Load/PV but only 12h of Prices,
+ * the solver only runs for 12h to avoid guessing prices.
+ */
 describe('Solver Timeline Logic (Refactored)', () => {
   const mockSettings = {
     stepSize_m: 15,

@@ -36,7 +36,7 @@ router.post('/', async (req, res, next) => {
       objectiveValue: result.ObjectiveValue,
       rows,
       initialSoc_percent: cfg.initialSoc_percent,
-      tsStart: data.tsStart,
+      tsStart: data.tsStart ?? data.load?.start,
       summary,
     });
   } catch (error) {

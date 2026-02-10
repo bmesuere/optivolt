@@ -82,34 +82,34 @@ export async function refreshSeriesFromVrmAndPersist() {
   const [baseSettings, baseData] = await Promise.all([loadSettings(), loadData()]);
 
   // Helper to extract start time safely
-  const getStart = (obj) => {
+  const getStart = (obj, label) => {
     if (obj?.timestamps?.length > 0) {
       return new Date(obj.timestamps[0]).toISOString();
     }
-    return new Date().toISOString(); // Fallback to now (bad, but better than crash)
+    throw new Error(`VRM returned no timestamps for ${label}.`);
   };
 
   // Build new data structures
   const load = {
-    start: getStart(forecasts),
+    start: getStart(forecasts, 'load'),
     step: forecasts?.step_minutes ?? 15,
     values: forecasts?.load_W ?? []
   };
 
   const pv = {
-    start: getStart(forecasts),
+    start: getStart(forecasts, 'pv'),
     step: forecasts?.step_minutes ?? 15,
     values: forecasts?.pv_W ?? []
   };
 
   const importPrice = {
-    start: getStart(prices),
+    start: getStart(prices, 'importPrice'),
     step: prices?.step_minutes ?? 15,
     values: prices?.importPrice_cents_per_kwh ?? []
   };
 
   const exportPrice = {
-    start: getStart(prices),
+    start: getStart(prices, 'exportPrice'),
     step: prices?.step_minutes ?? 15,
     values: prices?.exportPrice_cents_per_kwh ?? []
   };

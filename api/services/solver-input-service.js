@@ -53,16 +53,19 @@ export function buildSolverConfigFromSettings(settings, data = {}) {
   const terminalSocCustomPrice_cents_per_kWh =
     Number(settings.terminalSocCustomPrice_cents_per_kWh ?? 0);
 
-  // --- Dynamic Horizon Calculation ---
-
-  // Check for legacy data format (arrays instead of objects)
-  if (Array.isArray(data.load) || Array.isArray(data.pv) || Array.isArray(data.importPrice) || Array.isArray(data.exportPrice)) {
-    throw new HttpError(422, 'Data file format is outdated (legacy arrays detected). Please refresh data from VRM.', {
+  // Check for legacy data format
+  if (data.load_W || data.pv_W || data.tsStart) {
+    throw new HttpError(422, 'Data file format is outdated (legacy keys detected: load_W/pv_W/tsStart). Please refresh data from VRM.', {
       suggestion: 'Run POST /calculate with { "updateData": true } or delete data.json'
     });
   }
 
-  const nowMs = getQuarterStart(new Date());
+  // Validate new structure presence
+  if (!data.load || !data.pv || !data.importPrice || !data.exportPrice) {
+    throw new HttpError(500, 'Invalid data structure: missing required time series objects (load/pv/importPrice/exportPrice).');
+  }
+
+  const nowMs = getQuarterStart(new Date(), settings.stepSize_m);
 
   // Determine availability of each stream
   // data structure: { load: {...}, pv: {...}, importPrice: {...}, exportPrice: {...}, soc: {...} }
@@ -146,7 +149,7 @@ export function buildSolverConfigFromSettings(settings, data = {}) {
 // Timeline info derived from dynamic calculation
 export function getTimingData(settings, data = {}) {
   const stepMin = numOrThrow(settings.stepSize_m, 'stepSize_m');
-  const nowMs = getQuarterStart(new Date());
+  const nowMs = getQuarterStart(new Date(), stepMin);
 
   // We could return just "now" as start, since data is aligned to it.
   return { startMs: nowMs, stepMin };
