@@ -1,6 +1,7 @@
 import { HttpError } from '../http-errors.js';
 import { loadSettings } from './settings-store.js';
 import { loadData } from './data-store.js';
+import { extractWindow, getQuarterStart } from '../../lib/time-series-utils.js';
 
 // Clamp x/100 into [0,1], handling junk defensively
 function clamp01(x) {
@@ -17,20 +18,29 @@ function numOrThrow(value, field) {
   return n;
 }
 
-function ensureNumArray(value, field) {
-  if (!Array.isArray(value)) {
-    throw new HttpError(422, `Missing time series in data: ${field}`);
+/**
+ * Calculates the end timestamp (ms) of a time series object.
+ * Assumes source has { start: ISOString|number, step: number, values: number[] }
+ */
+function getSeriesEndMs(source, label = 'unknown series') {
+  if (!source) return 0; // Optional series (like soc?) - though caller usually checks. Let's stay safe for null.
+
+  if (!Array.isArray(source.values)) {
+    throw new HttpError(422, `Invalid data for ${label}: 'values' must be an array.`);
   }
 
-  const out = new Array(value.length);
-  for (let i = 0; i < value.length; i++) {
-    const n = Number(value[i]);
-    if (!Number.isFinite(n)) {
-      throw new HttpError(422, `Non-numeric value in ${field}[${i}]`);
-    }
-    out[i] = n;
+  const startMs = new Date(source.start).getTime();
+  if (Number.isNaN(startMs)) {
+    throw new HttpError(422, `Invalid data for ${label}: 'start' timestamp is invalid (${source.start}).`);
   }
-  return out;
+
+  const step = source.step ?? 15;
+  if (!Number.isFinite(step) || step <= 0) {
+    throw new HttpError(422, `Invalid data for ${label}: 'step' must be a positive number.`);
+  }
+
+  const stepMs = step * 60 * 1000;
+  return startMs + source.values.length * stepMs;
 }
 
 // Build the LP config expected by lib/build-lp.js from settings + data.
@@ -57,42 +67,54 @@ export function buildSolverConfigFromSettings(settings, data = {}) {
   const terminalSocCustomPrice_cents_per_kWh =
     Number(settings.terminalSocCustomPrice_cents_per_kWh ?? 0);
 
-  // Time series come purely from the data layer
-  const load_W = ensureNumArray(data.load_W, 'load_W');
-  const pv_W = ensureNumArray(data.pv_W, 'pv_W');
-  const importPrice = ensureNumArray(data.importPrice, 'importPrice');
-  const exportPrice = ensureNumArray(data.exportPrice, 'exportPrice');
+  // Check for legacy data format
+  if (data.load_W || data.pv_W || data.tsStart) {
+    throw new HttpError(422, 'Data file format is outdated (legacy keys detected: load_W/pv_W/tsStart). Please refresh data from VRM.', {
+      suggestion: 'Run POST /calculate with { "updateData": true } or delete data.json'
+    });
+  }
 
-  // Require equal lengths; don't silently trim
-  const len = load_W.length;
-  if (!len) {
-    throw new HttpError(422, 'Time series are empty', {
+  // Validate new structure presence
+  if (!data.load || !data.pv || !data.importPrice || !data.exportPrice) {
+    throw new HttpError(500, 'Invalid data structure: missing required time series objects (load/pv/importPrice/exportPrice).');
+  }
+
+  const nowMs = getQuarterStart(new Date(), settings.stepSize_m);
+
+  // Determine availability of each stream
+  // data structure: { load: {...}, pv: {...}, importPrice: {...}, exportPrice: {...}, soc: {...} }
+  const loadEndMs = getSeriesEndMs(data.load, 'load');
+  const pvEndMs = getSeriesEndMs(data.pv, 'pv');
+  const importEndMs = getSeriesEndMs(data.importPrice, 'importPrice');
+  const exportEndMs = getSeriesEndMs(data.exportPrice, 'exportPrice');
+
+  // The horizon ends at the earliest end time of any required stream
+  const endMs = Math.min(loadEndMs, pvEndMs, importEndMs, exportEndMs);
+
+  if (endMs <= nowMs) {
+    throw new HttpError(422, 'Insufficient future data', {
       details: {
-        load_W: load_W.length,
-        pv_W: pv_W.length,
-        importPrice: importPrice.length,
-        exportPrice: exportPrice.length,
+        now: new Date(nowMs).toISOString(),
+        loadEnd: new Date(loadEndMs).toISOString(),
+        pvEnd: new Date(pvEndMs).toISOString(),
+        importEnd: new Date(importEndMs).toISOString(),
+        exportEnd: new Date(exportEndMs).toISOString(),
       },
     });
   }
 
-  if (
-    pv_W.length !== len ||
-    importPrice.length !== len ||
-    exportPrice.length !== len
-  ) {
-    throw new HttpError(422, 'Time series lengths mismatch', {
-      details: {
-        load_W: load_W.length,
-        pv_W: pv_W.length,
-        importPrice: importPrice.length,
-        exportPrice: exportPrice.length,
-      },
-    });
-  }
+  // Extract aligned windows
+  const load_W = extractWindow(data.load, nowMs, endMs);
+  const pv_W = extractWindow(data.pv, nowMs, endMs);
+  const importPrice = extractWindow(data.importPrice, nowMs, endMs);
+  const exportPrice = extractWindow(data.exportPrice, nowMs, endMs);
 
-  // initial SoC is *only* allowed to come from data
-  const initialSoc_percent = Number(data.initialSoc_percent);
+  // Initial SoC from data
+  // New structure: data.soc = { timestamp: "...", value: 50 }
+  // Old structure compatible fallback: data.initialSoc_percent
+  let initialSoc_percent = data.soc?.value ?? data.initialSoc_percent;
+  initialSoc_percent = Number(initialSoc_percent);
+
   if (!Number.isFinite(initialSoc_percent)) {
     throw new HttpError(
       422,
@@ -138,26 +160,13 @@ export function buildSolverConfigFromSettings(settings, data = {}) {
   return cfg;
 }
 
-// Timeline info derived from data.tsStart + settings.stepSize_m
+// Timeline info derived from dynamic calculation
 export function getTimingData(settings, data = {}) {
   const stepMin = numOrThrow(settings.stepSize_m, 'stepSize_m');
+  const nowMs = getQuarterStart(new Date(), stepMin);
 
-  const rawTs =
-    typeof data.tsStart === 'string' ? data.tsStart.trim() : null;
-
-  if (!rawTs) {
-    throw new HttpError(
-      422,
-      'tsStart missing in data; refresh VRM time series first',
-    );
-  }
-
-  const ms = Date.parse(rawTs);
-  if (!Number.isFinite(ms)) {
-    throw new HttpError(422, `Invalid tsStart in data: ${rawTs}`);
-  }
-
-  return { startMs: ms, stepMin };
+  // We could return just "now" as start, since data is aligned to it.
+  return { startMs: nowMs, stepMin };
 }
 
 export async function getSolverInputs() {

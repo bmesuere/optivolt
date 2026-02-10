@@ -11,20 +11,6 @@ function createClientFromEnv() {
   return new VRMClient({ installationId, token });
 }
 
-/** Last local quarter (00/15/30/45) in ms since epoch. */
-function lastQuarterMs(baseDate = new Date()) {
-  const d = new Date(baseDate);
-  const q = Math.floor(d.getMinutes() / 15) * 15;
-  d.setMinutes(q, 0, 0);
-  return d.getTime();
-}
-
-/** Format Date -> "YYYY-MM-DDTHH:MM" for <input type="datetime-local"> */
-function toLocalDatetimeLocal(dt) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-}
-
 /** Persist relatively static system settings from VRM (no timeseries). */
 export async function refreshSettingsFromVrmAndPersist() {
   const client = createClientFromEnv();
@@ -75,10 +61,8 @@ export async function refreshSettingsFromVrmAndPersist() {
 }
 
 /**
- * Fetch VRM series (load + PV + prices), align to last quarter,
- * and persist only series + tsStart/step + SoC (data layer).
- *
- * SoC comes from MQTT instead of the VRM API.
+ * Fetch VRM series (load + PV + prices) and persist RAW data.
+ * No slicing/alignment is done here; the "Smart Reader" handles that.
  */
 export async function refreshSeriesFromVrmAndPersist() {
   const client = createClientFromEnv();
@@ -93,58 +77,75 @@ export async function refreshSeriesFromVrmAndPersist() {
     }),
   ]);
 
-  // --- quarter alignment (unchanged logic) ---
-  const quarterStartMs = lastQuarterMs(new Date());
-  const stepMin = Number(forecasts?.step_minutes ?? 15);
-
-  const fullHourStartMs =
-    Array.isArray(forecasts?.timestamps) && forecasts.timestamps.length > 0
-      ? Number(forecasts.timestamps[0])
-      : (() => {
-        const d = new Date();
-        d.setMinutes(0, 0, 0);
-        return d.getTime();
-      })();
-
-  let offsetSlots = Math.floor(
-    (quarterStartMs - fullHourStartMs) / (stepMin * 60 * 1000),
-  );
-  if (!Number.isFinite(offsetSlots) || offsetSlots < 0) offsetSlots = 0;
-  if (stepMin === 15) offsetSlots = Math.min(offsetSlots, 3);
-
-  const slice = (arr) => (Array.isArray(arr) ? arr.slice(offsetSlots) : []);
-
-  // Load previous settings/data for fallback
+  // Load previous data for fallback (if partial updates were supported, but here we likely overwrite)
+  // Actually we overwrite the specific keys.
   const [baseSettings, baseData] = await Promise.all([loadSettings(), loadData()]);
 
-  const load_W = slice(forecasts?.load_W);
-  const pv_W = slice(forecasts?.pv_W);
-  const importPrice = slice(prices?.importPrice_cents_per_kwh);
-  const exportPrice = slice(prices?.exportPrice_cents_per_kwh);
+  // Helper to extract start time safely
+  const getStart = (obj, label) => {
+    if (obj?.timestamps?.length > 0) {
+      return new Date(obj.timestamps[0]).toISOString();
+    }
+    throw new Error(`VRM returned no timestamps for ${label}.`);
+  };
+
+  // Build new data structures
+  const load = {
+    start: getStart(forecasts, 'load'),
+    step: forecasts?.step_minutes ?? 15,
+    values: forecasts?.load_W ?? []
+  };
+
+  const pv = {
+    start: getStart(forecasts, 'pv'),
+    step: forecasts?.step_minutes ?? 15,
+    values: forecasts?.pv_W ?? []
+  };
+
+  const importPrice = {
+    start: getStart(prices, 'importPrice'),
+    step: prices?.step_minutes ?? 15,
+    values: prices?.importPrice_cents_per_kwh ?? []
+  };
+
+  const exportPrice = {
+    start: getStart(prices, 'exportPrice'),
+    step: prices?.step_minutes ?? 15,
+    values: prices?.exportPrice_cents_per_kwh ?? []
+  };
+
+  const soc = {
+    timestamp: new Date().toISOString(),
+    value: Number.isFinite(socPercent)
+      ? socPercent
+      : (baseData.soc?.value ?? baseData.initialSoc_percent ?? baseSettings.initialSoc_percent)
+  };
 
   // Build new data snapshot
   const nextData = {
     ...baseData,
-    tsStart: toLocalDatetimeLocal(new Date(quarterStartMs)),
 
-    // Time series as arrays (data layer)
-    load_W: load_W.length ? load_W : baseData.load_W || [],
-    pv_W: pv_W.length ? pv_W : baseData.pv_W || [],
-    importPrice: importPrice.length ? importPrice : baseData.importPrice || [],
-    exportPrice: exportPrice.length ? exportPrice : baseData.exportPrice || [],
+    // New structure
+    load,
+    pv,
+    importPrice,
+    exportPrice,
+    soc,
 
-    // Current SoC comes from MQTT
-    initialSoc_percent: Number.isFinite(socPercent)
-      ? socPercent
-      : (baseData.initialSoc_percent ?? baseSettings.initialSoc_percent),
+    // Deprecated fields
+    tsStart: undefined,
+    load_W: undefined,
+    pv_W: undefined,
+    prices: undefined, // Clear the intermediate 'prices' object if it existed from previous dev iteration
+    initialSoc_percent: undefined
   };
 
   await saveData(nextData);
 
-  // Optionally keep stepSize_m in settings in sync with VRM step
+  // Optionally keep stepSize_m in settings in sync
   const nextSettings = {
     ...baseSettings,
-    stepSize_m: stepMin || baseSettings.stepSize_m || 15,
+    stepSize_m: forecasts?.step_minutes || baseSettings.stepSize_m || 15,
   };
   await saveSettings(nextSettings);
 }
