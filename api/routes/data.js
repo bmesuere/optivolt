@@ -42,30 +42,48 @@ router.post('/', async (req, res, next) => {
 
     const nextData = { ...currentData };
 
-    for (const key of keysToUpdate) {
-      const series = payload[key];
-      if (key === 'soc') {
-        validateSoC(series);
-      } else {
-        validateSeries(series, key);
+    try {
+      for (const key of keysToUpdate) {
+        const series = payload[key];
+        if (key === 'soc') {
+          validateSoC(series);
+        } else {
+          validateSeries(series, key);
+        }
+        nextData[key] = series;
       }
-      nextData[key] = series;
+    } catch (validationError) {
+      return next(toHttpError(validationError, 400, validationError.message));
     }
 
-    await saveData(nextData);
+    try {
+      await saveData(nextData);
+      res.json({ message: 'Data updated successfully', keysUpdated: keysToUpdate });
+    } catch (saveError) {
+      next(toHttpError(saveError, 500, 'Failed to persist data'));
+    }
 
-    res.json({ message: 'Data updated successfully', keysUpdated: keysToUpdate });
   } catch (error) {
-    next(toHttpError(error, 400, error.message || 'Failed to save data'));
+    // Catch-all for unexpected synchronous errors in the route setup (unlikely),
+    // or if toHttpError throws.
+    next(toHttpError(error, 500));
   }
 });
 
 function validateSeries(obj, name) {
   if (!obj || typeof obj !== 'object') throw new Error(`Invalid ${name} object`);
+
   if (!obj.start) throw new Error(`${name} missing 'start' ISO timestamp`);
+  if (isNaN(Date.parse(obj.start))) throw new Error(`${name} 'start' must be a valid ISO string`);
+
   // We strictly expect 'values' array now
   if (!Array.isArray(obj.values)) throw new Error(`${name} must contain 'values' array`);
-  // Optional: validate step?
+
+  if (obj.step !== undefined) {
+    if (!Number.isFinite(obj.step) || obj.step <= 0) {
+      throw new Error(`${name} 'step' must be a positive number`);
+    }
+  }
 }
 
 function validateSoC(obj) {

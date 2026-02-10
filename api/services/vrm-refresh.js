@@ -67,7 +67,8 @@ export async function refreshSettingsFromVrmAndPersist() {
 export async function refreshSeriesFromVrmAndPersist() {
   const client = createClientFromEnv();
 
-  const sources = (await loadSettings()).dataSources || {};
+  const settings = await loadSettings();
+  const sources = settings.dataSources || {};
 
   const shouldFetchForecasts = sources.load === 'vrm' || sources.pv === 'vrm';
   const shouldFetchPrices = sources.prices === 'vrm';
@@ -99,7 +100,8 @@ export async function refreshSeriesFromVrmAndPersist() {
   }
 
   // Load previous data for fallback (we overwrite specific keys if VRM usage is active)
-  const [baseSettings, baseData] = await Promise.all([loadSettings(), loadData()]);
+  const baseData = await loadData();
+  const baseSettings = settings;
 
   // Helper to extract start time safely
   const getStart = (obj, label) => {

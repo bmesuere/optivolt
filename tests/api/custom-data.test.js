@@ -33,6 +33,12 @@ app.use(express.json());
 app.use('/data', dataRouter);
 app.use('/calculate', calculateRouter);
 
+// Error handling middleware for tests
+app.use((err, req, res, next) => {
+  const status = err.statusCode || err.status || 500;
+  res.status(status).json({ message: err.message });
+});
+
 describe('Custom Data Injection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -86,12 +92,27 @@ describe('Custom Data Injection', () => {
   });
 
   it('POST /data should validate structure', async () => {
-    const res = await request(app)
+    // Missing values
+    const res1 = await request(app)
       .post('/data')
-      .send({ importPrice: { start: '...' } }); // Missing values
+      .send({ importPrice: { start: '2024-01-01T00:00:00Z' } });
+    expect(res1.status).toBe(400);
+    expect(res1.body.message).toMatch(/values/);
 
-    // The implementation throws error inside validateSeries -> next(error) -> 400
-    expect(res.status).toBe(400);
+    // Invalid start date
+    const res2 = await request(app)
+      .post('/data')
+      .send({ importPrice: { start: 'invalid-date', values: [] } });
+    expect(res2.status).toBe(400);
+    expect(res2.body.message).toMatch(/valid ISO string/);
+
+    // Invalid step
+    const res3 = await request(app)
+      .post('/data')
+      .send({ importPrice: { start: '2024-01-01T00:00:00Z', values: [], step: -1 } });
+    expect(res3.status).toBe(400);
+    expect(res3.body.message).toMatch(/positive number/);
+
     expect(saveData).not.toHaveBeenCalled();
   });
 });
