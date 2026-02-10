@@ -116,7 +116,9 @@ export async function refreshSeriesFromVrmAndPersist() {
 
   const soc = {
     timestamp: new Date().toISOString(),
-    value: Number.isFinite(socPercent) ? socPercent : (baseData.soc?.value ?? baseData.initialSoc_percent)
+    value: Number.isFinite(socPercent)
+      ? socPercent
+      : (baseData.soc?.value ?? baseData.initialSoc_percent ?? baseSettings.initialSoc_percent)
   };
 
   // Build new data snapshot

@@ -30,7 +30,7 @@ describe('Solver Timeline Logic (Refactored)', () => {
 
   // Mock Date to a fixed "Now"
   const NOW_STRING = '2024-01-01T12:05:00Z'; // 12:05
-  const EXPECTED_START = '2024-01-01T12:00:00.000Z'; // Rounded down to 12:00
+
 
   beforeEach(() => {
     vi.useFakeTimers();

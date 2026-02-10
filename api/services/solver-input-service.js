@@ -22,10 +22,24 @@ function numOrThrow(value, field) {
  * Calculates the end timestamp (ms) of a time series object.
  * Assumes source has { start: ISOString|number, step: number, values: number[] }
  */
-function getSeriesEndMs(source) {
-  if (!source || !source.start || !Array.isArray(source.values)) return 0;
+function getSeriesEndMs(source, label = 'unknown series') {
+  if (!source) return 0; // Optional series (like soc?) - though caller usually checks. Let's stay safe for null.
+
+  if (!Array.isArray(source.values)) {
+    throw new HttpError(422, `Invalid data for ${label}: 'values' must be an array.`);
+  }
+
   const startMs = new Date(source.start).getTime();
-  const stepMs = (source.step || 15) * 60 * 1000;
+  if (Number.isNaN(startMs)) {
+    throw new HttpError(422, `Invalid data for ${label}: 'start' timestamp is invalid (${source.start}).`);
+  }
+
+  const step = source.step ?? 15;
+  if (!Number.isFinite(step) || step <= 0) {
+    throw new HttpError(422, `Invalid data for ${label}: 'step' must be a positive number.`);
+  }
+
+  const stepMs = step * 60 * 1000;
   return startMs + source.values.length * stepMs;
 }
 
@@ -69,10 +83,10 @@ export function buildSolverConfigFromSettings(settings, data = {}) {
 
   // Determine availability of each stream
   // data structure: { load: {...}, pv: {...}, importPrice: {...}, exportPrice: {...}, soc: {...} }
-  const loadEndMs = getSeriesEndMs(data.load);
-  const pvEndMs = getSeriesEndMs(data.pv);
-  const importEndMs = getSeriesEndMs(data.importPrice);
-  const exportEndMs = getSeriesEndMs(data.exportPrice);
+  const loadEndMs = getSeriesEndMs(data.load, 'load');
+  const pvEndMs = getSeriesEndMs(data.pv, 'pv');
+  const importEndMs = getSeriesEndMs(data.importPrice, 'importPrice');
+  const exportEndMs = getSeriesEndMs(data.exportPrice, 'exportPrice');
 
   // The horizon ends at the earliest end time of any required stream
   const endMs = Math.min(loadEndMs, pvEndMs, importEndMs, exportEndMs);

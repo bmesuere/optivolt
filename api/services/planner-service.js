@@ -137,7 +137,7 @@ export async function computePlan({ updateData = false } = {}) {
 
   const summary = buildPlanSummary(rows, cfg, dessDiagnostics);
 
-  return { cfg, data, result, rows, summary };
+  return { cfg, data, timing, result, rows, summary };
 }
 
 /**
@@ -159,12 +159,12 @@ export async function planAndMaybeWrite({
   updateData = false,
   writeToVictron = false,
 } = {}) {
-  const { cfg, data, result, rows, summary } =
+  const { cfg, data, timing, result, rows, summary } =
     await computePlan({ updateData });
 
   if (writeToVictron) {
     await writePlanToVictron(rows);
   }
 
-  return { cfg, data, result, rows, summary };
+  return { cfg, data, timing, result, rows, summary };
 }
