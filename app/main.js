@@ -19,6 +19,10 @@ const els = {
   run: $("#run"),
   updateDataBeforeRun: $("#update-data-before-run"),
   pushToVictron: $("#push-to-victron"),
+  sourcePrices: $("#source-prices"),
+  sourceLoad: $("#source-load"),
+  sourcePv: $("#source-pv"),
+  sourceSoc: $("#source-soc"),
 
   // numeric inputs
   step: $("#step"),
@@ -195,6 +199,14 @@ function snapshotUI() {
     terminalSocValuation: els.terminal?.value || "zero",
     terminalSocCustomPrice_cents_per_kWh: num(els.terminalCustom?.value),
 
+    // DATA
+    dataSources: {
+      prices: els.sourcePrices?.value || "vrm",
+      load: els.sourceLoad?.value || "vrm",
+      pv: els.sourcePv?.value || "vrm",
+      soc: els.sourceSoc?.value || "mqtt",
+    },
+
     // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
     // Note: updateDataBeforeRun / pushToVictron are not part of the persisted settings
@@ -223,6 +235,12 @@ function hydrateUI(obj = {}) {
     els.terminal.value = String(obj.terminalSocValuation);
   }
   setIfDef(els.terminalCustom, obj.terminalSocCustomPrice_cents_per_kWh);
+
+  // DATA
+  if (els.sourcePrices && obj.dataSources?.prices) els.sourcePrices.value = obj.dataSources.prices;
+  if (els.sourceLoad && obj.dataSources?.load) els.sourceLoad.value = obj.dataSources.load;
+  if (els.sourcePv && obj.dataSources?.pv) els.sourcePv.value = obj.dataSources.pv;
+  if (els.sourceSoc && obj.dataSources?.soc) els.sourceSoc.value = obj.dataSources.soc;
 
   // UI-only
   if (els.tableKwh && obj.tableShowKwh != null) {

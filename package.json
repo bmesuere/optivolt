@@ -18,6 +18,7 @@
     "api": "node ./api/index.js",
     "dev": "dotenv -e .env.local -- nodemon --ignore 'data/' ./api/index.js",
     "test": "vitest",
+    "test:run": "vitest run",
     "lint": "npx eslint ."
   },
   "engines": {

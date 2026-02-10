@@ -19,6 +19,28 @@ Plan and control a home energy system with forecasts, dynamic tariffs, and a day
 - The **API** (in `api/`) exposes:
   - `POST /calculate` — builds & solves the LP with **HiGHS** and returns per-slot flows, SoC, and DESS mappings. The request body can ask the server to refresh VRM data first and/or push the first slots to Victron via MQTT.
   - `GET/POST /settings` — read/write persisted system + algorithm settings in `DATA_DIR/settings.json` (defaulting to `api/defaults/default-settings.json`).
+  - `POST /data` — inject custom time-series data. Used when data sources in the UI are set to "API".
+
+    The payload can contain one or more of the following keys:
+    - **Prices:** `importPrice`, `exportPrice` (cents/kWh)
+    - **Power:** `load`, `pv` (Watts)
+    - **State:** `soc` (Percentage, object with `value` and `timestamp`)
+
+    **Example payload:**
+    ```json
+    {
+      "importPrice": {
+        "start": "2024-01-01T00:00:00.000Z",
+        "step": 15,
+        "values": [10.5, 11.2, 12.0, 11.8]
+      },
+      "load": {
+        "start": "2024-01-01T00:00:00.000Z",
+        "step": 15,
+        "values": [500, 450, 600, 550]
+      }
+    }
+    ```
   - `POST /vrm/refresh-settings` — fetch latest Dynamic ESS limits/settings from VRM and persist.
 - Data (forecasts, prices, SoC) are server-owned: VRM refreshes write to `DATA_DIR/data.json` (defaulting to `api/defaults/default-data.json`) and the solver always reads from this persisted snapshot.
 - Shared logic lives in **`lib/`** (LP builder/parser, DESS mapping, VRM + MQTT clients).
@@ -146,5 +168,3 @@ There is a bug in the Victron API: the **price data is not available** when DESS
 - During that window, price data is available and can be fetched; outside of it, DESS can be left in Node-RED mode so Optivolt fully controls the schedule.
 
 Once all these steps are in place, Optivolt should run as an add-on, keep its data and schedules up to date, and continuously steer your Victron system using the optimized plan.
-
-
