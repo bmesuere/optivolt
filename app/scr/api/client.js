@@ -20,7 +20,7 @@ async function requestJson(path, init = {}) {
   try {
     raw = await response.text();
   } catch {
-    raw = "";
+    // ignore
   }
 
   if (!response.ok) {
