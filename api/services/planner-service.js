@@ -40,8 +40,12 @@ function buildPlanSummary(rows, cfg, dessDiagnostics = {}) {
       loadFromPv_kWh: 0,
       importEnergy_kWh: 0,
       avgImportPrice_cents_per_kWh: null,
-      firstSegmentTippingPoint_cents_per_kWh:
-        dessDiagnostics.firstSegmentTippingPoint_cents_per_kWh ?? null,
+      gridBatteryTippingPoint_cents_per_kWh:
+        dessDiagnostics.gridBatteryTippingPoint_cents_per_kWh ?? null,
+      gridChargeTippingPoint_cents_per_kWh:
+        dessDiagnostics.gridChargeTippingPoint_cents_per_kWh ?? null,
+      batteryExportTippingPoint_cents_per_kWh:
+        dessDiagnostics.batteryExportTippingPoint_cents_per_kWh ?? null,
     };
   }
 
@@ -55,6 +59,8 @@ function buildPlanSummary(rows, cfg, dessDiagnostics = {}) {
   let loadFromGrid = 0;
   let loadFromBattery = 0;
   let loadFromPv = 0;
+  let gridToBattery = 0;
+  let batteryToGrid = 0;
   let importEnergy = 0;
   let priceTimesEnergy = 0;
 
@@ -64,6 +70,8 @@ function buildPlanSummary(rows, cfg, dessDiagnostics = {}) {
     const g2lK = W2kWh(row.g2l);
     const b2lK = W2kWh(row.b2l);
     const pv2lK = W2kWh(row.pv2l);
+    const g2bK = W2kWh(row.g2b);
+    const b2gK = W2kWh(row.b2g);
     const impK = W2kWh(row.imp);
 
     loadTotal += loadK;
@@ -71,6 +79,8 @@ function buildPlanSummary(rows, cfg, dessDiagnostics = {}) {
     loadFromGrid += g2lK;
     loadFromBattery += b2lK;
     loadFromPv += pv2lK;
+    gridToBattery += g2bK;
+    batteryToGrid += b2gK;
     importEnergy += impK;
 
     const price = Number(row.ic);
@@ -88,10 +98,22 @@ function buildPlanSummary(rows, cfg, dessDiagnostics = {}) {
     loadFromGrid_kWh: loadFromGrid,
     loadFromBattery_kWh: loadFromBattery,
     loadFromPv_kWh: loadFromPv,
+    gridToBattery_kWh: gridToBattery,
+    batteryToGrid_kWh: batteryToGrid,
     importEnergy_kWh: importEnergy,
     avgImportPrice_cents_per_kWh: avgImportPrice,
-    firstSegmentTippingPoint_cents_per_kWh:
-      dessDiagnostics.firstSegmentTippingPoint_cents_per_kWh ?? null,
+    gridBatteryTippingPoint_cents_per_kWh:
+      Number.isFinite(dessDiagnostics.gridBatteryTippingPoint_cents_per_kWh)
+        ? dessDiagnostics.gridBatteryTippingPoint_cents_per_kWh
+        : null,
+    gridChargeTippingPoint_cents_per_kWh:
+      Number.isFinite(dessDiagnostics.gridChargeTippingPoint_cents_per_kWh)
+        ? dessDiagnostics.gridChargeTippingPoint_cents_per_kWh
+        : null,
+    batteryExportTippingPoint_cents_per_kWh:
+      Number.isFinite(dessDiagnostics.batteryExportTippingPoint_cents_per_kWh)
+        ? dessDiagnostics.batteryExportTippingPoint_cents_per_kWh
+        : null,
   };
 }
 

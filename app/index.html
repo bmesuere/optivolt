@@ -202,20 +202,33 @@
               </div>
             </dl>
 
-            <div class="mt-3 grid grid-cols-1 gap-y-1 border-t border-slate-200/70 pt-2 dark:border-white/10">
-              <div class="flex items-baseline justify-between gap-3">
+            <div class="mt-3 grid grid-cols-1 gap-y-1 dark:border-white/10">
+              <div class="mt-2">
+                <dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Tipping points (charge / use / export)
+                </dt>
+                <dd class="mt-1">
+                  <div class="flex justify-between text-[11px] font-mono text-slate-600 dark:text-slate-300">
+                    <span id="grid-charge-point-cent" title="Grid charge">—</span>
+                    <span id="tipping-point-cent" title="Grid/battery">—</span>
+                    <span id="export-point-cent" title="Battery export">—</span>
+                  </div>
+                  <!-- Energy Flow Bar -->
+                  <div class="mt-2">
+                    <div class="flex h-2 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80"
+                      id="flow-split-bar">
+                      <!-- Will be populated by JS -->
+                    </div>
+                  </div>
+                </dd>
+              </div>
+
+              <div
+                class="flex items-baseline justify-between gap-3 border-t border-slate-200/70 pt-2 dark:border-white/10 mt-2">
                 <span class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Avg. import price
                 </span>
                 <span id="avg-import-cent" class="font-mono text-sm text-ink dark:text-slate-100">
-                  —
-                </span>
-              </div>
-              <div class="flex items-baseline justify-between gap-3">
-                <span class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Grid/battery tipping point
-                </span>
-                <span id="tipping-point-cent" class="font-mono text-sm text-ink dark:text-slate-100">
                   —
                 </span>
               </div>
