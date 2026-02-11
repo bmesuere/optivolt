@@ -1,6 +1,5 @@
 // Import shared logic
 import {
-  SOLUTION_COLORS,
   drawFlowsBarStackSigned,
   drawSocChart,
   drawPricesStepLines,
@@ -12,71 +11,27 @@ import { refreshVrmSettings } from "./scr/api/backend.js";
 import { loadInitialConfig, saveConfig } from "./scr/config-store.js";
 import { requestRemoteSolve } from "./scr/api/solver.js";
 
+// Import new modules
+import {
+  getElements,
+  wireGlobalInputs,
+  wireVrmSettingInput,
+  setupSystemCardCollapsible,
+} from "./scr/ui-binding.js";
+import {
+  snapshotUI,
+  hydrateUI,
+  updatePlanMeta,
+  updateSummaryUI,
+  updateTerminalCustomUI,
+} from "./scr/state.js";
+
 // ---------- DOM ----------
-const $ = (sel) => document.querySelector(sel);
-const els = {
-  // actions
-  run: $("#run"),
-  updateDataBeforeRun: $("#update-data-before-run"),
-  pushToVictron: $("#push-to-victron"),
-  sourcePrices: $("#source-prices"),
-  sourceLoad: $("#source-load"),
-  sourcePv: $("#source-pv"),
-  sourceSoc: $("#source-soc"),
-  dessAlgorithm: $("#dess-algorithm"),
-
-  // numeric inputs
-  step: $("#step"),
-  cap: $("#cap"),
-  minsoc: $("#minsoc"),
-  maxsoc: $("#maxsoc"),
-  pchg: $("#pchg"),
-  pdis: $("#pdis"),
-  gimp: $("#gimp"),
-  gexp: $("#gexp"),
-  etaC: $("#etaC"),
-  etaD: $("#etaD"),
-  bwear: $("#bwear"),
-  terminal: $("#terminal"),
-  terminalCustom: $("#terminal-custom"),
-
-  // plan metadata
-  planSocNow: $("#plan-soc-now"),
-  planTsStart: $("#plan-ts-start"),
-
-  // charts + status
-  flows: $("#flows"),
-  soc: $("#soc"),
-  prices: $("#prices"),
-  loadpv: $("#loadpv"),
-  table: $("#table"),
-  tableKwh: $("#table-kwh"),
-  tableUnit: $("#table-unit"),
-  status: $("#status"),
-
-  // summary fields
-  sumLoad: $("#sum-load-kwh"),
-  sumPv: $("#sum-pv-kwh"),
-  sumLoadGrid: $("#sum-load-grid-kwh"),
-  sumLoadBatt: $("#sum-load-batt-kwh"),
-  sumLoadPv: $("#sum-load-pv-kwh"),
-  loadSplitGridBar: $("#load-split-grid-bar"),
-  loadSplitBattBar: $("#load-split-batt-bar"),
-  loadSplitPvBar: $("#load-split-pv-bar"),
-  avgImport: $("#avg-import-cent"),
-  gridBatteryTp: $("#tipping-point-cent"),
-  gridChargeTp: $("#grid-charge-point-cent"),
-  batteryExportTp: $("#export-point-cent"),
-
-  // VRM section
-  vrmFetchSettings: $("#vrm-fetch-settings"),
-
-  // System settings card
-  systemSettingsBody: $("#system-settings-body"),
-  systemSettingsToggle: $("#system-settings-toggle"),
-  systemSettingsToggleIcon: $("#system-settings-toggle-icon"),
-  systemSettingsHeader: $("#system-settings-header"),
-};
+// 'els' is now retrieved via getElements() in boot() and passed around or accessed globally if we kept it global.
+// For cleaner refactoring, let's keep a module-level reference initialized in boot,
+// or just initialize it at the top level since DOM content is likely ready (module scripts defer).
+// However, safer to call getElements() when needed or at top level if we trust DOMContentLoaded.
+const els = getElements();
 
 // ---------- State ----------
 const debounceRun = debounce(onRun, 250);
@@ -90,12 +45,23 @@ boot();
 async function boot() {
   const { config: initialConfig, source } = await loadInitialConfig();
 
-  hydrateUI(initialConfig);
+  hydrateUI(els, initialConfig);
 
-  setupSystemCardCollapsible();
+  setupSystemCardCollapsible(els);
 
-  wireGlobalInputs();
-  wireVrmSettingInput();
+  // Wire inputs with callbacks
+  wireGlobalInputs(els, {
+    onInput: () => {
+      queuePersistSnapshot();
+      debounceRun();
+    },
+    onRun: onRun,
+    updateTerminalCustomUI: () => updateTerminalCustomUI(els),
+  });
+
+  wireVrmSettingInput(els, {
+    onRefresh: onRefreshVrmSettings,
+  });
 
   if (els.status) {
     els.status.textContent =
@@ -106,166 +72,13 @@ async function boot() {
   await onRun();
 }
 
-// ---------- Wiring ----------
-function wireGlobalInputs() {
-  const handleChange = () => {
-    queuePersistSnapshot();
-    debounceRun();
-  };
-
-  // Auto-save whenever anything changes (except table toggler and run options)
-  for (const el of document.querySelectorAll("input, select, textarea")) {
-    if (el === els.tableKwh) continue;
-    if (el === els.updateDataBeforeRun) continue; // Checkbox doesn't trigger auto-save
-    if (el === els.pushToVictron) continue; // Checkbox doesn't trigger auto-save
-    el.addEventListener("input", handleChange);
-    el.addEventListener("change", handleChange);
-  }
-
-  els.terminal?.addEventListener("change", updateTerminalCustomUI);
-  updateTerminalCustomUI();
-
-  // Manual recompute
-  els.run?.addEventListener("click", onRun);
-
-  // Units toggle recompute
-  els.tableKwh?.addEventListener("change", onRun);
-
-  // Keyboard shortcut: Ctrl+Enter (or Cmd+Enter) to Recompute
-  document.addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-      e.preventDefault();
-      // Visual feedback via focus, then click
-      els.run?.focus();
-      els.run?.click();
-    }
-  });
-}
-
-// Only wires the settings button now
-function wireVrmSettingInput() {
-  els.vrmFetchSettings?.addEventListener("click", onRefreshVrmSettings);
-}
-
-function setupSystemCardCollapsible() {
-  const body = els.systemSettingsBody;
-  const toggle = els.systemSettingsToggle;
-  const icon = els.systemSettingsToggleIcon;
-  const header = els.systemSettingsHeader;
-
-  if (!body || !toggle) return;
-
-  const lgQuery = window.matchMedia("(min-width: 1024px)");
-  let isExpanded = lgQuery.matches;
-
-  const applyState = () => {
-    body.classList.toggle("hidden", !isExpanded);
-    toggle.setAttribute("aria-expanded", String(isExpanded));
-    icon?.classList.toggle("rotate-180", !isExpanded);
-    header?.classList.toggle("mb-3", isExpanded);
-    header?.classList.toggle("mb-0", !isExpanded);
-  };
-
-  const syncToViewport = () => {
-    isExpanded = lgQuery.matches;
-    applyState();
-  };
-
-  syncToViewport();
-
-  toggle.addEventListener("click", () => {
-    if (lgQuery.matches) return;
-    isExpanded = !isExpanded;
-    applyState();
-  });
-
-  lgQuery.addEventListener("change", syncToViewport);
-}
-
-// ---------- UI <-> settings snapshot ----------
-function snapshotUI() {
-  return {
-    // scalars (SYSTEM)
-    stepSize_m: num(els.step?.value),
-    batteryCapacity_Wh: num(els.cap?.value),
-    minSoc_percent: num(els.minsoc?.value),
-    maxSoc_percent: num(els.maxsoc?.value),
-    maxChargePower_W: num(els.pchg?.value),
-    maxDischargePower_W: num(els.pdis?.value),
-    maxGridImport_W: num(els.gimp?.value),
-    maxGridExport_W: num(els.gexp?.value),
-    chargeEfficiency_percent: num(els.etaC?.value),
-    dischargeEfficiency_percent: num(els.etaD?.value),
-    batteryCost_cent_per_kWh: num(els.bwear?.value),
-
-    // ALGORITHM
-    terminalSocValuation: els.terminal?.value || "zero",
-    terminalSocCustomPrice_cents_per_kWh: num(els.terminalCustom?.value),
-
-    // DATA
-    dataSources: {
-      prices: els.sourcePrices?.value || "vrm",
-      load: els.sourceLoad?.value || "vrm",
-      pv: els.sourcePv?.value || "vrm",
-      soc: els.sourceSoc?.value || "mqtt",
-    },
-
-    // ALGORITHM
-    dessAlgorithm: els.dessAlgorithm?.value || "v1",
-
-    // UI-only
-    tableShowKwh: !!els.tableKwh?.checked,
-    // Note: updateDataBeforeRun / pushToVictron are not part of the persisted settings
-  };
-}
-
-function hydrateUI(obj = {}) {
-  // SYSTEM
-  setIfDef(els.step, obj.stepSize_m);
-  setIfDef(els.cap, obj.batteryCapacity_Wh);
-  setIfDef(els.minsoc, obj.minSoc_percent);
-  setIfDef(els.maxsoc, obj.maxSoc_percent);
-  setIfDef(els.pchg, obj.maxChargePower_W);
-  setIfDef(els.pdis, obj.maxDischargePower_W);
-  setIfDef(els.gimp, obj.maxGridImport_W);
-  setIfDef(els.gexp, obj.maxGridExport_W);
-  setIfDef(els.etaC, obj.chargeEfficiency_percent);
-  setIfDef(els.etaD, obj.dischargeEfficiency_percent);
-  setIfDef(els.bwear, obj.batteryCost_cent_per_kWh);
-
-  // DATA (display-only metadata)
-  updatePlanMeta(obj.initialSoc_percent, obj.tsStart);
-
-  // ALGORITHM
-  if (els.terminal && obj.terminalSocValuation != null) {
-    els.terminal.value = String(obj.terminalSocValuation);
-  }
-  setIfDef(els.terminalCustom, obj.terminalSocCustomPrice_cents_per_kWh);
-
-  // DATA
-  if (els.sourcePrices && obj.dataSources?.prices) els.sourcePrices.value = obj.dataSources.prices;
-  if (els.sourceLoad && obj.dataSources?.load) els.sourceLoad.value = obj.dataSources.load;
-  if (els.sourcePv && obj.dataSources?.pv) els.sourcePv.value = obj.dataSources.pv;
-  if (els.sourceSoc && obj.dataSources?.soc) els.sourceSoc.value = obj.dataSources.soc;
-
-  // Algorithm
-  if (els.dessAlgorithm && obj.dessAlgorithm) els.dessAlgorithm.value = obj.dessAlgorithm;
-
-  // UI-only
-  if (els.tableKwh && obj.tableShowKwh != null) {
-    els.tableKwh.checked = !!obj.tableShowKwh;
-  }
-
-  updateTerminalCustomUI();
-}
-
 // ---------- Actions ----------
 async function onRefreshVrmSettings() {
   try {
     if (els.status) els.status.textContent = "Refreshing system settings from VRM…";
     const payload = await refreshVrmSettings();
     const saved = payload?.settings || {};
-    hydrateUI(saved);
+    hydrateUI(els, saved);
     if (els.status) els.status.textContent = "System settings saved from VRM.";
   } catch (err) {
     console.error(err);
@@ -301,10 +114,10 @@ async function onRun() {
       typeof result?.solverStatus === "string" ? result.solverStatus : "OK";
 
     // Update SoC and tsStart from result
-    updatePlanMeta(result.initialSoc_percent, result.tsStart);
+    updatePlanMeta(els, result.initialSoc_percent, result.tsStart);
 
     // Update summary if present
-    updateSummaryUI(result.summary);
+    updateSummaryUI(els, result.summary);
 
     if (els.status) {
       const nonOptimal =
@@ -348,15 +161,8 @@ async function onRun() {
       els.status.className = "text-sm font-medium text-red-600 dark:text-red-400";
     }
     // In error, clear summary so it doesn't look "fresh"
-    updateSummaryUI(null);
+    updateSummaryUI(els, null);
   }
-}
-
-
-// ---------- Helpers ----------
-function updateTerminalCustomUI() {
-  const isCustom = els.terminal?.value === "custom";
-  if (els.terminalCustom) els.terminalCustom.disabled = !isCustom;
 }
 
 function renderAllCharts(rows, cfg) {
@@ -366,7 +172,7 @@ function renderAllCharts(rows, cfg) {
   drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m);
 }
 
-async function persistConfig(cfg = snapshotUI()) {
+async function persistConfig(cfg = snapshotUI(els)) {
   try {
     await saveConfig(cfg);
   } catch (error) {
@@ -376,205 +182,5 @@ async function persistConfig(cfg = snapshotUI()) {
 }
 
 function queuePersistSnapshot() {
-  persistConfigDebounced(snapshotUI());
-}
-
-// Plan metadata helper
-function updatePlanMeta(initialSoc_percent, tsStart) {
-  if (els.planSocNow) {
-    if (initialSoc_percent == null || !Number.isFinite(Number(initialSoc_percent))) {
-      els.planSocNow.textContent = "—";
-    } else {
-      const n = Number(initialSoc_percent);
-      els.planSocNow.textContent = String(Math.round(n));
-    }
-  }
-
-  if (els.planTsStart) {
-    if (!tsStart) {
-      els.planTsStart.textContent = "—";
-    } else {
-      const raw = String(tsStart);
-      let display = raw;
-      const date = new Date(tsStart);
-      if (!isNaN(date.getTime())) {
-        const d = String(date.getDate()).padStart(2, "0");
-        const m = String(date.getMonth() + 1).padStart(2, "0");
-        const H = String(date.getHours()).padStart(2, "0");
-        const M = String(date.getMinutes()).padStart(2, "0");
-        display = `${d}/${m} ${H}:${M}`;
-      }
-      els.planTsStart.textContent = display;
-    }
-  }
-}
-
-// Summary helper
-function updateSummaryUI(summary) {
-  if (!summary) {
-    setText(els.sumLoad, "—");
-    setText(els.sumPv, "—");
-    setText(els.sumLoadGrid, "—");
-    setText(els.sumLoadBatt, "—");
-    setText(els.sumLoadPv, "—");
-    setText(els.avgImport, "—");
-    setText(els.gridBatteryTp, "—");
-    setText(els.gridChargeTp, "—");
-    setText(els.batteryExportTp, "—");
-
-    // reset mini bar
-    if (els.loadSplitGridBar && els.loadSplitBattBar && els.loadSplitPvBar) {
-      [els.loadSplitGridBar, els.loadSplitBattBar, els.loadSplitPvBar].forEach(el => {
-        el.style.width = "0%";
-        el.style.opacity = "0";
-      });
-    }
-    return;
-  }
-
-  const {
-    loadTotal_kWh,
-    pvTotal_kWh,
-    loadFromGrid_kWh,
-    loadFromBattery_kWh,
-    loadFromPv_kWh,
-    avgImportPrice_cents_per_kWh,
-    gridBatteryTippingPoint_cents_per_kWh,
-    gridChargeTippingPoint_cents_per_kWh,
-    batteryExportTippingPoint_cents_per_kWh,
-  } = summary;
-
-  setText(els.sumLoad, formatKWh(loadTotal_kWh));
-  setText(els.sumPv, formatKWh(pvTotal_kWh));
-  setText(els.sumLoadGrid, formatKWh(loadFromGrid_kWh));
-  setText(els.sumLoadBatt, formatKWh(loadFromBattery_kWh));
-  setText(els.sumLoadPv, formatKWh(loadFromPv_kWh));
-  setText(els.avgImport, formatCentsPerKWh(avgImportPrice_cents_per_kWh));
-  setText(els.gridBatteryTp, formatTippingPoint(gridBatteryTippingPoint_cents_per_kWh, "↓"));
-  setText(els.gridChargeTp, formatTippingPoint(gridChargeTippingPoint_cents_per_kWh, "↓"));
-  setText(els.batteryExportTp, formatTippingPoint(batteryExportTippingPoint_cents_per_kWh, "↑"));
-
-
-  // --- Load Split Bar ---
-  const loadTotal =
-    (Number(loadFromGrid_kWh) || 0) +
-    (Number(loadFromBattery_kWh) || 0) +
-    (Number(loadFromPv_kWh) || 0);
-
-  updateStackedBar(
-    [els.loadSplitGridBar, els.loadSplitBattBar, els.loadSplitPvBar],
-    loadTotal,
-    [
-      { value: loadFromGrid_kWh, color: SOLUTION_COLORS.g2l },
-      { value: loadFromBattery_kWh, color: SOLUTION_COLORS.b2l },
-      { value: loadFromPv_kWh, color: SOLUTION_COLORS.pv2l },
-    ]
-  );
-
-  // --- Energy Flow Bar ---
-  const g2b = Number(summary.gridToBattery_kWh) || 0;
-  const g2l = Number(loadFromGrid_kWh) || 0;
-  const b2l = Number(loadFromBattery_kWh) || 0;
-  const b2g = Number(summary.batteryToGrid_kWh) || 0;
-
-
-  const flowTotal = g2b + g2l + b2l + b2g;
-
-  updateStackedBarContainer(
-    document.getElementById("flow-split-bar"),
-    flowTotal,
-    [
-      { value: g2b, color: SOLUTION_COLORS.g2b, title: `Grid to Battery: ${formatKWh(g2b)}` }, // Charge
-      { value: g2l, color: SOLUTION_COLORS.g2l, title: `Grid to Load: ${formatKWh(g2l)}` },      // Load (Grid)
-      { value: b2l, color: SOLUTION_COLORS.b2l, title: `Battery to Load: ${formatKWh(b2l)}` },   // Load (Batt)
-      { value: b2g, color: SOLUTION_COLORS.b2g, title: `Battery to Grid: ${formatKWh(b2g)}` },   // Export
-    ]
-  );
-}
-
-// Helper to update specific bar elements (legacy support for Load Split if we want, or unified)
-function updateStackedBarContainer(container, total, segments) {
-  if (!container) return;
-  container.innerHTML = ""; // Clear for simplicity (or diff if performance needed, but this is infrequent)
-
-  if (total <= 0) return;
-
-  segments.forEach(seg => {
-    const pct = (seg.value / total) * 100;
-    if (pct <= 0) return; // skip empty
-
-    const el = document.createElement("div");
-    el.style.height = "100%";
-    el.style.width = `${pct}%`;
-    el.style.backgroundColor = seg.color;
-    if (seg.title) el.title = seg.title;
-    container.appendChild(el);
-  });
-}
-
-// Adapter for the existing load split bar elements (which are static in HTML)
-function updateStackedBar(elements, total, segments) {
-  if (!elements || elements.length !== segments.length) return;
-  if (total <= 0) {
-    elements.forEach(el => {
-      el.style.width = "0%";
-      el.style.opacity = "0";
-    });
-    return;
-  }
-
-  elements.forEach((el, i) => {
-    const seg = segments[i];
-    const pct = (seg.value / total) * 100;
-    el.style.width = `${pct}%`;
-    el.style.opacity = "1";
-    el.style.backgroundColor = seg.color;
-    if (seg.title) el.title = seg.title;
-  });
-}
-
-
-// small utils
-function setIfDef(el, v) {
-  if (!el) return;
-  if (v === 0) {
-    if ("value" in el) el.value = "0";
-    else el.textContent = "0";
-    return;
-  }
-  if (v == null || (typeof v === "string" && v.length === 0)) return;
-  const s = String(v);
-  if ("value" in el) el.value = s;
-  else el.textContent = s;
-}
-
-function num(val) {
-  const n = Number(val);
-  return Number.isFinite(n) ? n : null;
-}
-
-function setText(el, txt) {
-  if (!el) return;
-  el.textContent = txt;
-}
-
-function formatKWh(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  if (Math.abs(n) < 0.005) return "0.00 kWh";
-  return `${n.toFixed(2)} kWh`;
-}
-
-function formatCentsPerKWh(v) {
-  if (v === null || v === undefined) return "—";
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return `${n.toFixed(2)} c€/kWh`;
-}
-
-function formatTippingPoint(v, symbol) {
-  if (v === null || v === undefined) return "—";
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return `${symbol} ${n.toFixed(2)} c€`;
+  persistConfigDebounced(snapshotUI(els));
 }

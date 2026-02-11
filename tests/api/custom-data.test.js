@@ -34,7 +34,7 @@ app.use('/data', dataRouter);
 app.use('/calculate', calculateRouter);
 
 // Error handling middleware for tests
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   const status = err.statusCode || err.status || 500;
   res.status(status).json({ message: err.message });
 });

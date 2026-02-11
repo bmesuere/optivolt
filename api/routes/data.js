@@ -1,6 +1,6 @@
 import express from 'express';
 import { loadData, saveData } from '../services/data-store.js';
-import { toHttpError } from '../http-errors.js';
+import { HttpError, toHttpError } from '../http-errors.js';
 
 const router = express.Router();
 
@@ -27,7 +27,7 @@ router.post('/', async (req, res, next) => {
     const payload = req.body;
 
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-      return res.status(400).json({ message: 'Payload must be a JSON object' });
+      throw new HttpError(400, 'Payload must be a JSON object');
     }
 
     const currentData = await loadData();
@@ -37,7 +37,7 @@ router.post('/', async (req, res, next) => {
     const keysToUpdate = Object.keys(payload).filter(k => allowedKeys.includes(k));
 
     if (keysToUpdate.length === 0) {
-      return res.status(400).json({ message: 'No valid data keys provided', keysUpdated: [] });
+      throw new HttpError(400, 'No valid data keys provided', { details: { keysUpdated: [] } });
     }
 
     const nextData = { ...currentData };
