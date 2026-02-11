@@ -32,7 +32,7 @@ export function renderTable({ rows, cfg, targets, showKwh, dessDiff }) {
     }
   }
 
-  const timesDisp = rows.map((row, idx) => {
+  const timesDisp = rows.map((row) => {
     const dt = new Date(row.timestampMs);
     // If minutes and hours are 0, it's midnight -> show Date
     if (dt.getHours() === 0 && dt.getMinutes() === 0) {

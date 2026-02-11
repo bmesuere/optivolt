@@ -164,7 +164,7 @@ export function buildSolverConfigFromSettings(settings, data = {}) {
 }
 
 // Timeline info derived from dynamic calculation
-export function getTimingData(settings, data = {}) {
+export function getTimingData(settings) {
   const stepMin = numOrThrow(settings.stepSize_m, 'stepSize_m');
   const nowMs = getQuarterStart(new Date(), stepMin);
 
