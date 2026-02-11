@@ -72,7 +72,7 @@ describe('mapRowsToDess', () => {
     it('uses price signal when no flow (Price <= Tipping Point -> ProBattery)', () => {
       // We need 2 slots. Slot 0 defines tipping point (Grid usage at high price).
       // Slot 1 has no flow (load=pv=0) but low price.
-      // Both will be in same segment because socTarget_percent is undefined.
+      // Both will be in same segment because soc_percent (50) is not at min/max boundary.
       const rows = [
         {
           ...baseRow,
@@ -260,22 +260,13 @@ describe('Tipping Point Calculations', () => {
   };
 
   // Helper to create a row with specific values
-  function createRow({
-    soc_percent = 50,
-    g2b = 0, // Grid to Battery
-    b2g = 0, // Battery to Grid
-    ic = 0,  // Import Cost
-    ec = 0,  // Export Cost (Revenue)
-  } = {}) {
+  function createRow(overrides = {}) {
     return {
-      soc_percent,
-      g2b,
-      b2g,
-      ic,
-      ec,
-      // defaults for others to avoid crashes
+      soc_percent: 50,
+      g2b: 0, b2g: 0, ic: 0, ec: 0,
       g2l: 0, pv2l: 0, pv2b: 0, pv2g: 0, b2l: 0,
-      load: 0, pv: 0, soc: 0
+      load: 0, pv: 0, soc: 0,
+      ...overrides,
     };
   }
 
@@ -292,14 +283,14 @@ describe('Tipping Point Calculations', () => {
     expect(result.diagnostics.gridChargeTippingPoint_cents_per_kWh).toBe(15);
   });
 
-  it('should return null for Grid Charge Tipping Point if no charging occurs', () => {
+  it('should return -Infinity for Grid Charge Tipping Point if no charging occurs', () => {
     const rows = [
       createRow({ soc_percent: 50, g2b: 0, ic: 10 }),
       createRow({ soc_percent: 50, g2b: 0, ic: 15 }),
     ];
 
     const result = mapRowsToDess(rows, mockCfg);
-    expect(result.diagnostics.gridChargeTippingPoint_cents_per_kWh).toBeNull();
+    expect(result.diagnostics.gridChargeTippingPoint_cents_per_kWh).toBe(-Infinity);
   });
 
   it('should calculate Battery Export Tipping Point correctly', () => {
@@ -315,14 +306,14 @@ describe('Tipping Point Calculations', () => {
     expect(result.diagnostics.batteryExportTippingPoint_cents_per_kWh).toBe(20);
   });
 
-  it('should return null for Battery Export Tipping Point if no exporting occurs', () => {
+  it('should return Infinity for Battery Export Tipping Point if no exporting occurs', () => {
     const rows = [
       createRow({ soc_percent: 50, b2g: 0, ec: 30 }),
       createRow({ soc_percent: 50, b2g: 0, ec: 20 }),
     ];
 
     const result = mapRowsToDess(rows, mockCfg);
-    expect(result.diagnostics.batteryExportTippingPoint_cents_per_kWh).toBeNull();
+    expect(result.diagnostics.batteryExportTippingPoint_cents_per_kWh).toBe(Infinity);
   });
 
   it('should ignore small flows (epsilon)', () => {
@@ -357,5 +348,27 @@ describe('Tipping Point Calculations', () => {
     // We expect it to find 10c from segment 1, NOT 99c from segment 2.
     const result = mapRowsToDess(rows, mockCfg);
     expect(result.diagnostics.gridChargeTippingPoint_cents_per_kWh).toBe(10);
+  });
+
+  it('should calculate Grid Battery Tipping Point (grid->load) correctly', () => {
+    const rows = [
+      createRow({ soc_percent: 50, g2l: 100, ic: 40 }), // Grid usage at 40c
+      createRow({ soc_percent: 50, g2l: 100, ic: 30 }), // Grid usage at 30c
+      createRow({ soc_percent: 50, g2l: 0, ic: 50 }),   // No usage at 50c
+    ];
+
+    const result = mapRowsToDess(rows, mockCfg);
+    // Highest price used was 40c
+    expect(result.diagnostics.gridBatteryTippingPoint_cents_per_kWh).toBe(40);
+  });
+
+  it('should return -Infinity for Grid Battery Tipping Point if no grid usage occurs', () => {
+    const rows = [
+      createRow({ soc_percent: 50, g2l: 0, ic: 40 }),
+      createRow({ soc_percent: 50, g2l: 0, ic: 30 }),
+    ];
+
+    const result = mapRowsToDess(rows, mockCfg);
+    expect(result.diagnostics.gridBatteryTippingPoint_cents_per_kWh).toBe(-Infinity);
   });
 });
