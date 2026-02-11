@@ -103,11 +103,17 @@ function buildPlanSummary(rows, cfg, dessDiagnostics = {}) {
     importEnergy_kWh: importEnergy,
     avgImportPrice_cents_per_kWh: avgImportPrice,
     gridBatteryTippingPoint_cents_per_kWh:
-      dessDiagnostics.gridBatteryTippingPoint_cents_per_kWh ?? null,
+      Number.isFinite(dessDiagnostics.gridBatteryTippingPoint_cents_per_kWh)
+        ? dessDiagnostics.gridBatteryTippingPoint_cents_per_kWh
+        : null,
     gridChargeTippingPoint_cents_per_kWh:
-      dessDiagnostics.gridChargeTippingPoint_cents_per_kWh ?? null,
+      Number.isFinite(dessDiagnostics.gridChargeTippingPoint_cents_per_kWh)
+        ? dessDiagnostics.gridChargeTippingPoint_cents_per_kWh
+        : null,
     batteryExportTippingPoint_cents_per_kWh:
-      dessDiagnostics.batteryExportTippingPoint_cents_per_kWh ?? null,
+      Number.isFinite(dessDiagnostics.batteryExportTippingPoint_cents_per_kWh)
+        ? dessDiagnostics.batteryExportTippingPoint_cents_per_kWh
+        : null,
   };
 }
 
