@@ -442,47 +442,89 @@ function updateSummaryUI(summary) {
   setText(els.sumLoadBatt, formatKWh(loadFromBattery_kWh));
   setText(els.sumLoadPv, formatKWh(loadFromPv_kWh));
   setText(els.avgImport, formatCentsPerKWh(avgImportPrice_cents_per_kWh));
-  setText(els.gridBatteryTp, formatCentsPerKWh(gridBatteryTippingPoint_cents_per_kWh));
-  setText(els.gridChargeTp, formatCentsPerKWh(gridChargeTippingPoint_cents_per_kWh));
-  setText(els.batteryExportTp, formatCentsPerKWh(batteryExportTippingPoint_cents_per_kWh));
+  setText(els.gridBatteryTp, formatTippingPoint(gridBatteryTippingPoint_cents_per_kWh, "↓"));
+  setText(els.gridChargeTp, formatTippingPoint(gridChargeTippingPoint_cents_per_kWh, "↓"));
+  setText(els.batteryExportTp, formatTippingPoint(batteryExportTippingPoint_cents_per_kWh, "↑"));
 
-  const total =
+
+  // --- Load Split Bar ---
+  const loadTotal =
     (Number(loadFromGrid_kWh) || 0) +
     (Number(loadFromBattery_kWh) || 0) +
     (Number(loadFromPv_kWh) || 0);
 
-  const gridEl = els.loadSplitGridBar;
-  const battEl = els.loadSplitBattBar;
-  const pvEl = els.loadSplitPvBar;
+  updateStackedBar(
+    [els.loadSplitGridBar, els.loadSplitBattBar, els.loadSplitPvBar],
+    loadTotal,
+    [
+      { value: loadFromGrid_kWh, color: SOLUTION_COLORS.g2l },
+      { value: loadFromBattery_kWh, color: SOLUTION_COLORS.b2l },
+      { value: loadFromPv_kWh, color: SOLUTION_COLORS.pv2l },
+    ]
+  );
 
-  if (!gridEl || !battEl || !pvEl) return;
+  // --- Energy Flow Bar ---
+  const g2b = Number(summary.gridToBattery_kWh) || 0;
+  const g2l = Number(loadFromGrid_kWh) || 0;
+  const b2l = Number(loadFromBattery_kWh) || 0;
+  const b2g = Number(summary.batteryToGrid_kWh) || 0;
 
+
+  const flowTotal = g2b + g2l + b2l + b2g;
+
+  updateStackedBarContainer(
+    document.getElementById("flow-split-bar"),
+    flowTotal,
+    [
+      { value: g2b, color: SOLUTION_COLORS.g2b, title: `Grid to Battery: ${formatKWh(g2b)}` }, // Charge
+      { value: g2l, color: SOLUTION_COLORS.g2l, title: `Grid to Load: ${formatKWh(g2l)}` },      // Load (Grid)
+      { value: b2l, color: SOLUTION_COLORS.b2l, title: `Battery to Load: ${formatKWh(b2l)}` },   // Load (Batt)
+      { value: b2g, color: SOLUTION_COLORS.b2g, title: `Battery to Grid: ${formatKWh(b2g)}` },   // Export
+    ]
+  );
+}
+
+// Helper to update specific bar elements (legacy support for Load Split if we want, or unified)
+function updateStackedBarContainer(container, total, segments) {
+  if (!container) return;
+  container.innerHTML = ""; // Clear for simplicity (or diff if performance needed, but this is infrequent)
+
+  if (total <= 0) return;
+
+  segments.forEach(seg => {
+    const pct = (seg.value / total) * 100;
+    if (pct <= 0) return; // skip empty
+
+    const el = document.createElement("div");
+    el.style.height = "100%";
+    el.style.width = `${pct}%`;
+    el.style.backgroundColor = seg.color;
+    if (seg.title) el.title = seg.title;
+    container.appendChild(el);
+  });
+}
+
+// Adapter for the existing load split bar elements (which are static in HTML)
+function updateStackedBar(elements, total, segments) {
+  if (!elements || elements.length !== segments.length) return;
   if (total <= 0) {
-    // nothing to show
-    [gridEl, battEl, pvEl].forEach(el => {
+    elements.forEach(el => {
       el.style.width = "0%";
       el.style.opacity = "0";
     });
     return;
   }
 
-  const gridPct = (Number(loadFromGrid_kWh) || 0) / total * 100;
-  const battPct = (Number(loadFromBattery_kWh) || 0) / total * 100;
-  const pvPct = (Number(loadFromPv_kWh) || 0) / total * 100;
-
-  gridEl.style.width = `${gridPct}%`;
-  battEl.style.width = `${battPct}%`;
-  pvEl.style.width = `${pvPct}%`;
-
-  // match flows chart colors: g2l, b2l, pv2l
-  gridEl.style.backgroundColor = SOLUTION_COLORS.g2l;
-  battEl.style.backgroundColor = SOLUTION_COLORS.b2l;
-  pvEl.style.backgroundColor = SOLUTION_COLORS.pv2l;
-
-  [gridEl, battEl, pvEl].forEach(el => {
+  elements.forEach((el, i) => {
+    const seg = segments[i];
+    const pct = (seg.value / total) * 100;
+    el.style.width = `${pct}%`;
     el.style.opacity = "1";
+    el.style.backgroundColor = seg.color;
+    if (seg.title) el.title = seg.title;
   });
 }
+
 
 // small utils
 function setIfDef(el, v) {
@@ -520,4 +562,11 @@ function formatCentsPerKWh(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
   return `${n.toFixed(2)} c€/kWh`;
+}
+
+function formatTippingPoint(v, symbol) {
+  if (v === null || v === undefined) return "—";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "—";
+  return `${symbol} ${n.toFixed(2)} c€`;
 }
