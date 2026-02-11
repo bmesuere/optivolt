@@ -146,6 +146,9 @@ export function buildSolverConfigFromSettings(settings, data = {}) {
     terminalSocCustomPrice_cents_per_kWh,
 
     initialSoc_percent,
+
+    // Algorithm version
+    dessAlgorithm: settings.dessAlgorithm ?? 'v1',
   };
 
   // Sanity: clamp min/max SOC to [0,100], ensure min <= max

@@ -18,5 +18,6 @@
     "load": "vrm",
     "pv": "vrm",
     "soc": "mqtt"
-  }
+  },
+  "dessAlgorithm": "v1"
 }

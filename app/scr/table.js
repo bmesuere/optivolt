@@ -13,7 +13,7 @@ import { SOLUTION_COLORS } from "./charts.js";
  * @param {HTMLElement}  [opts.targets.tableUnit] - element for the "Units: ..." label
  * @param {boolean}      opts.showKwh             - whether to display kWh instead of W
  */
-export function renderTable({ rows, cfg, targets, showKwh }) {
+export function renderTable({ rows, cfg, targets, showKwh, dessDiff }) {
   const { table, tableUnit } = targets || {};
   if (!table || !Array.isArray(rows) || rows.length === 0) return;
 
@@ -24,7 +24,15 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
   const fmtTime = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
   const fmtDate = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit" });
 
-  const timesDisp = rows.map(row => {
+  // Build a slot→diff lookup for quick per-row checks
+  const diffBySlot = new Map();
+  if (dessDiff?.diffs) {
+    for (const d of dessDiff.diffs) {
+      diffBySlot.set(d.slot, d);
+    }
+  }
+
+  const timesDisp = rows.map((row, idx) => {
     const dt = new Date(row.timestampMs);
     // If minutes and hours are 0, it's midnight -> show Date
     if (dt.getHours() === 0 && dt.getMinutes() === 0) {
@@ -57,13 +65,15 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
       key: "dess_strategy",
       headerHtml: "DESS<br>strategy",
       fmt: (_, ri) => fmtDessStrategy(rows[ri]?.dess?.strategy),
-      tip: '0=Target SOC, 1=Self-consumption, 2=Pro battery, 3=Pro grid; "?" = unknown',
+      tip: 'DESS strategy: TS=Target SoC, SC=Self-consumption, PB=Pro battery, PG=Pro grid',
+      cellTip: true,
     },
     {
       key: "dess_restrictions",
       headerHtml: "Restr.",
       fmt: (_, ri) => fmtDessRestrictions(rows[ri]?.dess?.restrictions),
-      tip: '0=none, 1=grid→bat restricted, 2=bat→grid restricted, 3=both; "?" = unknown',
+      tip: 'Grid↔battery restrictions',
+      cellTip: true,
     },
     {
       key: "dess_feedin",
@@ -85,6 +95,21 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
     },
   ];
 
+  // Add diff indicator column when v2 diff data is available
+  if (diffBySlot.size > 0) {
+    cols.push({
+      key: "dess_diff",
+      headerHtml: "Δ",
+      fmt: (_, ri) => {
+        const d = diffBySlot.get(ri);
+        if (!d) return "";
+        return { text: "⚠", tip: fmtDiffTooltip(d), style: "color: #d97706" };
+      },
+      tip: "V1 → V2 differences",
+      cellTip: true,
+    });
+  }
+
   const thead = `
     <thead>
       <tr class="align-bottom">
@@ -103,8 +128,16 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
     const tds = cols.map(c => {
       const raw = c.key === "time" ? null : r[c.key];
       const displayVal = c.key === "time" ? timeLabel : c.fmt(raw, ri);
-      const styleAttr = styleForCell(c.key, raw); // only applies to flow columns with > 0
-      return `<td ${styleAttr} class="px-2 py-1 text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${displayVal}</td>`;
+      const isObj = typeof displayVal === "object";
+      const cellTitle = c.cellTip && isObj ? ` title="${escapeHtml(displayVal.tip)}"` : "";
+      const cellText = isObj ? displayVal.text : displayVal;
+      // Merge flow-cell background style with per-value inline style (e.g. icon color)
+      const bgStyle = styleForCell(c.key, raw);
+      const extraStyle = isObj && displayVal.style ? displayVal.style : "";
+      const combinedStyle = bgStyle || extraStyle
+        ? `style="${bgStyle ? bgStyle.replace(/^style="/, "").replace(/"$/, "") : ""}${bgStyle && extraStyle ? "; " : ""}${extraStyle}"`
+        : "";
+      return `<td ${combinedStyle}${cellTitle} class="px-2 py-1 text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${cellText}</td>`;
     }).join("");
 
     return `<tr class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 ">${tds}</tr>`;
@@ -129,15 +162,41 @@ export function renderTable({ rows, cfg, targets, showKwh }) {
   }
 
   function fmtDessStrategy(v) {
-    if (v === -1 || v === "-1" || v == null) return "?";
-    const map = { 0: "TS", 1: "SC", 2: "PB", 3: "PG" }; // Target, Self, Pro-bat, Pro-grid
-    return map[v] ?? String(v);
+    if (v === -1 || v === "-1" || v == null) return { text: "?", tip: "Unknown" };
+    const map = { 0: "TS", 1: "SC", 2: "PB", 3: "PG" };
+    const tips = { 0: "Target SoC", 1: "Self-consumption", 2: "Pro battery", 3: "Pro grid" };
+    return { text: map[v] ?? String(v), tip: tips[v] ?? String(v) };
   }
 
   function fmtDessRestrictions(v) {
-    if (v === -1 || v === "-1" || v == null) return "?";
-    // 0=no restrictions, 1=grid→bat restricted, 2=bat→grid restricted, 3=both blocked
-    return String(v);
+    if (v === -1 || v === "-1" || v == null) return { text: "?", tip: "Unknown" };
+    const map = { 0: "—", 1: "⊘b→g", 2: "⊘g→b", 3: "⊘⊘" };
+    const tips = {
+      0: "No restrictions",
+      1: "Battery → grid restricted",
+      2: "Grid → battery restricted",
+      3: "Both directions restricted",
+    };
+    return { text: map[v] ?? String(v), tip: tips[v] ?? String(v) };
+  }
+
+  function fmtDiffTooltip(d) {
+    const sn = { 0: "Target SoC", 1: "Self-consumption", 2: "Pro battery", 3: "Pro grid" };
+    const rn = { 0: "none", 1: "b→g restricted", 2: "g→b restricted", 3: "both restricted" };
+    const parts = [];
+    if (d.v1?.strategy !== d.v2?.strategy) {
+      parts.push(`Strategy: ${sn[d.v1?.strategy] ?? "?"} → ${sn[d.v2?.strategy] ?? "?"}`);
+    }
+    if (d.v1?.restrictions !== d.v2?.restrictions) {
+      parts.push(`Restrictions: ${rn[d.v1?.restrictions] ?? "?"} → ${rn[d.v2?.restrictions] ?? "?"}`);
+    }
+    if (d.v1?.socTarget_percent !== d.v2?.socTarget_percent) {
+      parts.push(`SoC target: ${d.v1?.socTarget_percent ?? "?"}% → ${d.v2?.socTarget_percent ?? "?"}%`);
+    }
+    if (d.v1?.feedin !== d.v2?.feedin) {
+      parts.push(`Feed-in: ${d.v1?.feedin ? "yes" : "no"} → ${d.v2?.feedin ? "yes" : "no"}`);
+    }
+    return parts.length ? parts.join("; ") : "Differs";
   }
 
   function fmtDessFeedin(v) {
