@@ -63,7 +63,9 @@ const els = {
   loadSplitBattBar: $("#load-split-batt-bar"),
   loadSplitPvBar: $("#load-split-pv-bar"),
   avgImport: $("#avg-import-cent"),
-  tippingPoint: $("#tipping-point-cent"),
+  gridBatteryTp: $("#tipping-point-cent"),
+  gridChargeTp: $("#grid-charge-point-cent"),
+  batteryExportTp: $("#export-point-cent"),
 
   // VRM section
   vrmFetchSettings: $("#vrm-fetch-settings"),
@@ -408,7 +410,9 @@ function updateSummaryUI(summary) {
     setText(els.sumLoadBatt, "—");
     setText(els.sumLoadPv, "—");
     setText(els.avgImport, "—");
-    setText(els.tippingPoint, "—");
+    setText(els.gridBatteryTp, "—");
+    setText(els.gridChargeTp, "—");
+    setText(els.batteryExportTp, "—");
 
     // reset mini bar
     if (els.loadSplitGridBar && els.loadSplitBattBar && els.loadSplitPvBar) {
@@ -427,7 +431,9 @@ function updateSummaryUI(summary) {
     loadFromBattery_kWh,
     loadFromPv_kWh,
     avgImportPrice_cents_per_kWh,
-    firstSegmentTippingPoint_cents_per_kWh,
+    gridBatteryTippingPoint_cents_per_kWh,
+    gridChargeTippingPoint_cents_per_kWh,
+    batteryExportTippingPoint_cents_per_kWh,
   } = summary;
 
   setText(els.sumLoad, formatKWh(loadTotal_kWh));
@@ -436,7 +442,9 @@ function updateSummaryUI(summary) {
   setText(els.sumLoadBatt, formatKWh(loadFromBattery_kWh));
   setText(els.sumLoadPv, formatKWh(loadFromPv_kWh));
   setText(els.avgImport, formatCentsPerKWh(avgImportPrice_cents_per_kWh));
-  setText(els.tippingPoint, formatCentsPerKWh(firstSegmentTippingPoint_cents_per_kWh));
+  setText(els.gridBatteryTp, formatCentsPerKWh(gridBatteryTippingPoint_cents_per_kWh));
+  setText(els.gridChargeTp, formatCentsPerKWh(gridChargeTippingPoint_cents_per_kWh));
+  setText(els.batteryExportTp, formatCentsPerKWh(batteryExportTippingPoint_cents_per_kWh));
 
   const total =
     (Number(loadFromGrid_kWh) || 0) +

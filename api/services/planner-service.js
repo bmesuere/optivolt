@@ -40,8 +40,12 @@ function buildPlanSummary(rows, cfg, dessDiagnostics = {}) {
       loadFromPv_kWh: 0,
       importEnergy_kWh: 0,
       avgImportPrice_cents_per_kWh: null,
-      firstSegmentTippingPoint_cents_per_kWh:
-        dessDiagnostics.firstSegmentTippingPoint_cents_per_kWh ?? null,
+      gridBatteryTippingPoint_cents_per_kWh:
+        dessDiagnostics.gridBatteryTippingPoint_cents_per_kWh ?? null,
+      gridChargeTippingPoint_cents_per_kWh:
+        dessDiagnostics.gridChargeTippingPoint_cents_per_kWh ?? null,
+      batteryExportTippingPoint_cents_per_kWh:
+        dessDiagnostics.batteryExportTippingPoint_cents_per_kWh ?? null,
     };
   }
 
@@ -90,8 +94,12 @@ function buildPlanSummary(rows, cfg, dessDiagnostics = {}) {
     loadFromPv_kWh: loadFromPv,
     importEnergy_kWh: importEnergy,
     avgImportPrice_cents_per_kWh: avgImportPrice,
-    firstSegmentTippingPoint_cents_per_kWh:
-      dessDiagnostics.firstSegmentTippingPoint_cents_per_kWh ?? null,
+    gridBatteryTippingPoint_cents_per_kWh:
+      dessDiagnostics.gridBatteryTippingPoint_cents_per_kWh ?? null,
+    gridChargeTippingPoint_cents_per_kWh:
+      dessDiagnostics.gridChargeTippingPoint_cents_per_kWh ?? null,
+    batteryExportTippingPoint_cents_per_kWh:
+      dessDiagnostics.batteryExportTippingPoint_cents_per_kWh ?? null,
   };
 }
 
