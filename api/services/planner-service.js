@@ -1,6 +1,6 @@
 import highsFactory from 'highs';
 
-import { mapRowsToDess } from '../../lib/dess-mapper.js';
+import { mapRowsToDess, mapRowsToDessV2, computeDessDiff } from '../../lib/dess-mapper.js';
 import { buildLP } from '../../lib/build-lp.js';
 import { parseSolution } from '../../lib/parse-solution.js';
 import { getSolverInputs } from './solver-input-service.js';
@@ -150,16 +150,26 @@ export async function computePlan({ updateData = false } = {}) {
   const result = highs.solve(lpText);
 
   const rows = parseSolution(result, cfg, timing);
-  const { perSlot, diagnostics } = mapRowsToDess(rows, cfg);
+
+  const useV2 = cfg.dessAlgorithm === 'v2';
+  const activeMapper = useV2 ? mapRowsToDessV2 : mapRowsToDess;
+  const { perSlot, diagnostics } = activeMapper(rows, cfg);
   const dessDiagnostics = diagnostics;
 
   for (let i = 0; i < rows.length; i++) {
     rows[i].dess = perSlot[i];
   }
 
+  // When v2 is active, also run v1 and compute diff
+  let dessDiff;
+  if (useV2) {
+    const v1Result = mapRowsToDess(rows, cfg);
+    dessDiff = computeDessDiff(v1Result.perSlot, perSlot);
+  }
+
   const summary = buildPlanSummary(rows, cfg, dessDiagnostics);
 
-  return { cfg, data, timing, result, rows, summary };
+  return { cfg, data, timing, result, rows, summary, dessDiff };
 }
 
 /**
@@ -181,12 +191,12 @@ export async function planAndMaybeWrite({
   updateData = false,
   writeToVictron = false,
 } = {}) {
-  const { cfg, data, timing, result, rows, summary } =
+  const { cfg, data, timing, result, rows, summary, dessDiff } =
     await computePlan({ updateData });
 
   if (writeToVictron) {
     await writePlanToVictron(rows);
   }
 
-  return { cfg, data, timing, result, rows, summary };
+  return { cfg, data, timing, result, rows, summary, dessDiff };
 }

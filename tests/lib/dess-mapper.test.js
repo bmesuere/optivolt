@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapRowsToDess, Strategy, Restrictions, FeedIn } from '../../lib/dess-mapper.js';
+import { mapRowsToDess, mapRowsToDessV2, computeDessDiff, Strategy, Restrictions, FeedIn } from '../../lib/dess-mapper.js';
 
 describe('mapRowsToDess', () => {
   const cfg = {
@@ -370,5 +370,217 @@ describe('Tipping Point Calculations', () => {
 
     const result = mapRowsToDess(rows, mockCfg);
     expect(result.diagnostics.gridBatteryTippingPoint_cents_per_kWh).toBe(-Infinity);
+  });
+});
+
+describe('mapRowsToDessV2', () => {
+  const cfg = {
+    stepSize_m: 15,
+    batteryCapacity_Wh: 20480,
+    minSoc_percent: 10,
+    maxSoc_percent: 100,
+    maxChargePower_W: 3600,
+    maxDischargePower_W: 4000,
+    maxGridImport_W: 5000,
+    maxGridExport_W: 5000,
+    chargeEfficiency_percent: 95,
+    dischargeEfficiency_percent: 95,
+    batteryCost_cent_per_kWh: 2,
+  };
+
+  // Helper to create rows with specific tipping points established
+  // A grid charge at price X sets gridChargeTp = X
+  // A grid-to-load at price Y sets gridBatteryTp = Y
+  // A battery export at price Z sets batteryExportTp = Z
+  function makeRow(overrides = {}) {
+    return {
+      g2l: 0, g2b: 0, pv2l: 0, pv2b: 0, pv2g: 0, b2l: 0, b2g: 0,
+      soc: 500, soc_percent: 50,
+      load: 0, pv: 0,
+      ic: 20, ec: 5,
+      ...overrides,
+    };
+  }
+
+  it('charges from grid when importCost <= gridChargeTp', () => {
+    // Row 0: establish gridChargeTp = 15 (g2b flow at price 15)
+    // Row 1: test slot with ic = 10 (<= 15) should charge
+    const rows = [
+      makeRow({ g2b: 100, ic: 15 }),
+      makeRow({ ic: 10, ec: 5 }),
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    expect(perSlot[1].strategy).toBe(Strategy.proBattery);
+    expect(perSlot[1].restrictions).toBe(Restrictions.batteryToGrid);
+  });
+
+  it('applies +5% SoC boost when charging and grid import is saturated', () => {
+    const rows = [
+      makeRow({ g2b: 100, ic: 15, soc_percent: 50 }),
+      makeRow({ ic: 10, ec: 5, soc_percent: 50, g2l: 1000, g2b: 4000 }), // g2l+g2b = 5000 = maxGridImport
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    expect(perSlot[1].socTarget_percent).toBe(55); // 50 + 5
+  });
+
+  it('does NOT boost SoC when charging but grid import is not saturated', () => {
+    const rows = [
+      makeRow({ g2b: 100, ic: 15, soc_percent: 50 }),
+      makeRow({ ic: 10, ec: 5, soc_percent: 50, g2l: 500, g2b: 1000 }), // g2l+g2b = 1500 < 5000
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    expect(perSlot[1].socTarget_percent).toBe(50); // no boost
+  });
+
+  it('caps SoC boost at maxSoc_percent - 1', () => {
+    const rows = [
+      makeRow({ g2b: 100, ic: 15, soc_percent: 97 }),
+      makeRow({ ic: 10, ec: 5, soc_percent: 97, g2l: 1000, g2b: 4000 }), // saturated
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, { ...cfg, maxSoc_percent: 100 });
+    expect(perSlot[1].socTarget_percent).toBe(99); // capped at 100-1
+  });
+
+  it('uses grid for load when gridChargeTp < importCost <= gridBatteryTp', () => {
+    // gridChargeTp = 10 (from g2b), gridBatteryTp = 25 (from g2l)
+    // Test slot ic = 20 (> 10 but <= 25)
+    const rows = [
+      makeRow({ g2b: 100, ic: 10 }),
+      makeRow({ g2l: 100, ic: 25, b2l: 0 }),
+      makeRow({ ic: 20, ec: 5 }),
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    expect(perSlot[2].strategy).toBe(Strategy.proBattery);
+    expect(perSlot[2].restrictions).toBe(Restrictions.both);
+  });
+
+  it('exports when exportPrice >= batteryExportTp', () => {
+    // batteryExportTp = 20 (from b2g flow at price 20)
+    // Test slot ec = 25 (>= 20) should export
+    const rows = [
+      makeRow({ b2g: 100, ec: 20, ic: 100 }),
+      makeRow({ ic: 100, ec: 25 }),
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    expect(perSlot[1].strategy).toBe(Strategy.proGrid);
+    expect(perSlot[1].restrictions).toBe(Restrictions.gridToBattery);
+  });
+
+  it('applies -5% SoC boost when exporting and grid export is saturated', () => {
+    const rows = [
+      makeRow({ b2g: 100, ec: 20, ic: 100, soc_percent: 50 }),
+      makeRow({ ic: 100, ec: 25, soc_percent: 50, b2g: 4000, pv2g: 1000 }), // b2g+pv2g = 5000 = maxGridExport
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, { ...cfg, maxGridExport_W: 5000 });
+    expect(perSlot[1].socTarget_percent).toBe(45); // 50 - 5
+  });
+
+  it('does NOT boost SoC when exporting but grid export is not saturated', () => {
+    const rows = [
+      makeRow({ b2g: 100, ec: 20, ic: 100, soc_percent: 50 }),
+      makeRow({ ic: 100, ec: 25, soc_percent: 50, b2g: 500, pv2g: 0 }), // 500 < 5000
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, { ...cfg, maxGridExport_W: 5000 });
+    expect(perSlot[1].socTarget_percent).toBe(50); // no boost
+  });
+
+  it('floors SoC boost at minSoc_percent + 1', () => {
+    const rows = [
+      makeRow({ b2g: 100, ec: 20, ic: 100, soc_percent: 13 }),
+      makeRow({ ic: 100, ec: 25, soc_percent: 13, b2g: 4000, pv2g: 1000 }), // saturated
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, { ...cfg, minSoc_percent: 10, maxGridExport_W: 5000 });
+    expect(perSlot[1].socTarget_percent).toBe(11); // floored at 10+1
+  });
+
+  it('defaults to selfConsumption when no tipping points match', () => {
+    // No g2b, g2l, or b2g flows -> all tipping points at sentinel values
+    // importCost > -Infinity but there are no flows so all tps are sentinel
+    const rows = [
+      makeRow({ ic: 20, ec: 5 }),
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    expect(perSlot[0].strategy).toBe(Strategy.selfConsumption);
+    expect(perSlot[0].restrictions).toBe(Restrictions.both);
+  });
+
+  it('blocks feed-in when export price is negative', () => {
+    const rows = [makeRow({ ec: -1 })];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    expect(perSlot[0].feedin).toBe(FeedIn.blocked);
+  });
+
+  it('allows feed-in when export price is positive', () => {
+    const rows = [makeRow({ ec: 5 })];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    expect(perSlot[0].feedin).toBe(FeedIn.allowed);
+  });
+
+  it('uses per-segment tipping points', () => {
+    // Segment 1: rows 0-1 (row 1 at minSoc boundary creates break)
+    //   g2b at price 10 -> gridChargeTp = 10
+    // Segment 2: row 2
+    //   g2b at price 50 -> gridChargeTp = 50
+    //   test row 3: ic = 30 (<= 50 in segment 2, but > 10 in segment 1)
+    const rows = [
+      makeRow({ g2b: 100, ic: 10, soc_percent: 50 }),
+      makeRow({ soc_percent: 10, ic: 40 }), // at min boundary
+      makeRow({ g2b: 100, ic: 50, soc_percent: 50 }),
+      makeRow({ ic: 30, soc_percent: 50 }),
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    // Row 3 is in segment 2 with gridChargeTp=50, ic=30 <= 50 -> charge
+    expect(perSlot[3].strategy).toBe(Strategy.proBattery);
+    expect(perSlot[3].restrictions).toBe(Restrictions.batteryToGrid);
+  });
+
+  it('returns same diagnostics shape as v1', () => {
+    const rows = [
+      makeRow({ g2b: 100, g2l: 200, b2g: 50, ic: 15, ec: 25 }),
+    ];
+    const v1Result = mapRowsToDess(rows, cfg);
+    const v2Result = mapRowsToDessV2(rows, cfg);
+    expect(Object.keys(v2Result.diagnostics).sort())
+      .toEqual(Object.keys(v1Result.diagnostics).sort());
+  });
+});
+
+describe('computeDessDiff', () => {
+  it('reports no diffs when outputs are identical', () => {
+    const slot = { feedin: 1, restrictions: 3, strategy: 1, flags: 0, socTarget_percent: 50 };
+    const result = computeDessDiff([slot], [{ ...slot }]);
+    expect(result.diffCount).toBe(0);
+    expect(result.diffs).toEqual([]);
+    expect(result.totalSlots).toBe(1);
+  });
+
+  it('detects strategy differences', () => {
+    const v1 = [{ feedin: 1, restrictions: 3, strategy: 1, flags: 0, socTarget_percent: 50 }];
+    const v2 = [{ feedin: 1, restrictions: 3, strategy: 2, flags: 0, socTarget_percent: 50 }];
+    const result = computeDessDiff(v1, v2);
+    expect(result.diffCount).toBe(1);
+    expect(result.diffs[0].slot).toBe(0);
+  });
+
+  it('detects restriction differences', () => {
+    const v1 = [{ feedin: 1, restrictions: 3, strategy: 1, flags: 0, socTarget_percent: 50 }];
+    const v2 = [{ feedin: 1, restrictions: 1, strategy: 1, flags: 0, socTarget_percent: 50 }];
+    const result = computeDessDiff(v1, v2);
+    expect(result.diffCount).toBe(1);
+  });
+
+  it('detects socTarget differences', () => {
+    const v1 = [{ feedin: 1, restrictions: 3, strategy: 1, flags: 0, socTarget_percent: 50 }];
+    const v2 = [{ feedin: 1, restrictions: 3, strategy: 1, flags: 0, socTarget_percent: 55 }];
+    const result = computeDessDiff(v1, v2);
+    expect(result.diffCount).toBe(1);
+  });
+
+  it('handles arrays of different lengths', () => {
+    const v1 = [{ feedin: 1, restrictions: 3, strategy: 1, flags: 0, socTarget_percent: 50 }];
+    const v2 = [];
+    const result = computeDessDiff(v1, v2);
+    expect(result.diffCount).toBe(1);
+    expect(result.diffs[0].v2).toBeNull();
   });
 });

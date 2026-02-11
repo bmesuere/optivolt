@@ -23,6 +23,7 @@ const els = {
   sourceLoad: $("#source-load"),
   sourcePv: $("#source-pv"),
   sourceSoc: $("#source-soc"),
+  dessAlgorithm: $("#dess-algorithm"),
 
   // numeric inputs
   step: $("#step"),
@@ -209,6 +210,9 @@ function snapshotUI() {
       soc: els.sourceSoc?.value || "mqtt",
     },
 
+    // ALGORITHM
+    dessAlgorithm: els.dessAlgorithm?.value || "v1",
+
     // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
     // Note: updateDataBeforeRun / pushToVictron are not part of the persisted settings
@@ -243,6 +247,9 @@ function hydrateUI(obj = {}) {
   if (els.sourceLoad && obj.dataSources?.load) els.sourceLoad.value = obj.dataSources.load;
   if (els.sourcePv && obj.dataSources?.pv) els.sourcePv.value = obj.dataSources.pv;
   if (els.sourceSoc && obj.dataSources?.soc) els.sourceSoc.value = obj.dataSources.soc;
+
+  // Algorithm
+  if (els.dessAlgorithm && obj.dessAlgorithm) els.dessAlgorithm.value = obj.dessAlgorithm;
 
   // UI-only
   if (els.tableKwh && obj.tableShowKwh != null) {
@@ -330,6 +337,7 @@ async function onRun() {
       cfg: cfgForViz,
       targets: { table: els.table, tableUnit: els.tableUnit },
       showKwh: !!els.tableKwh?.checked,
+      dessDiff: result.dessDiff,
     });
 
     renderAllCharts(rows, cfgForViz);
