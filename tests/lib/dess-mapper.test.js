@@ -375,10 +375,17 @@ describe('Tipping Point Calculations', () => {
 
 describe('mapRowsToDessV2', () => {
   const cfg = {
-    maxGridImport_W: 5000,
-    maxSoc_percent: 100,
+    stepSize_m: 15,
+    batteryCapacity_Wh: 20480,
     minSoc_percent: 10,
+    maxSoc_percent: 100,
+    maxChargePower_W: 3600,
     maxDischargePower_W: 4000,
+    maxGridImport_W: 5000,
+    maxGridExport_W: 5000,
+    chargeEfficiency_percent: 95,
+    dischargeEfficiency_percent: 95,
+    batteryCost_cent_per_kWh: 2,
   };
 
   // Helper to create rows with specific tipping points established

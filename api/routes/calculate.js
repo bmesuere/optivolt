@@ -25,7 +25,7 @@ router.post('/', async (req, res, next) => {
       writeToVictron: shouldWriteToVictron,
     });
 
-    const { cfg, data, timing, result, rows, summary, dessDiff } =
+    const { cfg, timing, result, rows, summary, dessDiff } =
       await planAndMaybeWrite({
         updateData: shouldUpdateData,
         writeToVictron: shouldWriteToVictron,
