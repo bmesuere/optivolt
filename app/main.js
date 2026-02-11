@@ -386,12 +386,13 @@ function updatePlanMeta(initialSoc_percent, tsStart) {
     } else {
       const raw = String(tsStart);
       let display = raw;
-      if (raw.includes("T")) {
-        const [datePart, timePart] = raw.split("T");
-        const [y, m, d] = datePart.split("-");
-        if (y && m && d && timePart) {
-          display = `${d}/${m} ${timePart}`;
-        }
+      const date = new Date(tsStart);
+      if (!isNaN(date.getTime())) {
+        const d = String(date.getDate()).padStart(2, "0");
+        const m = String(date.getMonth() + 1).padStart(2, "0");
+        const H = String(date.getHours()).padStart(2, "0");
+        const M = String(date.getMinutes()).padStart(2, "0");
+        display = `${d}/${m} ${H}:${M}`;
       }
       els.planTsStart.textContent = display;
     }
