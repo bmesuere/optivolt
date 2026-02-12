@@ -2,12 +2,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDataDir, readJson, writeJson } from './json-store.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Same DATA_DIR convention as settings-store
 const DATA_DIR = resolveDataDir();
 const DATA_PATH = path.join(DATA_DIR, 'data.json');
-const DEFAULT_PATH = path.resolve(__dirname, '../defaults/default-data.json');
+const DEFAULT_PATH = fileURLToPath(new URL('../defaults/default-data.json', import.meta.url));
 
 /**
  * Load stored data or fall back to defaults.

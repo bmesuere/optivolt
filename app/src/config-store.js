@@ -1,4 +1,4 @@
-import { fetchStoredSettings, saveStoredSettings } from "./api/settings.js";
+import { fetchStoredSettings, saveStoredSettings } from "./api/api.js";
 
 // Load exactly what the API has; do not merge client defaults anymore.
 export async function loadInitialConfig() {

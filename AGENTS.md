@@ -10,15 +10,13 @@
 
 ## Front-end layout
 - Static UI lives in `app/index.html` and `app/main.js`.
-- Browser-side modules under `app/scr/`:
+- Browser-side modules under `app/src/`:
 
-  - `app/scr/api/client.js` — low-level `getJson` / `postJson`.
-  - `app/scr/api/settings.js` — `/settings` helpers.
-  - `app/scr/api/solver.js` — `/calculate` helper (can toggle VRM refresh / MQTT write).
-  - `app/scr/config-store.js` — loads and saves the current settings snapshot via the API.
-  - `app/scr/api/backend.js` — VRM settings refresh.
-  - `app/scr/charts.js`, `app/scr/table.js` — visualization only.
-  - `app/scr/utils.js` — small utilities (e.g. debounce).
+  - `app/src/api/client.js` — low-level `getJson` / `postJson`.
+  - `app/src/api/api.js` — endpoint wrappers (settings, calculate, VRM refresh).
+  - `app/src/config-store.js` — loads and saves the current settings snapshot via the API.
+  - `app/src/charts.js`, `app/src/table.js` — visualization only.
+  - `app/src/utils.js` — small utilities (e.g. debounce).
 
 ### Settings on the client
 

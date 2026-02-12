@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getJson, postJson } from '../../../app/scr/api/client.js';
+import { getJson, postJson } from '../../../app/src/api/client.js';
 
 describe('API Client', () => {
   const fetchMock = vi.fn();
@@ -34,15 +34,15 @@ describe('API Client', () => {
     const res = await postJson('/test', payload);
 
     expect(fetchMock).toHaveBeenCalledWith('./test', expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify(payload)
+      method: 'POST',
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
     }));
     expect(res).toEqual({ success: true });
   });
 
   it('throws error on non-ok response', async () => {
-     fetchMock.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       status: 400,
       text: async () => JSON.stringify({ error: 'Bad Request' }),
@@ -52,7 +52,7 @@ describe('API Client', () => {
   });
 
   it('throws error on network failure', async () => {
-      fetchMock.mockRejectedValue(new Error('Network Error'));
-      await expect(getJson('/fail')).rejects.toThrow('Network Error');
+    fetchMock.mockRejectedValue(new Error('Network Error'));
+    await expect(getJson('/fail')).rejects.toThrow('Network Error');
   });
 });

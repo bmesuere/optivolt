@@ -46,7 +46,7 @@ Plan and control a home energy system with forecasts, dynamic tariffs, and a day
 - Shared logic lives in **`lib/`** (LP builder/parser, DESS mapping, VRM + MQTT clients).
 
 ```text
-app/                 # Static web UI (index.html, main.js, app/scr/**)
+app/                 # Static web UI (index.html, main.js, app/src/**)
 api/                 # Express server (routes + services)
 lib/                 # Core logic: LP builder, parser, DESS mapper, VRM + MQTT clients
 addon/               # Home Assistant add-on wrapper (s6, run scripts)

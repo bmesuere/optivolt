@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { debounce } from '../../app/scr/utils.js';
+import { debounce } from '../../app/src/utils.js';
 
 describe('debounce', () => {
   it('executes the function after the delay', () => {

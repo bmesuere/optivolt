@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { buildSolverConfigFromSettings } from '../../../api/services/solver-input-service.js';
+import { buildSolverConfigFromSettings } from '../../../api/services/config-builder.js';
 
 /**
- * These tests verify the "Smart Reader" logic in solver-input-service.js.
+ * These tests verify the "Smart Reader" logic in config-builder.js.
  *
  * They verify that:
  * 1. The solver horizon starts at the current 15-minute slot (now).

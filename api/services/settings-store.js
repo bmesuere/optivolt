@@ -2,12 +2,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDataDir, readJson, writeJson } from './json-store.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Allow overriding via env (e.g. Home Assistant mounts persistent state at /data)
 const DATA_DIR = resolveDataDir();
 const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
-const DEFAULT_PATH = path.resolve(__dirname, '../defaults/default-settings.json');
+const DEFAULT_PATH = fileURLToPath(new URL('../defaults/default-settings.json', import.meta.url));
 
 /**
  * Load stored settings or fall back to defaults.

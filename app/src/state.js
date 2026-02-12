@@ -122,13 +122,9 @@ export function updateSummaryUI(els, summary) {
     setText(els.gridChargeTp, "—");
     setText(els.batteryExportTp, "—");
 
-    // reset mini bar
-    if (els.loadSplitGridBar && els.loadSplitBattBar && els.loadSplitPvBar) {
-      [els.loadSplitGridBar, els.loadSplitBattBar, els.loadSplitPvBar].forEach(el => {
-        el.style.width = "0%";
-        el.style.opacity = "0";
-      });
-    }
+    // reset mini bars
+    const loadSplitBar = document.getElementById("load-split-bar");
+    if (loadSplitBar) loadSplitBar.innerHTML = "";
     return;
   }
 
@@ -161,13 +157,13 @@ export function updateSummaryUI(els, summary) {
     (Number(loadFromBattery_kWh) || 0) +
     (Number(loadFromPv_kWh) || 0);
 
-  updateStackedBar(
-    [els.loadSplitGridBar, els.loadSplitBattBar, els.loadSplitPvBar],
+  updateStackedBarContainer(
+    document.getElementById("load-split-bar"),
     loadTotal,
     [
-      { value: loadFromGrid_kWh, color: SOLUTION_COLORS.g2l },
-      { value: loadFromBattery_kWh, color: SOLUTION_COLORS.b2l },
-      { value: loadFromPv_kWh, color: SOLUTION_COLORS.pv2l },
+      { value: loadFromGrid_kWh, color: SOLUTION_COLORS.g2l, title: `Grid: ${formatKWh(loadFromGrid_kWh)}` },
+      { value: loadFromBattery_kWh, color: SOLUTION_COLORS.b2l, title: `Battery: ${formatKWh(loadFromBattery_kWh)}` },
+      { value: loadFromPv_kWh, color: SOLUTION_COLORS.pv2l, title: `PV: ${formatKWh(loadFromPv_kWh)}` },
     ]
   );
 
@@ -217,27 +213,6 @@ function updateStackedBarContainer(container, total, segments) {
     el.style.backgroundColor = seg.color;
     if (seg.title) el.title = seg.title;
     container.appendChild(el);
-  });
-}
-
-// Adapter for the existing load split bar elements (which are static in HTML)
-function updateStackedBar(elements, total, segments) {
-  if (!elements || elements.length !== segments.length) return;
-  if (total <= 0) {
-    elements.forEach(el => {
-      el.style.width = "0%";
-      el.style.opacity = "0";
-    });
-    return;
-  }
-
-  elements.forEach((el, i) => {
-    const seg = segments[i];
-    const pct = (seg.value / total) * 100;
-    el.style.width = `${pct}%`;
-    el.style.opacity = "1";
-    el.style.backgroundColor = seg.color;
-    if (seg.title) el.title = seg.title;
   });
 }
 
