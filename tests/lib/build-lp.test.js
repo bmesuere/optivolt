@@ -48,4 +48,30 @@ describe('buildLP', () => {
     const lp = buildLP({ ...mockData, terminalSocValuation: 'max' });
     expect(lp).toContain('soc_4'); // Should be in objective if valued
   });
+
+  it('subtracts default idle drain (40 W) from SOC constraints', () => {
+    const lp = buildLP(mockData);
+    // Default: 40 W * 0.25 h = 10 Wh per slot
+    // initialSoc default is 20% of 204800 = 40960 Wh; soc_0 RHS = 40960 - 10 = 40950
+    expect(lp).toContain('c_soc_0:');
+    expect(lp).toMatch(/c_soc_0:.*= 40950\b/);
+    // soc_1..soc_4 RHS = -10
+    expect(lp).toMatch(/c_soc_1:.*= -10\b/);
+  });
+
+  it('applies custom idle drain to SOC constraints', () => {
+    const lp = buildLP({ ...mockData, idleDrain_W: 100 });
+    // 100 W * 0.25 h = 25 Wh per slot
+    // soc_0 RHS = 40960 - 25 = 40935
+    expect(lp).toMatch(/c_soc_0:.*= 40935\b/);
+    expect(lp).toMatch(/c_soc_1:.*= -25\b/);
+  });
+
+  it('produces zero RHS for SOC evolution when idle drain is 0', () => {
+    const lp = buildLP({ ...mockData, idleDrain_W: 0 });
+    // soc_0 RHS = 40960 (no drain)
+    expect(lp).toMatch(/c_soc_0:.*= 40960\b/);
+    // soc_1..soc_4 RHS = 0
+    expect(lp).toMatch(/c_soc_1:.*= 0\b/);
+  });
 });

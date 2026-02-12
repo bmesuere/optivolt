@@ -24,6 +24,7 @@ export function getElements() {
     etaC: $("#etaC"),
     etaD: $("#etaD"),
     bwear: $("#bwear"),
+    idleDrain: $("#idle-drain"),
     terminal: $("#terminal"),
     terminalCustom: $("#terminal-custom"),
 

@@ -59,6 +59,7 @@ export function buildSolverConfigFromSettings(settings, data = {}) {
   const chargeEfficiency_percent = numOrThrow(settings.chargeEfficiency_percent, 'chargeEfficiency_percent');
   const dischargeEfficiency_percent = numOrThrow(settings.dischargeEfficiency_percent, 'dischargeEfficiency_percent');
   const batteryCost_cent_per_kWh = numOrThrow(settings.batteryCost_cent_per_kWh, 'batteryCost_cent_per_kWh');
+  const idleDrain_W = numOrThrow(settings.idleDrain_W, 'idleDrain_W');
 
   const terminalSocValuation = settings.terminalSocValuation;
   if (typeof terminalSocValuation !== 'string' || !terminalSocValuation) {
@@ -141,6 +142,7 @@ export function buildSolverConfigFromSettings(settings, data = {}) {
     chargeEfficiency_percent,
     dischargeEfficiency_percent,
     batteryCost_cent_per_kWh,
+    idleDrain_W,
 
     terminalSocValuation,
     terminalSocCustomPrice_cents_per_kWh,

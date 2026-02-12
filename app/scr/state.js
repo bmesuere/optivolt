@@ -15,6 +15,7 @@ export function snapshotUI(els) {
     chargeEfficiency_percent: num(els.etaC?.value),
     dischargeEfficiency_percent: num(els.etaD?.value),
     batteryCost_cent_per_kWh: num(els.bwear?.value),
+    idleDrain_W: num(els.idleDrain?.value),
 
     // ALGORITHM
     terminalSocValuation: els.terminal?.value || "zero",
@@ -50,6 +51,7 @@ export function hydrateUI(els, obj = {}) {
   setIfDef(els.etaC, obj.chargeEfficiency_percent);
   setIfDef(els.etaD, obj.dischargeEfficiency_percent);
   setIfDef(els.bwear, obj.batteryCost_cent_per_kWh);
+  setIfDef(els.idleDrain, obj.idleDrain_W);
 
   // DATA (display-only metadata)
   updatePlanMeta(els, obj.initialSoc_percent, obj.tsStart);
