@@ -31,14 +31,14 @@ The system has three layers, all plain ESM (no build step, no TypeScript):
 - **Services** (`api/services/`):
   - `planner-service.js` — Orchestrates the full pipeline: refresh VRM data → load settings/data → build LP → solve with HiGHS → parse → map to DESS → optionally write via MQTT.
   - `settings-store.js` / `data-store.js` — JSON file persistence under `DATA_DIR` (defaults to `data/`).
-  - `solver-input-service.js` — Merges persisted settings + data into solver inputs.
+  - `config-builder.js` — Merges persisted settings + data into solver inputs.
   - `vrm-refresh.js` — Fetches time-series from VRM and persists to `data.json`.
   - `mqtt-service.js` — Writes Dynamic ESS schedule via MQTT.
 - **Defaults** (`api/defaults/`): `default-settings.json` and `default-data.json` used when no persisted files exist.
 
 ### `app/` — Static web UI (no build step)
 - `index.html` + `main.js` — Entry points.
-- `app/scr/` — Browser modules: API client, config store, charts, table, utils.
+- `app/src/` — Browser modules: API client, config store, charts, table, utils.
 - The UI calls the Express API on the same origin. Time-series data is display-only (comes from VRM, not editable).
 
 ### Data flow

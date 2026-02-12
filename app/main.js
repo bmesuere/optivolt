@@ -4,12 +4,12 @@ import {
   drawSocChart,
   drawPricesStepLines,
   drawLoadPvGrouped,
-} from "./scr/charts.js";
-import { renderTable } from "./scr/table.js";
-import { debounce } from "./scr/utils.js";
-import { refreshVrmSettings } from "./scr/api/backend.js";
-import { loadInitialConfig, saveConfig } from "./scr/config-store.js";
-import { requestRemoteSolve } from "./scr/api/solver.js";
+} from "./src/charts.js";
+import { renderTable } from "./src/table.js";
+import { debounce } from "./src/utils.js";
+import { refreshVrmSettings } from "./src/api/api.js";
+import { loadInitialConfig, saveConfig } from "./src/config-store.js";
+import { requestRemoteSolve } from "./src/api/api.js";
 
 // Import new modules
 import {
@@ -17,14 +17,14 @@ import {
   wireGlobalInputs,
   wireVrmSettingInput,
   setupSystemCardCollapsible,
-} from "./scr/ui-binding.js";
+} from "./src/ui-binding.js";
 import {
   snapshotUI,
   hydrateUI,
   updatePlanMeta,
   updateSummaryUI,
   updateTerminalCustomUI,
-} from "./scr/state.js";
+} from "./src/state.js";
 
 // ---------- DOM ----------
 // 'els' is now retrieved via getElements() in boot() and passed around or accessed globally if we kept it global.

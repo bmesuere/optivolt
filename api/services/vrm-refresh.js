@@ -101,7 +101,6 @@ export async function refreshSeriesFromVrmAndPersist() {
 
   // Load previous data for fallback (we overwrite specific keys if VRM usage is active)
   const baseData = await loadData();
-  const baseSettings = settings;
 
   // Helper to extract start time safely
   const getStart = (obj, label) => {
@@ -153,7 +152,7 @@ export async function refreshSeriesFromVrmAndPersist() {
       : (baseData.soc?.timestamp ?? new Date().toISOString()),
     value: (shouldFetchSoc && Number.isFinite(socPercent))
       ? socPercent
-      : (baseData.soc?.value ?? baseData.initialSoc_percent ?? baseSettings.initialSoc_percent)
+      : (baseData.soc?.value ?? baseData.initialSoc_percent ?? settings.initialSoc_percent)
   };
 
   // Build new data snapshot
@@ -179,8 +178,8 @@ export async function refreshSeriesFromVrmAndPersist() {
 
   // Optionally keep stepSize_m in settings in sync
   const nextSettings = {
-    ...baseSettings,
-    stepSize_m: forecasts?.step_minutes || baseSettings.stepSize_m || 15,
+    ...settings,
+    stepSize_m: forecasts?.step_minutes || settings.stepSize_m || 15,
   };
   await saveSettings(nextSettings);
 }
