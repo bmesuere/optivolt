@@ -11,6 +11,7 @@
   "chargeEfficiency_percent": 95,
   "dischargeEfficiency_percent": 95,
   "batteryCost_cent_per_kWh": 2,
+  "idleDrain_W": 40,
   "terminalSocValuation": "zero",
   "terminalSocCustomPrice_cents_per_kWh": 0,
   "dataSources": {

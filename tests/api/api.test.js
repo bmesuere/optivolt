@@ -25,6 +25,7 @@ const mockSettings = {
   chargeEfficiency_percent: 100,
   dischargeEfficiency_percent: 100,
   batteryCost_cent_per_kWh: 0,
+  idleDrain_W: 0,
   terminalSocValuation: "zero",
   terminalSocCustomPrice_cents_per_kWh: 0
 };

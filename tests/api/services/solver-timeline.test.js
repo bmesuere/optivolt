@@ -25,6 +25,7 @@ describe('Solver Timeline Logic (Refactored)', () => {
     chargeEfficiency_percent: 95,
     dischargeEfficiency_percent: 95,
     batteryCost_cent_per_kWh: 0,
+    idleDrain_W: 0,
     terminalSocValuation: 'zero'
   };
 
