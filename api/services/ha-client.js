@@ -81,6 +81,7 @@ export async function fetchHaStats({ haUrl, haToken, entityIds, startTime, endTi
     };
 
     ws.onerror = (err) => {
+      ws.close();
       done(() => reject(new Error(`HA WebSocket error: ${err?.message ?? String(err)}`)));
     };
 

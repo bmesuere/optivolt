@@ -20,14 +20,18 @@ import {
  * @returns {{ sensorNames: string[], results: Array }}
  */
 export async function runValidation(config) {
-  const { haUrl, haToken, historyStart, sensors, derived, validationWindow } = config;
+  const { haUrl, haToken, sensors, derived, validationWindow } = config;
   const entityIds = sensors.map(s => s.id);
+
+  // Max lookback tested by generateAllConfigs is 8 weeks; +1 week for the validation window
+  const MAX_LOOKBACK_WEEKS = 8;
+  const startTime = new Date(Date.now() - (MAX_LOOKBACK_WEEKS + 1) * 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const rawData = await fetchHaStats({
     haUrl,
     haToken,
     entityIds,
-    startTime: historyStart,
+    startTime,
   });
 
   const data = postprocess(rawData, sensors, derived);
@@ -71,16 +75,13 @@ export async function runValidation(config) {
  * @returns {{ start: string, step: number, values: number[] }}
  */
 export async function runForecast(config) {
-  const { haUrl, haToken, historyStart, sensors, derived, activeConfig } = config;
+  const { haUrl, haToken, sensors, derived, activeConfig } = config;
   const entityIds = sensors.map(s => s.id);
 
-  // Fetch only as much history as needed (lookbackWeeks × 7 days) + buffer
-  // If historyStart is provided, use it, otherwise auto-calculate.
-  const lookbackMs = activeConfig.lookbackWeeks * 7 * 24 * 60 * 60 * 1000;
-  const bufferMs = 2 * 24 * 60 * 60 * 1000; // +2 days buffer
-  const autoStart = new Date(Date.now() - lookbackMs - bufferMs).toISOString();
-
-  const startTime = (historyStart && historyStart < autoStart) ? historyStart : autoStart;
+  // +1 week when we need recent accuracy for the UI chart
+  const extraWeeks = config.includeRecent !== false ? 1 : 0;
+  const totalWeeks = activeConfig.lookbackWeeks + extraWeeks;
+  const startTime = new Date(Date.now() - totalWeeks * 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const rawData = await fetchHaStats({
     haUrl,
@@ -100,10 +101,11 @@ export async function runForecast(config) {
   const end = new Date(now);
   end.setMinutes(0, 0, 0);
   if (currentHour < 13) {
-    end.setHours(24);
+    end.setDate(end.getDate() + 1);
+    end.setHours(0, 0, 0, 0);
   } else {
     end.setDate(end.getDate() + 1);
-    end.setHours(24);
+    end.setHours(0, 0, 0, 0);
   }
 
   // Define targets:
@@ -130,8 +132,8 @@ export async function runForecast(config) {
     futureTargets.push({
       date: d.toISOString(),
       time: t,
-      hour: d.getUTCHours(),
-      dayOfWeek: d.getUTCDay(),
+      hour: d.getHours(),
+      dayOfWeek: d.getDay(),
       value: null
     });
   }

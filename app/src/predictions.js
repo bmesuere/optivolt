@@ -17,8 +17,6 @@ import { buildTimeAxisFromTimestamps, getBaseOptions, renderChart, SOLUTION_COLO
 let validationResults = null;
 let _activeSensor = null;
 let accuracyChart = null;
-let forecastChart = null;
-let historyChart = null;
 
 export async function initPredictionsTab() {
   await hydrateForm();
@@ -168,8 +166,11 @@ async function onRecompute() {
     // Calculate Avg Error (MAE) from recent data
     let avgErrorW = 0;
     if (result.recent && result.recent.length > 0) {
-      const sumError = result.recent.reduce((acc, r) => acc + Math.abs(r.actual - r.predicted), 0);
-      avgErrorW = sumError / result.recent.length;
+      const validEntries = result.recent.filter(r => r.actual != null && r.predicted != null);
+      if (validEntries.length > 0) {
+        const sumError = validEntries.reduce((acc, r) => acc + Math.abs(r.actual - r.predicted), 0);
+        avgErrorW = sumError / validEntries.length;
+      }
     }
 
     updateSummaryMetrics(totalKwh, peak, min, avgErrorW);
@@ -206,10 +207,8 @@ function renderForecastChart({ forecast }) {
   if (!canvas) return;
 
   // Clean up legacy chart instance if it exists
-  if (forecastChart) {
-    forecastChart.destroy();
-    forecastChart = null;
-  }
+  // Clean up legacy chart instance if it exists
+  // renderChart handles this via canvas._chart
 
   // Aggregate 15-min slots into hourly kWh buckets for display
   const hourMap = new Map();
@@ -234,6 +233,12 @@ function renderForecastChart({ forecast }) {
   const hourlyKwh = sortedKeys.map(k => hourMap.get(k) / 1000); // Wh -> kWh
   const axis = buildTimeAxisFromTimestamps(sortedKeys);
 
+  const dim = (rgb) => {
+    const m = /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/.exec(rgb);
+    return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, 0.6)` : rgb;
+  };
+  const stripe = (c) => window.pattern?.draw('diagonal', c) || c;
+
   renderChart(canvas, {
     type: 'bar',
     data: {
@@ -242,9 +247,10 @@ function renderForecastChart({ forecast }) {
         {
           label: 'Consumption Forecast',
           data: hourlyKwh,
-          backgroundColor: SOLUTION_COLORS.g2l,
+          backgroundColor: stripe(SOLUTION_COLORS.g2l),
           borderColor: SOLUTION_COLORS.g2l,
           borderWidth: 1,
+          hoverBackgroundColor: stripe(dim(SOLUTION_COLORS.g2l)),
         }
       ]
     },
@@ -256,10 +262,7 @@ function renderHistoryChart(recentData) {
   const canvas = document.getElementById('pred-history-chart');
   if (!canvas) return;
 
-  if (historyChart) {
-    historyChart.destroy();
-    historyChart = null;
-  }
+  // renderChart handles cleanup via canvas._chart
 
   if (!recentData || recentData.length === 0) return;
 
@@ -308,31 +311,47 @@ function renderHistoryChart(recentData) {
 // ---------------------------------------------------------------------------
 
 async function onRunValidation() {
-  const resultsEl = document.getElementById('pred-results');
-
-  setStatus('Saving config…');
-
-  try {
-    // Save latest form values first
-    const partial = readFormValues();
-    await savePredictionConfig(partial);
-  } catch (err) {
-    setStatus(`Save failed: ${err.message}`, true);
-    return;
+  const runBtn = document.getElementById('pred-run-validation');
+  const originalText = runBtn ? runBtn.textContent : '';
+  if (runBtn) {
+    runBtn.disabled = true;
+    runBtn.textContent = 'Running...';
+    runBtn.classList.add('opacity-50', 'cursor-not-allowed');
   }
 
-  setStatus('Fetching HA data and running validation…');
-  if (resultsEl) resultsEl.hidden = true;
-  const noResultsEl = document.getElementById('pred-no-results');
-  if (noResultsEl) noResultsEl.hidden = true;
-
   try {
-    const result = await runValidation();
-    validationResults = result;
-    renderResults(result);
-    setStatus(`Validation complete. ${result.results.length} combinations evaluated.`);
-  } catch (err) {
-    setStatus(`Error: ${err.message}`, true);
+    const resultsEl = document.getElementById('pred-results');
+
+    setStatus('Saving config…');
+
+    try {
+      // Save latest form values first
+      const partial = readFormValues();
+      await savePredictionConfig(partial);
+    } catch (err) {
+      setStatus(`Save failed: ${err.message}`, true);
+      return;
+    }
+
+    setStatus('Fetching HA data and running validation…');
+    if (resultsEl) resultsEl.hidden = true;
+    const noResultsEl = document.getElementById('pred-no-results');
+    if (noResultsEl) noResultsEl.hidden = true;
+
+    try {
+      const result = await runValidation();
+      validationResults = result;
+      renderResults(result);
+      setStatus(`Validation complete. ${result.results.length} combinations evaluated.`);
+    } catch (err) {
+      setStatus(`Error: ${err.message}`, true);
+    }
+  } finally {
+    if (runBtn) {
+      runBtn.disabled = false;
+      runBtn.textContent = originalText;
+      runBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
   }
 }
 
@@ -372,8 +391,7 @@ function renderSensorTabs(sensorNames) {
     btn.dataset.sensor = name;
     btn.className =
       'px-3 py-1.5 text-sm rounded-pill border border-slate-300 dark:border-white/10 ' +
-      'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 ' +
-      'hover:bg-slate-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400/30';
+      'focus:outline-none focus:ring-2 focus:ring-sky-400/30 transition-colors';
     btn.addEventListener('click', () => {
       _activeSensor = name;
       renderMetricsTable(validationResults.results, name);
@@ -388,13 +406,20 @@ function renderSensorTabs(sensorNames) {
 function updateTabActive(container, activeName) {
   for (const btn of container.querySelectorAll('button')) {
     const isActive = btn.dataset.sensor === activeName;
+
+    // Active state
     btn.classList.toggle('bg-sky-600', isActive);
     btn.classList.toggle('text-white', isActive);
     btn.classList.toggle('border-sky-600', isActive);
+    btn.classList.toggle('hover:bg-sky-700', isActive);
+
+    // Inactive state
     btn.classList.toggle('bg-white', !isActive);
     btn.classList.toggle('dark:bg-slate-800', !isActive);
     btn.classList.toggle('text-slate-700', !isActive);
     btn.classList.toggle('dark:text-slate-200', !isActive);
+    btn.classList.toggle('hover:bg-slate-50', !isActive);
+    btn.classList.toggle('dark:hover:bg-slate-700', !isActive);
   }
 }
 

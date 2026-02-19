@@ -89,11 +89,11 @@
       <div class="flex items-center gap-4">
         <h1 class="text-2xl font-semibold tracking-tight">Optivolt DESS</h1>
         <nav class="flex gap-1" role="tablist">
-          <button id="tab-optimizer" role="tab" aria-selected="true"
+          <button id="tab-optimizer" role="tab" aria-selected="true" aria-controls="panel-optimizer"
             class="rounded-pill bg-sky-600 px-3 py-1.5 text-sm text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/50">
             Optimizer
           </button>
-          <button id="tab-predictions" role="tab" aria-selected="false"
+          <button id="tab-predictions" role="tab" aria-selected="false" aria-controls="panel-predictions"
             class="rounded-pill border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
             Predictions
           </button>
@@ -125,7 +125,7 @@
   </header>
 
   <!-- Main -->
-  <main id="panel-optimizer" class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3">
+  <main id="panel-optimizer" role="tabpanel" aria-labelledby="tab-optimizer" class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3">
     <!-- Settings (now scrolls with the page) -->
     <aside class="lg:col-span-1 min-w-0">
       <div id="sidebar-stack" class="space-y-6 lg:pr-1">
@@ -459,7 +459,7 @@
 
 
   <!-- Predictions Panel -->
-  <div id="panel-predictions" class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3 hidden">
+  <div id="panel-predictions" role="tabpanel" aria-labelledby="tab-predictions" class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3 hidden">
 
     <!-- Sidebar -->
     <aside class="lg:col-span-1 min-w-0 space-y-6">
