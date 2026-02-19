@@ -37,15 +37,27 @@ function fmtTickHourOrDate(dt) {
   return `${String(hrs).padStart(2, "0")}:00`;
 }
 
-function buildTimeAxisFromTimestamps(timestampsMs) {
+export function buildTimeAxisFromTimestamps(timestampsMs) {
   const times = timestampsMs.map(ms => new Date(ms));
   let hoursSpan = 0;
   if (times.length > 1) {
     hoursSpan = (times[times.length - 1] - times[0]) / (3600 * 1000);
   }
 
-  const sparseMode = hoursSpan > 12;
-  const labelEveryH = 3;
+  /* Modified to handle 7-day range better */
+  const daysSpan = hoursSpan / 24;
+
+  let labelEveryH = 3;
+  let sparseMode = hoursSpan > 12;
+
+  // Very sparse mode for > 2 days
+  if (daysSpan > 2) {
+    labelEveryH = 24; // Only Midnight
+  } else if (hoursSpan > 12) {
+    labelEveryH = 4; // Every 4h
+  } else {
+    labelEveryH = 2; // Every 2h
+  }
 
   function isMidnight(dt) { return dt.getHours() === 0 && dt.getMinutes() === 0; }
   function isFullMinute(dt) { return dt.getMinutes() === 0; }
@@ -85,7 +97,7 @@ function buildTimeAxisFromTimestamps(timestampsMs) {
  * Generates the standard Chart.js options object used by all 4 charts.
  * Allows overriding specific sections via `overrides`.
  */
-function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacked = false }, overrides = {}) {
+export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacked = false }, overrides = {}) {
   const theme = getChartTheme();
 
   const legendSquare = {
@@ -147,7 +159,7 @@ function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacked = fal
   return options;
 }
 
-function getChartTheme() {
+export function getChartTheme() {
   const dark = document.documentElement.classList.contains('dark');
   if (dark) {
     return {
@@ -166,7 +178,7 @@ function getChartTheme() {
 /**
  * Handles the destruction of old chart instances and creation of new ones.
  */
-function renderChart(canvas, config) {
+export function renderChart(canvas, config) {
   if (canvas._chart) canvas._chart.destroy();
   canvas._chart = new Chart(canvas.getContext("2d"), config);
 }

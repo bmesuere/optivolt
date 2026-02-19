@@ -2,6 +2,8 @@ import { VRMClient } from '../../lib/vrm-api.js';
 import { loadSettings, saveSettings } from './settings-store.js';
 import { loadData, saveData } from './data-store.js';
 import { readVictronSocPercent, readVictronSocLimits } from './mqtt-service.js';
+import { loadPredictionConfig } from './prediction-config-store.js';
+import { runForecast } from './prediction-service.js';
 
 function createClientFromEnv() {
   const installationId = (process.env.VRM_INSTALLATION_ID ?? '').trim();
@@ -70,13 +72,20 @@ export async function refreshSeriesFromVrmAndPersist() {
   const settings = await loadSettings();
   const sources = settings.dataSources || {};
 
-  const shouldFetchForecasts = sources.load === 'vrm' || sources.pv === 'vrm';
+  const shouldFetchVrmLoad = sources.load === 'vrm';
+  const shouldFetchVrmPv = sources.pv === 'vrm';
+  const shouldFetchForecasts = shouldFetchVrmLoad || shouldFetchVrmPv;
+  const shouldFetchHaPrediction = sources.load === 'ha-prediction';
   const shouldFetchPrices = sources.prices === 'vrm';
   const shouldFetchSoc = sources.soc === 'mqtt';
 
   // Concurrent IO
-  const [forecastsResult, pricesResult, socResult] = await Promise.allSettled([
+  const [forecastsResult, haPredResult, pricesResult, socResult] = await Promise.allSettled([
     shouldFetchForecasts ? client.fetchForecasts() : Promise.resolve(null),
+    shouldFetchHaPrediction ? (async () => {
+      const predConfig = await loadPredictionConfig();
+      return runForecast(predConfig);
+    })() : Promise.resolve(null),
     shouldFetchPrices ? client.fetchPrices() : Promise.resolve(null),
     shouldFetchSoc ? readVictronSocPercent({ timeoutMs: 5000 }) : Promise.resolve(null),
   ]);
@@ -85,6 +94,12 @@ export async function refreshSeriesFromVrmAndPersist() {
   if (shouldFetchForecasts) {
     if (forecastsResult.status === 'fulfilled') forecasts = forecastsResult.value;
     else console.error('Failed to fetch forecasts:', forecastsResult.reason?.message ?? String(forecastsResult.reason));
+  }
+
+  let haPrediction = null;
+  if (shouldFetchHaPrediction) {
+    if (haPredResult.status === 'fulfilled') haPrediction = haPredResult.value;
+    else console.error('Failed to fetch HA prediction:', haPredResult.reason?.message ?? String(haPredResult.reason));
   }
 
   let prices = null;
@@ -98,6 +113,7 @@ export async function refreshSeriesFromVrmAndPersist() {
     if (socResult.status === 'fulfilled') socPercent = socResult.value;
     else console.error('Failed to read SoC from MQTT:', socResult.reason?.message ?? String(socResult.reason));
   }
+
 
   // Load previous data for fallback (we overwrite specific keys if VRM usage is active)
   const baseData = await loadData();
@@ -113,8 +129,9 @@ export async function refreshSeriesFromVrmAndPersist() {
   // Build new data structures (or keep existing)
 
   let load = baseData.load;
-  // If we fetched forecasts AND the user wants VRM load, use it
-  if (shouldFetchForecasts && sources.load !== 'api' && forecasts) {
+  if (shouldFetchHaPrediction && haPrediction) {
+    load = haPrediction.forecast;
+  } else if (shouldFetchVrmLoad && forecasts) {
     load = {
       start: getStart(forecasts, 'load'),
       step: forecasts?.step_minutes ?? 15,
@@ -123,7 +140,7 @@ export async function refreshSeriesFromVrmAndPersist() {
   }
 
   let pv = baseData.pv;
-  if (shouldFetchForecasts && sources.pv !== 'api' && forecasts) {
+  if (shouldFetchVrmPv && forecasts) {
     pv = {
       start: getStart(forecasts, 'pv'),
       step: forecasts?.step_minutes ?? 15,
@@ -182,4 +199,5 @@ export async function refreshSeriesFromVrmAndPersist() {
     stepSize_m: forecasts?.step_minutes || settings.stepSize_m || 15,
   };
   await saveSettings(nextSettings);
+
 }

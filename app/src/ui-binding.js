@@ -70,6 +70,7 @@ export function wireGlobalInputs(els, { onInput, onRun, updateTerminalCustomUI }
     if (el === els.tableKwh) continue;
     if (el === els.updateDataBeforeRun) continue; // Checkbox doesn't trigger auto-save
     if (el === els.pushToVictron) continue; // Checkbox doesn't trigger auto-save
+    if (el.dataset.predictionsOnly) continue; // Predictions tab inputs handled separately
     el.addEventListener("input", onInput);
     el.addEventListener("change", onInput);
   }

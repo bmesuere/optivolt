@@ -22,3 +22,10 @@ export function requestRemoteSolve(body = {}) {
 export function refreshVrmSettings() {
   return postJson("/vrm/refresh-settings", {});
 }
+
+// --- Predictions ---
+export const fetchPredictionConfig = () => getJson('/predictions/config');
+export const savePredictionConfig = (c) => postJson('/predictions/config', c);
+export const runValidation = () => postJson('/predictions/validate', {});
+export const runForecast = () => postJson('/predictions/forecast', {});
+export const fetchForecast = runForecast;

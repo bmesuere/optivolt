@@ -1,0 +1,94 @@
+{
+  "haUrl": "ws://192.168.0.11:8123/api/websocket",
+  "haToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyOWUxNWZjZDlmMGU0M2Y4OWEzNWU3ZDVlOTVlNDE3NiIsImlhdCI6MTc3MTQzOTkxNCwiZXhwIjoyMDg2Nzk5OTE0fQ.FSkz7drzYMpqQY5DFX2PjC9Wuz5QENpJejZ_UaX8dxw",
+  "historyStart": "2025-11-01T00:00:00Z",
+  "sensors": [
+    {
+      "id": "sensor.battery_charged",
+      "name": "Battery Charge",
+      "unit": "kWh"
+    },
+    {
+      "id": "sensor.battery_discharged",
+      "name": "Battery Discharge",
+      "unit": "kWh"
+    },
+    {
+      "id": "sensor.dsmr_reading_electricity_delivered_1",
+      "name": "Grid Import",
+      "unit": "kWh"
+    },
+    {
+      "id": "sensor.dsmr_reading_electricity_delivered_2",
+      "name": "Grid Import",
+      "unit": "kWh"
+    },
+    {
+      "id": "sensor.dsmr_reading_electricity_returned_1",
+      "name": "Grid Export",
+      "unit": "kWh"
+    },
+    {
+      "id": "sensor.dsmr_reading_electricity_returned_2",
+      "name": "Grid Export",
+      "unit": "kWh"
+    },
+    {
+      "id": "sensor.sma_energy",
+      "name": "Solar Generation",
+      "unit": "Wh"
+    },
+    {
+      "id": "sensor.solis_energy",
+      "name": "Solar Generation",
+      "unit": "Wh"
+    },
+    {
+      "id": "sensor.wallbox_energy",
+      "name": "Wallbox Energy",
+      "unit": "Wh"
+    },
+    {
+      "id": "sensor.altherma_outdoor_energy",
+      "name": "Heat Pump Energy",
+      "unit": "Wh"
+    }
+  ],
+  "derived": [
+    {
+      "name": "Total Load",
+      "formula": [
+        "+Solar Generation",
+        "+Grid Import",
+        "+Battery Discharge",
+        "-Grid Export",
+        "-Battery Charge"
+      ]
+    },
+    {
+      "name": "Residual Load",
+      "formula": [
+        "+Total Load",
+        "-Wallbox Energy",
+        "-Heat Pump Energy"
+      ]
+    },
+    {
+      "name": "Load without EV",
+      "formula": [
+        "+Total Load",
+        "-Wallbox Energy"
+      ]
+    }
+  ],
+  "validationWindow": {
+    "start": "2026-01-18T00:00:00Z",
+    "end": "2026-01-25T00:00:00Z"
+  },
+  "activeConfig": {
+    "sensor": "Load without EV",
+    "lookbackWeeks": 4,
+    "dayFilter": "weekday-weekend",
+    "aggregation": "median"
+  }
+}

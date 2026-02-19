@@ -86,7 +86,19 @@
   <!-- Header -->
   <header class="border-b border-white/60 dark:border-white/5 bg-white/70 dark:bg-slate-900/60 backdrop-blur">
     <div class="mx-auto w-full max-w-7xl px-4 py-2 sm:py-3 flex items-center justify-between">
-      <h1 class="text-2xl font-semibold tracking-tight">Optivolt DESS</h1>
+      <div class="flex items-center gap-4">
+        <h1 class="text-2xl font-semibold tracking-tight">Optivolt DESS</h1>
+        <nav class="flex gap-1" role="tablist">
+          <button id="tab-optimizer" role="tab" aria-selected="true"
+            class="rounded-pill bg-sky-600 px-3 py-1.5 text-sm text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+            Optimizer
+          </button>
+          <button id="tab-predictions" role="tab" aria-selected="false"
+            class="rounded-pill border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+            Predictions
+          </button>
+        </nav>
+      </div>
       <div class="flex items-center gap-2">
         <!-- Appearance icon button -->
         <button id="themeToggle"
@@ -113,7 +125,7 @@
   </header>
 
   <!-- Main -->
-  <main class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3">
+  <main id="panel-optimizer" class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3">
     <!-- Settings (now scrolls with the page) -->
     <aside class="lg:col-span-1 min-w-0">
       <div id="sidebar-stack" class="space-y-6 lg:pr-1">
@@ -360,6 +372,7 @@
                   <select id="source-load" class="form-select">
                     <option value="vrm">Victron VRM</option>
                     <option value="api">API</option>
+                    <option value="ha-prediction">HA Prediction</option>
                   </select>
                 </label>
                 <label class="text-sm">PV prediction
@@ -444,6 +457,220 @@
     </section>
   </main>
 
+
+  <!-- Predictions Panel -->
+  <div id="panel-predictions" class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3 hidden">
+
+    <!-- Sidebar -->
+    <aside class="lg:col-span-1 min-w-0 space-y-6">
+
+      <!-- Settings (was Prediction Control) -->
+      <section class="card">
+        <h2 class="text-base font-semibold mb-3">Settings</h2>
+        <div class="space-y-3">
+          <label class="block text-sm">Sensor
+            <select id="pred-active-sensor" class="form-select" data-predictions-only="true">
+              <option value="" disabled selected>Select a sensor…</option>
+            </select>
+          </label>
+
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block text-sm">Lookback (weeks)
+              <input id="pred-active-lookback" type="number" min="1" class="form-input" data-predictions-only="true" />
+            </label>
+            <label class="block text-sm">Aggregation
+              <select id="pred-active-agg" class="form-select" data-predictions-only="true">
+                <option value="mean">Mean</option>
+                <option value="median">Median</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="block text-sm">Day Filter
+            <select id="pred-active-filter" class="form-select" data-predictions-only="true">
+              <option value="same">Same day of week</option>
+              <option value="weekday-weekend">Weekday / Weekend</option>
+              <option value="weekday-sat-sun">Weekday / Sat / Sun</option>
+              <option value="all">All days</option>
+            </select>
+          </label>
+
+          <!-- Recompute Action -->
+          <div class="mt-4 flex justify-center">
+            <button id="pred-recompute" type="button"
+              class="w-full sm:w-auto rounded-pill bg-sky-600 px-4 py-2 text-white shadow-soft hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+              Recompute
+            </button>
+          </div>
+
+          <!-- Summary -->
+          <div class="mt-4 rounded-lg bg-slate-50 px-3 py-3 text-sm text-ink-soft dark:bg-slate-800/60">
+            <div class="flex items-center justify-between gap-3">
+              <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Status
+              </div>
+              <div id="summary-status" class="text-sm font-medium text-ink dark:text-slate-100">
+                --
+              </div>
+            </div>
+
+            <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
+              <div>
+                <dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Min Load
+                </dt>
+                <dd class="font-mono text-sm text-ink dark:text-slate-100">
+                  <span id="summary-min">--</span> <span class="text-xs">W</span>
+                </dd>
+              </div>
+              <div>
+                <dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Peak Load
+                </dt>
+                <dd class="font-mono text-sm text-ink dark:text-slate-100">
+                  <span id="summary-peak">--</span> <span class="text-xs">W</span>
+                </dd>
+              </div>
+              <div>
+                <dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Total Load
+                </dt>
+                <dd class="font-mono text-sm text-ink dark:text-slate-100">
+                  <span id="summary-total">--</span> <span class="text-xs">kWh</span>
+                </dd>
+              </div>
+              <div>
+                <dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Avg Error
+                </dt>
+                <dd class="font-mono text-sm text-ink dark:text-slate-100">
+                  <span id="summary-error">--</span> <span class="text-xs">W</span>
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <!-- System Settings (collapsible) -->
+      <section class="card">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-base font-semibold">System Settings</h2>
+          <button id="pred-settings-toggle" type="button"
+            class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 lg:hidden">
+            <svg id="pred-settings-toggle-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+              class="h-4 w-4 transition-transform">
+              <path fill="currentColor" d="m12 15l-5-5h10Z" />
+            </svg>
+          </button>
+        </div>
+
+        <div id="pred-settings-body" class="space-y-4 hidden lg:block">
+          <!-- Connection -->
+          <div>
+            <h3 class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">Home Assistant</h3>
+            <div class="space-y-3">
+              <label class="block text-sm">WebSocket URL
+                <input id="pred-ha-url" type="url" placeholder="ws://homeassistant.local:8123/api/websocket"
+                  class="form-input" data-predictions-only="true" />
+              </label>
+              <label class="block text-sm">Access Token
+                <input id="pred-ha-token" type="password" placeholder="eyJ…" class="form-input"
+                  data-predictions-only="true" />
+              </label>
+            </div>
+          </div>
+
+          <hr class="border-slate-100 dark:border-white/10" />
+
+          <!-- Sensors -->
+          <div>
+            <h3 class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">Sensors</h3>
+            <div class="space-y-3">
+              <label class="block text-sm">Sensors (JSON)
+                <textarea id="pred-sensors" rows="4" class="form-input font-mono text-xs" data-predictions-only="true"
+                  placeholder='[{"id":"sensor.xxx","name":"Grid Import","unit":"kWh"}]'></textarea>
+              </label>
+              <label class="block text-sm">Derived (JSON)
+                <textarea id="pred-derived" rows="4" class="form-input font-mono text-xs" data-predictions-only="true"
+                  placeholder='[{"name":"Total Load","formula":["+Grid Import","-Grid Export"]}]'></textarea>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Full Comparison -->
+      <section class="card">
+        <h2 class="text-base font-semibold mb-2">Compare Strategies</h2>
+        <p class="text-xs text-slate-500 mb-3">Run full validation on all combinations for the last 7 days.</p>
+        <button id="pred-run-validation" type="button"
+          class="w-full rounded-pill border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+          Run Comparison
+        </button>
+      </section>
+
+    </aside>
+
+    <!-- Main: Results -->
+    <section class="lg:col-span-2 space-y-6 min-w-0">
+
+      <!-- Forecast & Recent Accuracy Chart -->
+      <section class="card">
+        <h2 class="text-base font-semibold mb-3">Forecast</h2>
+        <div class="h-80 w-full">
+          <canvas id="pred-forecast-chart" class="h-full w-full"></canvas>
+        </div>
+      </section>
+
+      <!-- History Comparison Chart -->
+      <section class="card">
+        <!-- History Comparison Chart -->
+        <section class="card">
+          <h2 class="text-base font-semibold mb-3">Historical Accuracy</h2>
+          <div class="h-80 w-full">
+            <canvas id="pred-history-chart" class="h-full w-full"></canvas>
+          </div>
+        </section>
+
+        <!-- Comparison Results -->
+        <div id="pred-results" hidden class="space-y-6">
+          <!-- Results Chart (Specific strategy from table) -->
+          <section id="pred-chart-section" class="card" hidden>
+            <h2 id="pred-chart-title" class="text-base font-semibold mb-3">Detailed Accuracy</h2>
+            <div class="h-72 w-full">
+              <canvas id="pred-accuracy-chart" class="h-full w-full"></canvas>
+            </div>
+          </section>
+
+          <!-- Metrics table -->
+          <section class="card overflow-auto">
+            <div class="mb-4">
+              <h2 class="text-base font-semibold mb-2">Strategy Comparison</h2>
+              <div class="flex flex-wrap gap-2" id="pred-sensor-tabs"></div>
+            </div>
+
+            <table class="min-w-full text-sm">
+              <thead>
+                <tr class="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <th class="px-3 py-2">Lookback</th>
+                  <th class="px-3 py-2">Day filter</th>
+                  <th class="px-3 py-2">Agg</th>
+                  <th class="px-3 py-2 text-right">MAE</th>
+                  <th class="px-3 py-2 text-right">RMSE</th>
+                  <th class="px-3 py-2 text-right">MAPE</th>
+                  <th class="px-3 py-2 text-right">n</th>
+                  <th class="px-3 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="pred-metrics-body"></tbody>
+            </table>
+          </section>
+        </div>
+
+      </section>
+
+  </div>
 
   <footer class="mx-auto w-full max-w-7xl px-4 py-8 text-center text-xs text-ink-soft">
     Built with HiGHS (WASM) + Chart.js + Tailwind. Changes run instantly.

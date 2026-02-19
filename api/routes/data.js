@@ -58,6 +58,8 @@ router.post('/', async (req, res, next) => {
 
     try {
       await saveData(nextData);
+      await saveData(nextData);
+      logDataUpdateCall(keysToUpdate);
       res.json({ message: 'Data updated successfully', keysUpdated: keysToUpdate });
     } catch (saveError) {
       next(toHttpError(saveError, 500, 'Failed to persist data'));
@@ -69,6 +71,15 @@ router.post('/', async (req, res, next) => {
     next(toHttpError(error, 500));
   }
 });
+
+
+function logDataUpdateCall(keysUpdated) {
+  const timestamp = new Date().toISOString();
+  console.log('[data] update', {
+    timestamp,
+    keysUpdated,
+  });
+}
 
 function validateSeries(obj, name) {
   if (!obj || typeof obj !== 'object') throw new Error(`Invalid ${name} object`);
