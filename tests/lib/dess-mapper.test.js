@@ -504,6 +504,56 @@ describe('mapRowsToDessV2', () => {
     expect(perSlot[0].restrictions).toBe(Restrictions.both);
   });
 
+  it('triggers proGrid with both restrictions when exportPrice >= pvExportTp and PV surplus', () => {
+    // Row 0: establish pvExportTp = 15 (pv2g flow at ec 15)
+    // Row 1: test slot with ec = 20 (>= 15) AND pv > load should trigger PV export branch
+    const rows = [
+      makeRow({ pv2g: 500, ec: 15, ic: 100 }),
+      makeRow({ ic: 100, ec: 20, pv: 1000, load: 200 }),
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    expect(perSlot[1].strategy).toBe(Strategy.proGrid);
+    expect(perSlot[1].restrictions).toBe(Restrictions.both);
+  });
+
+  it('does NOT trigger pvExportTp when exportPrice < pvExportTp', () => {
+    // Row 0: establish pvExportTp = 25 (pv2g flow at ec 25)
+    // Row 1: test slot with ec = 10 (< 25) should fall through to selfConsumption
+    const rows = [
+      makeRow({ pv2g: 500, ec: 25, ic: 100 }),
+      makeRow({ ic: 100, ec: 10, pv: 1000, load: 200 }),
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    expect(perSlot[1].strategy).toBe(Strategy.selfConsumption);
+    expect(perSlot[1].restrictions).toBe(Restrictions.both);
+  });
+
+  it('does NOT trigger pvExportTp in deficit slots (load > PV)', () => {
+    // Row 0: establish pvExportTp = 5 (low forced export)
+    // Row 1: deficit slot (load > pv) with ec = 20 (>= 5) should NOT match pvExportTp
+    const rows = [
+      makeRow({ pv2g: 500, ec: 5, ic: 100 }),
+      makeRow({ ic: 100, ec: 20, pv: 200, load: 1000 }),
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    expect(perSlot[1].strategy).toBe(Strategy.selfConsumption);
+    expect(perSlot[1].restrictions).toBe(Restrictions.both);
+  });
+
+  it('batteryExportTp takes precedence over pvExportTp', () => {
+    // Both b2g (at ec=20) and pv2g (at ec=10) establish tipping points
+    // batteryExportTp=20, pvExportTp=10
+    // Test slot ec=22 (>= both) should match batteryExportTp first -> allow battery->grid
+    const rows = [
+      makeRow({ b2g: 100, ec: 20, ic: 100 }),
+      makeRow({ pv2g: 500, ec: 10, ic: 100 }),
+      makeRow({ ic: 100, ec: 22 }),
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    expect(perSlot[2].strategy).toBe(Strategy.proGrid);
+    expect(perSlot[2].restrictions).toBe(Restrictions.gridToBattery); // battery export branch, not PV export
+  });
+
   it('blocks feed-in when export price is negative', () => {
     const rows = [makeRow({ ec: -1 })];
     const { perSlot } = mapRowsToDessV2(rows, cfg);
@@ -534,14 +584,13 @@ describe('mapRowsToDessV2', () => {
     expect(perSlot[3].restrictions).toBe(Restrictions.batteryToGrid);
   });
 
-  it('returns same diagnostics shape as v1', () => {
+  it('returns diagnostics including pvExportTippingPoint', () => {
     const rows = [
-      makeRow({ g2b: 100, g2l: 200, b2g: 50, ic: 15, ec: 25 }),
+      makeRow({ g2b: 100, g2l: 200, b2g: 50, pv2g: 300, ic: 15, ec: 25 }),
     ];
-    const v1Result = mapRowsToDess(rows, cfg);
     const v2Result = mapRowsToDessV2(rows, cfg);
-    expect(Object.keys(v2Result.diagnostics).sort())
-      .toEqual(Object.keys(v1Result.diagnostics).sort());
+    expect(v2Result.diagnostics).toHaveProperty('pvExportTippingPoint_cents_per_kWh');
+    expect(v2Result.diagnostics.pvExportTippingPoint_cents_per_kWh).toBe(25);
   });
 });
 

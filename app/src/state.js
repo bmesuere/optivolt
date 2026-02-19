@@ -138,6 +138,7 @@ export function updateSummaryUI(els, summary) {
     gridBatteryTippingPoint_cents_per_kWh,
     gridChargeTippingPoint_cents_per_kWh,
     batteryExportTippingPoint_cents_per_kWh,
+    pvExportTippingPoint_cents_per_kWh,
   } = summary;
 
   setText(els.sumLoad, formatKWh(loadTotal_kWh));
@@ -148,7 +149,9 @@ export function updateSummaryUI(els, summary) {
   setText(els.avgImport, formatCentsPerKWh(avgImportPrice_cents_per_kWh));
   setText(els.gridBatteryTp, formatTippingPoint(gridBatteryTippingPoint_cents_per_kWh, "↓"));
   setText(els.gridChargeTp, formatTippingPoint(gridChargeTippingPoint_cents_per_kWh, "↓"));
-  setText(els.batteryExportTp, formatTippingPoint(batteryExportTippingPoint_cents_per_kWh, "↑"));
+  // Show battery export tp if present, otherwise fall back to PV export tp
+  const exportTp = batteryExportTippingPoint_cents_per_kWh ?? pvExportTippingPoint_cents_per_kWh;
+  setText(els.batteryExportTp, formatTippingPoint(exportTp, "↑"));
 
 
   // --- Load Split Bar ---
