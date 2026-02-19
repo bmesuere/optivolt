@@ -17,10 +17,8 @@ import { buildTimeAxisFromTimestamps, getBaseOptions, renderChart, SOLUTION_COLO
 let validationResults = null;
 let _activeSensor = null;
 let accuracyChart = null;
-let forecastChart = null; // New chart instance
-let historyChart = null; // History comparison chart
-
-const dim = (c) => c.replace('rgb', 'rgba').replace(')', ', 0.6)'); // Simple dim hack or import dim
+let forecastChart = null;
+let historyChart = null;
 
 export async function initPredictionsTab() {
   await hydrateForm();
@@ -119,9 +117,6 @@ async function saveFormToServer() {
 function readFormValues() {
   const sensors = parseSilently(getVal('pred-sensors'));
   const derived = parseSilently(getVal('pred-derived'));
-  const historyStart = getVal('pred-history-start');
-  const valStart = getVal('pred-val-start');
-  const valEnd = getVal('pred-val-end');
 
   const activeSensor = getVal('pred-active-sensor');
   const activeLookback = getVal('pred-active-lookback');
@@ -216,30 +211,12 @@ function renderForecastChart({ forecast }) {
     forecastChart = null;
   }
 
-  // Aggregate into hourly buckets
+  // Aggregate 15-min slots into hourly kWh buckets for display
   const hourMap = new Map();
   const values = forecast.values || [];
   const startTs = new Date(forecast.start).getTime();
   const stepMs = (forecast.step || 15) * 60 * 1000;
-  const stepHours = (forecast.step || 15) / 60; // used for kWh conversion if needed?
-  // Note: forecast.values are in Watts (power).
-  // To get Wh for a 15 min slot: Power * 0.25h
-  // We want to display a bar per hour. The user asked for "like consumption forecast".
-  // In charts.js drawLoadPvGrouped, it sums (Power * stepHours / 1000) to get kWh.
-  // BUT the graph Y-axis title says "W" in the original code.
-  // The user said "underlying values are actually hourly values spread out over quarters".
-  // If they are hourly values, maybe we should just sample one per hour?
-  // OR if they are quarters summing up to an hour?
-  // User: "the forecast graph now shows a bar per quarter, but the underlying values are actually hourly values spread out over quarters. Maybe change it to 1 bar per hour?"
-  // This suggests the 15-min values are just repetitions of the hourly value (or fractions).
-  // I will average the power for the hour (which is equal to the hourly power value if constant)
-  // AND the request says "make them red and striped like the 'consumption forecast'".
-  // Consumption forecast in charts.js uses kWh.
-  // Let's stick to Power (W) for now as the original chart used W, unless "consumption forecast" implies kWh.
-  // Checking `app/src/charts.js`: `drawLoadPvGrouped` has yTitle: "kWh".
-  // So I should convert to kWh.
 
-  // Let's calculate total kWh per hour.
   for (let i = 0; i < values.length; i++) {
     const ts = startTs + i * stepMs;
     const dt = new Date(ts);
@@ -257,8 +234,6 @@ function renderForecastChart({ forecast }) {
   const hourlyKwh = sortedKeys.map(k => hourMap.get(k) / 1000); // Wh -> kWh
   const axis = buildTimeAxisFromTimestamps(sortedKeys);
 
-  const stripe = (c) => window.pattern?.draw('diagonal', c) || c;
-
   renderChart(canvas, {
     type: 'bar',
     data: {
@@ -267,10 +242,9 @@ function renderForecastChart({ forecast }) {
         {
           label: 'Consumption Forecast',
           data: hourlyKwh,
-          backgroundColor: stripe(SOLUTION_COLORS.g2l), // Red-ish from charts.js
+          backgroundColor: SOLUTION_COLORS.g2l,
           borderColor: SOLUTION_COLORS.g2l,
           borderWidth: 1,
-          hoverBackgroundColor: stripe(dim(SOLUTION_COLORS.g2l)) // rough approximation
         }
       ]
     },

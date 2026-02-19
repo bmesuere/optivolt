@@ -41,7 +41,6 @@ router.post('/validate', async (req, res, next) => {
     assertCondition(config.haToken, 400, 'haToken is required');
     assertCondition(config.sensors?.length > 0, 400, 'At least one sensor must be configured');
 
-
     logPredictionCall('validate', { sensors: config.sensors.length });
 
     let result;
@@ -69,68 +68,44 @@ router.post('/forecast', async (req, res, next) => {
       config.includeRecent = false;
     }
 
-    assertCondition(config.haUrl, 400, 'haUrl is required');
-    assertCondition(config.haToken, 400, 'haToken is required');
-    assertCondition(config.activeConfig, 400, 'activeConfig is required');
-    assertCondition(config.sensors?.length > 0, 400, 'At least one sensor must be configured');
-
-
-    logPredictionCall('forecast', {
-      activeConfig: config.activeConfig,
-    });
-
-    let result;
-    try {
-      result = await runForecast(config);
-    } catch (err) {
-      const msg = err?.message ?? String(err);
-      if (msg.includes('auth') || msg.includes('WebSocket') || msg.includes('timed out')) {
-        throw toHttpError(err, 502, `HA connection error: ${msg}`);
-      }
-      throw err;
-    }
-
+    const result = await executeForecast(config, 'forecast');
     res.json(result);
   } catch (error) {
     next(error instanceof Error && error.statusCode ? error : toHttpError(error, 500, 'Forecast failed'));
   }
 });
 
-// Automation endpoint: Future predictions only
+// Automation endpoint: future slots only (no recent accuracy data)
 router.get('/forecast/now', async (req, res, next) => {
   try {
     const config = await loadPredictionConfig();
-
-    // Automation mode: Future only
     config.includeRecent = false;
 
-    assertCondition(config.haUrl, 400, 'haUrl is required');
-    assertCondition(config.haToken, 400, 'haToken is required');
-    assertCondition(config.activeConfig, 400, 'activeConfig is required');
-    assertCondition(config.sensors?.length > 0, 400, 'At least one sensor must be configured');
-
-
-    logPredictionCall('forecast/now', {
-      activeConfig: config.activeConfig,
-    });
-
-    let result;
-    try {
-      result = await runForecast(config);
-    } catch (err) {
-      const msg = err?.message ?? String(err);
-      if (msg.includes('auth') || msg.includes('WebSocket') || msg.includes('timed out')) {
-        throw toHttpError(err, 502, `HA connection error: ${msg}`);
-      }
-      throw err;
-    }
-
-    // Return only forecast part for automation
+    const result = await executeForecast(config, 'forecast/now');
     res.json(result);
   } catch (error) {
     next(error instanceof Error && error.statusCode ? error : toHttpError(error, 500, 'Forecast failed'));
   }
 });
+
+async function executeForecast(config, logLabel) {
+  assertCondition(config.haUrl, 400, 'haUrl is required');
+  assertCondition(config.haToken, 400, 'haToken is required');
+  assertCondition(config.activeConfig, 400, 'activeConfig is required');
+  assertCondition(config.sensors?.length > 0, 400, 'At least one sensor must be configured');
+
+  logPredictionCall(logLabel, { activeConfig: config.activeConfig });
+
+  try {
+    return await runForecast(config);
+  } catch (err) {
+    const msg = err?.message ?? String(err);
+    if (msg.includes('auth') || msg.includes('WebSocket') || msg.includes('timed out')) {
+      throw toHttpError(err, 502, `HA connection error: ${msg}`);
+    }
+    throw err;
+  }
+}
 
 function logPredictionCall(type, meta) {
   const timestamp = new Date().toISOString();

@@ -40,7 +40,6 @@ export async function runValidation(config) {
     const metrics = validate(predictions, validationWindow);
 
     // Only include validation-window predictions for chart rendering
-    // Only include validation-window predictions for chart rendering
     const windowStart = new Date(validationWindow.start).getTime();
     const windowEnd = new Date(validationWindow.end).getTime();
 
@@ -131,8 +130,8 @@ export async function runForecast(config) {
     futureTargets.push({
       date: d.toISOString(),
       time: t,
-      hour: d.getHours(),
-      dayOfWeek: d.getDay(),
+      hour: d.getUTCHours(),
+      dayOfWeek: d.getUTCDay(),
       value: null
     });
   }

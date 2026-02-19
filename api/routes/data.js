@@ -58,7 +58,6 @@ router.post('/', async (req, res, next) => {
 
     try {
       await saveData(nextData);
-      await saveData(nextData);
       logDataUpdateCall(keysToUpdate);
       res.json({ message: 'Data updated successfully', keysUpdated: keysToUpdate });
     } catch (saveError) {

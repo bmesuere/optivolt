@@ -608,6 +608,7 @@
           class="w-full rounded-pill border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
           Run Comparison
         </button>
+        <p id="pred-status" class="mt-2 text-sm text-ink-soft dark:text-slate-400"></p>
       </section>
 
     </aside>
@@ -625,50 +626,46 @@
 
       <!-- History Comparison Chart -->
       <section class="card">
-        <!-- History Comparison Chart -->
-        <section class="card">
-          <h2 class="text-base font-semibold mb-3">Historical Accuracy</h2>
-          <div class="h-80 w-full">
-            <canvas id="pred-history-chart" class="h-full w-full"></canvas>
+        <h2 class="text-base font-semibold mb-3">Historical Accuracy</h2>
+        <div class="h-80 w-full">
+          <canvas id="pred-history-chart" class="h-full w-full"></canvas>
+        </div>
+      </section>
+
+      <!-- Comparison Results -->
+      <div id="pred-results" hidden class="space-y-6">
+        <!-- Results Chart (Specific strategy from table) -->
+        <section id="pred-chart-section" class="card" hidden>
+          <h2 id="pred-chart-title" class="text-base font-semibold mb-3">Detailed Accuracy</h2>
+          <div class="h-72 w-full">
+            <canvas id="pred-accuracy-chart" class="h-full w-full"></canvas>
           </div>
         </section>
 
-        <!-- Comparison Results -->
-        <div id="pred-results" hidden class="space-y-6">
-          <!-- Results Chart (Specific strategy from table) -->
-          <section id="pred-chart-section" class="card" hidden>
-            <h2 id="pred-chart-title" class="text-base font-semibold mb-3">Detailed Accuracy</h2>
-            <div class="h-72 w-full">
-              <canvas id="pred-accuracy-chart" class="h-full w-full"></canvas>
-            </div>
-          </section>
+        <!-- Metrics table -->
+        <section class="card overflow-auto">
+          <div class="mb-4">
+            <h2 class="text-base font-semibold mb-2">Strategy Comparison</h2>
+            <div class="flex flex-wrap gap-2" id="pred-sensor-tabs"></div>
+          </div>
 
-          <!-- Metrics table -->
-          <section class="card overflow-auto">
-            <div class="mb-4">
-              <h2 class="text-base font-semibold mb-2">Strategy Comparison</h2>
-              <div class="flex flex-wrap gap-2" id="pred-sensor-tabs"></div>
-            </div>
-
-            <table class="min-w-full text-sm">
-              <thead>
-                <tr class="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  <th class="px-3 py-2">Lookback</th>
-                  <th class="px-3 py-2">Day filter</th>
-                  <th class="px-3 py-2">Agg</th>
-                  <th class="px-3 py-2 text-right">MAE</th>
-                  <th class="px-3 py-2 text-right">RMSE</th>
-                  <th class="px-3 py-2 text-right">MAPE</th>
-                  <th class="px-3 py-2 text-right">n</th>
-                  <th class="px-3 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="pred-metrics-body"></tbody>
-            </table>
-          </section>
-        </div>
-
-      </section>
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <th class="px-3 py-2">Lookback</th>
+                <th class="px-3 py-2">Day filter</th>
+                <th class="px-3 py-2">Agg</th>
+                <th class="px-3 py-2 text-right">MAE</th>
+                <th class="px-3 py-2 text-right">RMSE</th>
+                <th class="px-3 py-2 text-right">MAPE</th>
+                <th class="px-3 py-2 text-right">n</th>
+                <th class="px-3 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="pred-metrics-body"></tbody>
+          </table>
+        </section>
+      </div>
 
   </div>
 

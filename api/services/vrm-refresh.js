@@ -199,5 +199,4 @@ export async function refreshSeriesFromVrmAndPersist() {
     stepSize_m: forecasts?.step_minutes || settings.stepSize_m || 15,
   };
   await saveSettings(nextSettings);
-
 }
