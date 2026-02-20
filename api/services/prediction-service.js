@@ -104,7 +104,7 @@ export async function runForecast(config) {
     end.setDate(end.getDate() + 1);
     end.setHours(0, 0, 0, 0);
   } else {
-    end.setDate(end.getDate() + 1);
+    end.setDate(end.getDate() + 2);
     end.setHours(0, 0, 0, 0);
   }
 
