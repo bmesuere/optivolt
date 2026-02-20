@@ -52,8 +52,8 @@ function setupTabSwitcher() {
   if (!tabOptimizer || !tabPredictions || !panelOptimizer || !panelPredictions) return;
 
   // Complete class strings — replace wholesale to avoid stale hover/state classes
-  const ACTIVE_CLS = 'rounded-pill bg-sky-600 px-3 py-1.5 text-sm text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/50';
-  const INACTIVE_CLS = 'rounded-pill border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50';
+  const ACTIVE_CLS = 'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium bg-white text-ink shadow-sm dark:bg-slate-700 dark:text-slate-100 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50';
+  const INACTIVE_CLS = 'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50';
 
   function activateTab(isOptimizer) {
     // Use Tailwind's .hidden class (display:none !important) so it beats utility classes like .grid
