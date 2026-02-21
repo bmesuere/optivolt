@@ -183,7 +183,7 @@ async function onRecompute() {
     }
 
     updateSummaryMetrics(totalKwh, peak, min, avgErrorW);
-    updateSummaryStatus('Plan updated.', false);
+    updateSummaryStatus('Predictions updated.', false);
   } catch (err) {
     console.error(err);
     updateSummaryStatus('Error: ' + err.message, true);
