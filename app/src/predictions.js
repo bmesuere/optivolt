@@ -40,8 +40,17 @@ async function hydrateForm() {
 }
 
 function applyConfigToForm(config) {
-  setVal('pred-ha-url', config.haUrl ?? '');
-  setVal('pred-ha-token', config.haToken ?? '');
+  const haSettingsGroup = document.getElementById('pred-ha-settings-group');
+  if (haSettingsGroup) {
+    if (config.isAddon) {
+      haSettingsGroup.hidden = true;
+    } else {
+      haSettingsGroup.hidden = false;
+      setVal('pred-ha-url', config.haUrl ?? '');
+      setVal('pred-ha-token', config.haToken ?? '');
+    }
+  }
+
   /* Removed obsolete fields */
   setVal('pred-sensors', config.sensors ? JSON.stringify(config.sensors, null, 2) : '');
   setVal('pred-derived', config.derived ? JSON.stringify(config.derived, null, 2) : '');

@@ -8,7 +8,10 @@ const router = express.Router();
 router.get('/config', async (_req, res, next) => {
   try {
     const config = await loadPredictionConfig();
-    res.json(config);
+    res.json({
+      ...config,
+      isAddon: !!process.env.SUPERVISOR_TOKEN,
+    });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to read prediction config'));
   }
@@ -37,8 +40,11 @@ router.post('/validate', async (req, res, next) => {
   try {
     const config = await loadPredictionConfig();
 
-    assertCondition(config.haUrl, 400, 'haUrl is required');
-    assertCondition(config.haToken, 400, 'haToken is required');
+    assertCondition(
+      !!process.env.SUPERVISOR_TOKEN || (config.haUrl && config.haToken),
+      400,
+      'haUrl and haToken are required when not running as an add-on'
+    );
     assertCondition(config.sensors?.length > 0, 400, 'At least one sensor must be configured');
 
     logPredictionCall('validate', { sensors: config.sensors.length });
@@ -89,8 +95,11 @@ router.get('/forecast/now', async (req, res, next) => {
 });
 
 async function executeForecast(config, logLabel) {
-  assertCondition(config.haUrl, 400, 'haUrl is required');
-  assertCondition(config.haToken, 400, 'haToken is required');
+  assertCondition(
+    !!process.env.SUPERVISOR_TOKEN || (config.haUrl && config.haToken),
+    400,
+    'haUrl and haToken are required when not running as an add-on'
+  );
   assertCondition(config.activeConfig, 400, 'activeConfig is required');
   assertCondition(config.sensors?.length > 0, 400, 'At least one sensor must be configured');
 

@@ -14,6 +14,7 @@ ingress: true
 ingress_port: 3000
 panel_title: Optivolt
 panel_icon: mdi:home-battery-outline
+homeassistant_api: true
 
 ports:
   "3000/tcp": 3070

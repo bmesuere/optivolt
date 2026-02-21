@@ -21,7 +21,12 @@
  * @returns {Promise<Object>} raw HA statistics_during_period result
  */
 export async function fetchHaStats({ haUrl, haToken, entityIds, startTime, endTime, period = 'hour', timeoutMs = 30000 }) {
-  const ws = new WebSocket(haUrl);
+  // If running as an add-on, always prioritize the supervisor proxy
+  const isAddon = !!process.env.SUPERVISOR_TOKEN;
+  const targetUrl = isAddon ? 'ws://supervisor/core/websocket' : haUrl;
+  const targetToken = isAddon ? process.env.SUPERVISOR_TOKEN : haToken;
+
+  const ws = new WebSocket(targetUrl);
 
   return new Promise((resolve, reject) => {
     let authenticated = false;
@@ -52,7 +57,7 @@ export async function fetchHaStats({ haUrl, haToken, entityIds, startTime, endTi
       }
 
       if (msg.type === 'auth_required') {
-        ws.send(JSON.stringify({ type: 'auth', access_token: haToken }));
+        ws.send(JSON.stringify({ type: 'auth', access_token: targetToken }));
 
       } else if (msg.type === 'auth_ok') {
         authenticated = true;
