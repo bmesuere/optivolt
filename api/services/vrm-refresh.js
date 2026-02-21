@@ -75,17 +75,12 @@ export async function refreshSeriesFromVrmAndPersist() {
   const shouldFetchVrmLoad = sources.load === 'vrm';
   const shouldFetchVrmPv = sources.pv === 'vrm';
   const shouldFetchForecasts = shouldFetchVrmLoad || shouldFetchVrmPv;
-  const shouldFetchHaPrediction = sources.load === 'ha-prediction';
   const shouldFetchPrices = sources.prices === 'vrm';
   const shouldFetchSoc = sources.soc === 'mqtt';
 
   // Concurrent IO
-  const [forecastsResult, haPredResult, pricesResult, socResult] = await Promise.allSettled([
+  const [forecastsResult, pricesResult, socResult] = await Promise.allSettled([
     shouldFetchForecasts ? client.fetchForecasts() : Promise.resolve(null),
-    shouldFetchHaPrediction ? (async () => {
-      const predConfig = await loadPredictionConfig();
-      return runForecast(predConfig);
-    })() : Promise.resolve(null),
     shouldFetchPrices ? client.fetchPrices() : Promise.resolve(null),
     shouldFetchSoc ? readVictronSocPercent({ timeoutMs: 5000 }) : Promise.resolve(null),
   ]);
@@ -94,12 +89,6 @@ export async function refreshSeriesFromVrmAndPersist() {
   if (shouldFetchForecasts) {
     if (forecastsResult.status === 'fulfilled') forecasts = forecastsResult.value;
     else console.error('Failed to fetch forecasts:', forecastsResult.reason?.message ?? String(forecastsResult.reason));
-  }
-
-  let haPrediction = null;
-  if (shouldFetchHaPrediction) {
-    if (haPredResult.status === 'fulfilled') haPrediction = haPredResult.value;
-    else console.error('Failed to fetch HA prediction:', haPredResult.reason?.message ?? String(haPredResult.reason));
   }
 
   let prices = null;
@@ -129,9 +118,7 @@ export async function refreshSeriesFromVrmAndPersist() {
   // Build new data structures (or keep existing)
 
   let load = baseData.load;
-  if (shouldFetchHaPrediction && haPrediction) {
-    load = haPrediction.forecast;
-  } else if (shouldFetchVrmLoad && forecasts) {
+  if (shouldFetchVrmLoad && forecasts) {
     load = {
       start: getStart(forecasts, 'load'),
       step: forecasts?.step_minutes ?? 15,

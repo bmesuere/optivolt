@@ -2,6 +2,7 @@ import express from 'express';
 import { assertCondition, toHttpError } from '../http-errors.js';
 import { loadPredictionConfig, savePredictionConfig } from '../services/prediction-config-store.js';
 import { runValidation, runForecast } from '../services/prediction-service.js';
+import { loadData, saveData } from '../services/data-store.js';
 
 const router = express.Router();
 
@@ -106,7 +107,16 @@ async function executeForecast(config, logLabel) {
   logPredictionCall(logLabel, { activeConfig: config.activeConfig });
 
   try {
-    return await runForecast(config);
+    const result = await runForecast(config);
+
+    // Save the forecast directly to the data store under the 'load' key
+    if (result.forecast && result.forecast.values) {
+      const currentData = await loadData();
+      currentData.load = result.forecast;
+      await saveData(currentData);
+    }
+
+    return result;
   } catch (err) {
     const msg = err?.message ?? String(err);
     if (msg.includes('auth') || msg.includes('WebSocket') || msg.includes('timed out')) {
