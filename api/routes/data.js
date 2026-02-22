@@ -1,5 +1,6 @@
 import express from 'express';
 import { loadData, saveData } from '../services/data-store.js';
+import { loadSettings } from '../services/settings-store.js';
 import { HttpError, toHttpError } from '../http-errors.js';
 
 const router = express.Router();
@@ -31,13 +32,23 @@ router.post('/', async (req, res, next) => {
     }
 
     const currentData = await loadData();
+    const settings = await loadSettings();
+    const dataSources = settings?.dataSources || {};
+
+    const sourceMapping = {
+      load: dataSources.load,
+      pv: dataSources.pv,
+      importPrice: dataSources.prices,
+      exportPrice: dataSources.prices,
+      soc: dataSources.soc
+    };
 
     // keys allowed to be updated
     const allowedKeys = ['load', 'pv', 'importPrice', 'exportPrice', 'soc'];
-    const keysToUpdate = Object.keys(payload).filter(k => allowedKeys.includes(k));
+    const keysToUpdate = Object.keys(payload).filter(k => allowedKeys.includes(k) && sourceMapping[k] === 'api');
 
     if (keysToUpdate.length === 0) {
-      throw new HttpError(400, 'No valid data keys provided', { details: { keysUpdated: [] } });
+      throw new HttpError(400, 'No valid data keys provided or settings are not set to API', { details: { keysUpdated: [] } });
     }
 
     const nextData = { ...currentData };

@@ -3,6 +3,7 @@ import { assertCondition, toHttpError } from '../http-errors.js';
 import { loadPredictionConfig, savePredictionConfig } from '../services/prediction-config-store.js';
 import { runValidation, runForecast } from '../services/prediction-service.js';
 import { loadData, saveData } from '../services/data-store.js';
+import { loadSettings } from '../services/settings-store.js';
 
 const router = express.Router();
 
@@ -111,9 +112,12 @@ async function executeForecast(config, logLabel) {
 
     // Save the forecast directly to the data store under the 'load' key
     if (result.forecast && result.forecast.values) {
-      const currentData = await loadData();
-      currentData.load = result.forecast;
-      await saveData(currentData);
+      const settings = await loadSettings();
+      if (settings?.dataSources?.load === 'api') {
+        const currentData = await loadData();
+        currentData.load = result.forecast;
+        await saveData(currentData);
+      }
     }
 
     return result;
