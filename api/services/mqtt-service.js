@@ -1,4 +1,4 @@
-import { VictronMqttClient } from '../../lib/victron-mqtt.js';
+import { VictronMqttClient } from '../../lib/victron-mqtt.ts';
 
 let victronClient = null;
 

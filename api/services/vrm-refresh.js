@@ -1,4 +1,4 @@
-import { VRMClient } from '../../lib/vrm-api.js';
+import { VRMClient } from '../../lib/vrm-api.ts';
 import { loadSettings, saveSettings } from './settings-store.js';
 import { loadData, saveData } from './data-store.js';
 import { readVictronSocPercent, readVictronSocLimits } from './mqtt-service.js';

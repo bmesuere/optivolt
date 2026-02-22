@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildLP } from '../../lib/build-lp.js';
+import { buildLP } from '../../lib/build-lp.ts';
 
 describe('buildLP', () => {
   const T = 5;

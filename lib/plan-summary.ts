@@ -5,7 +5,10 @@
  *  - import energy & energy-weighted avg import price
  *  - tipping point from DESS diagnostics
  */
-export function buildPlanSummary(rows, cfg, dessDiagnostics = {}) {
+
+import type { PlanRow, SolverConfig, DessDiagnostics, PlanSummary } from './types.ts';
+
+export function buildPlanSummary(rows: PlanRow[], cfg: Pick<SolverConfig, 'stepSize_m'>, dessDiagnostics: Partial<DessDiagnostics> = {}): PlanSummary {
   if (!Array.isArray(rows) || rows.length === 0) {
     return {
       loadTotal_kWh: 0,
@@ -31,7 +34,7 @@ export function buildPlanSummary(rows, cfg, dessDiagnostics = {}) {
   const stepMinutes = Number(cfg.stepSize_m ?? 15);
   const stepHours =
     Number.isFinite(stepMinutes) && stepMinutes > 0 ? stepMinutes / 60 : 0.25;
-  const W2kWh = (x) => (Number(x) || 0) * stepHours / 1000;
+  const W2kWh = (x: number) => (Number(x) || 0) * stepHours / 1000;
 
   let loadTotal = 0;
   let pvTotal = 0;
@@ -83,19 +86,19 @@ export function buildPlanSummary(rows, cfg, dessDiagnostics = {}) {
     avgImportPrice_cents_per_kWh: avgImportPrice,
     gridBatteryTippingPoint_cents_per_kWh:
       Number.isFinite(dessDiagnostics.gridBatteryTippingPoint_cents_per_kWh)
-        ? dessDiagnostics.gridBatteryTippingPoint_cents_per_kWh
+        ? dessDiagnostics.gridBatteryTippingPoint_cents_per_kWh!
         : null,
     gridChargeTippingPoint_cents_per_kWh:
       Number.isFinite(dessDiagnostics.gridChargeTippingPoint_cents_per_kWh)
-        ? dessDiagnostics.gridChargeTippingPoint_cents_per_kWh
+        ? dessDiagnostics.gridChargeTippingPoint_cents_per_kWh!
         : null,
     batteryExportTippingPoint_cents_per_kWh:
       Number.isFinite(dessDiagnostics.batteryExportTippingPoint_cents_per_kWh)
-        ? dessDiagnostics.batteryExportTippingPoint_cents_per_kWh
+        ? dessDiagnostics.batteryExportTippingPoint_cents_per_kWh!
         : null,
     pvExportTippingPoint_cents_per_kWh:
       Number.isFinite(dessDiagnostics.pvExportTippingPoint_cents_per_kWh)
-        ? dessDiagnostics.pvExportTippingPoint_cents_per_kWh
+        ? dessDiagnostics.pvExportTippingPoint_cents_per_kWh!
         : null,
   };
 }

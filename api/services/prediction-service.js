@@ -5,13 +5,13 @@
  */
 
 import { fetchHaStats } from './ha-client.js';
-import { postprocess, getSensorNames } from '../../lib/ha-postprocess.js';
+import { postprocess, getSensorNames } from '../../lib/ha-postprocess.ts';
 import {
   predict,
   validate,
   generateAllConfigs,
   buildForecastSeriesRange,
-} from '../../lib/predict-load.js';
+} from '../../lib/predict-load.ts';
 
 /**
  * Run full validation across all config combinations.

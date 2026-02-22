@@ -1,4 +1,24 @@
-export function parseSolution(result, cfg, opts = {}) {
+import type { PlanRow, SolverConfig } from './types.ts';
+
+// Minimal type for the HiGHS solver result columns.
+// HiGHS can return columns as either an array (with a Name field) or an object keyed by name.
+interface HighsColumn {
+  Name?: string;
+  Value?: number;
+  Primal?: number;
+  value?: number;
+}
+
+export interface HighsSolution {
+  Columns?: HighsColumn[] | Record<string, HighsColumn>;
+}
+
+interface ParseSolutionOpts {
+  startMs: number | string;
+  stepMin: number | string;
+}
+
+export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: ParseSolutionOpts): PlanRow[] {
   const T = cfg.load_W.length;
 
   // unpack timeline info
@@ -26,7 +46,9 @@ export function parseSolution(result, cfg, opts = {}) {
   const soc = Array(T).fill(0);
 
   const cols = result.Columns || [];
-  const entries = Array.isArray(cols) ? cols.map(c => [c.Name, c]) : Object.entries(cols);
+  const entries: [string, HighsColumn][] = Array.isArray(cols)
+    ? cols.map(c => [c.Name ?? '', c])
+    : Object.entries(cols);
 
   for (const [name, col] of entries) {
     const t = parseIndex(name);
@@ -50,7 +72,7 @@ export function parseSolution(result, cfg, opts = {}) {
   }
 
   // --- 2. Build rows (flows, soc, etc.) ---
-  const rows = [];
+  const rows: PlanRow[] = [];
   for (let t = 0; t < T; t++) {
     const imp = g2l[t] + g2b[t];
     const exp = pv2g[t] + b2g[t];
@@ -84,27 +106,26 @@ export function parseSolution(result, cfg, opts = {}) {
 
 // --- helpers ---
 
-function parseIndex(varName) {
+function parseIndex(varName: string): number | null {
   const m = /_(\d+)$/.exec(varName);
   return m ? Number(m[1]) : null;
 }
 
-function valueOf(col) {
+function valueOf(col: HighsColumn): number {
   if (col == null) return 0;
-  if (typeof col === "number") return col;
   if (typeof col.Value === "number") return col.Value;
   if (typeof col.Primal === "number") return col.Primal;
   if (typeof col.value === "number") return col.value;
-  return Number(col) || 0;
+  return 0;
 }
 
-function round(x) {
+function round(x: number): number {
   return Math.abs(x) < 1e-9 ? 0 : Math.round(x * 1000) / 1000;
 }
 
 // synthesize timeline from a provided startMs
-function synthesizeFromStart(startMs, stepMin, T) {
-  const out = new Array(T);
+function synthesizeFromStart(startMs: number, stepMin: number, T: number): number[] {
+  const out = new Array<number>(T);
   const stepMs = stepMin * 60_000;
   for (let i = 0; i < T; i++) {
     out[i] = startMs + i * stepMs;

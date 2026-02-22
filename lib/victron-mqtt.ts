@@ -1,6 +1,46 @@
-import mqtt from 'mqtt';
+import mqtt, { type MqttClient } from 'mqtt';
+
+export interface VictronMqttConfig {
+  host?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  protocol?: string;
+  reconnectPeriod?: number;
+  serial?: string | null;
+}
+
+interface WaitForMessageOptions {
+  timeoutMs?: number;
+  label?: string;
+}
+
+interface ReadSettingOptions {
+  serial?: string;
+  timeoutMs?: number;
+}
+
+export interface ScheduleSlot {
+  startEpoch?: number | null;
+  durationSeconds?: number | null;
+  strategy?: number | null;
+  flags?: number | null;
+  socTarget?: number | null;
+  restrictions?: number | null;
+  allowGridFeedIn?: number | null;
+}
 
 export class VictronMqttClient {
+  host: string;
+  port: number;
+  username: string | undefined;
+  password: string | undefined;
+  protocol: string;
+  reconnectPeriod: number;
+  serial: string | null;
+  private _serialPromise: Promise<string> | null;
+  private _clientPromise: Promise<MqttClient> | null;
+
   constructor({
     host = 'venus.local',
     port = 1883,
@@ -9,7 +49,7 @@ export class VictronMqttClient {
     protocol = 'mqtt',    // 'mqtt', 'ws', 'wss', ...
     reconnectPeriod = 0,  // 0 = no auto reconnect by default
     serial = null,        // optional: if you already know the portal id
-  } = {}) {
+  }: VictronMqttConfig = {}) {
     this.host = host;
     this.port = port;
     this.username = username || undefined;
@@ -22,7 +62,7 @@ export class VictronMqttClient {
     this._clientPromise = null;
   }
 
-  async _getClient() {
+  private async _getClient(): Promise<MqttClient> {
     if (this._clientPromise) return this._clientPromise;
 
     const url = `${this.protocol}://${this.host}:${this.port}`;
@@ -42,7 +82,7 @@ export class VictronMqttClient {
     return client;
   }
 
-  async close() {
+  async close(): Promise<void> {
     if (!this._clientPromise) return;
     const client = await this._clientPromise;
     this._clientPromise = null;
@@ -53,11 +93,11 @@ export class VictronMqttClient {
   // Internal helper: wait for the first message that matchFn() accepts
   // matchFn(topic, payload) -> result | undefined
   // ---------------------------------------------------------------------------
-  _waitForFirstMessage(
-    client,
-    matchFn,
-    { timeoutMs = 2000, label = 'message' } = {},
-  ) {
+  private _waitForFirstMessage<T>(
+    client: MqttClient,
+    matchFn: (topic: string, payload: Buffer) => T | undefined,
+    { timeoutMs = 2000, label = 'message' }: WaitForMessageOptions = {},
+  ): Promise<T> {
     return new Promise((resolve, reject) => {
       let settled = false;
 
@@ -72,7 +112,7 @@ export class VictronMqttClient {
         }
       };
 
-      const handler = (topic, payload) => {
+      const handler = (topic: string, payload: Buffer) => {
         if (settled) return;
         try {
           const maybeResult = matchFn(topic, payload);
@@ -103,7 +143,7 @@ export class VictronMqttClient {
    * - If already known, returns cached value.
    * - Otherwise subscribes once to N/+/system/0/Serial and resolves from payload.value.
    */
-  async getSerial({ timeoutMs = 5000 } = {}) {
+  async getSerial({ timeoutMs = 5000 }: { timeoutMs?: number } = {}): Promise<string> {
     if (this.serial) return this.serial;
 
     if (!this._serialPromise) {
@@ -121,7 +161,7 @@ export class VictronMqttClient {
   }
 
   // Internal: one-shot detection using N/+/system/0/Serial
-  async _detectSerialOnce({ timeoutMs = 5000 } = {}) {
+  private async _detectSerialOnce({ timeoutMs = 5000 }: { timeoutMs?: number } = {}): Promise<string> {
     const client = await this._getClient();
     const wildcard = 'N/+/system/0/Serial';
 
@@ -129,7 +169,7 @@ export class VictronMqttClient {
       client,
       (topic, payload) => {
         // Payload is {"value":"xxxxxxxxx"}
-        const obj = JSON.parse(payload.toString());
+        const obj = JSON.parse(payload.toString()) as { value?: string };
         return obj?.value;
       },
       { timeoutMs, label: wildcard },
@@ -152,7 +192,7 @@ export class VictronMqttClient {
   // Generic helpers
   // ---------------------------------------------------------------------------
 
-  async publishJson(topic, payload, { qos = 0, retain = false } = {}) {
+  async publishJson(topic: string, payload: unknown, { qos = 0, retain = false }: { qos?: 0 | 1 | 2; retain?: boolean } = {}): Promise<void> {
     const client = await this._getClient();
     const json = JSON.stringify(payload);
     await client.publishAsync(topic, json, { qos, retain });
@@ -162,14 +202,14 @@ export class VictronMqttClient {
    * Subscribe to a specific topic and resolve with the first JSON payload.
    * If requestTopic is given, publish an empty message there after subscribe.
    */
-  async readJsonOnce(topic, { timeoutMs = 2000, requestTopic } = {}) {
+  async readJsonOnce(topic: string, { timeoutMs = 2000, requestTopic }: { timeoutMs?: number; requestTopic?: string } = {}): Promise<unknown> {
     const client = await this._getClient();
 
     const wait = this._waitForFirstMessage(
       client,
       (incomingTopic, payload) => {
         if (incomingTopic !== topic) return undefined;
-        return JSON.parse(payload.toString());
+        return JSON.parse(payload.toString()) as unknown;
       },
       { timeoutMs, label: topic },
     );
@@ -194,7 +234,7 @@ export class VictronMqttClient {
    *   - Reads from N/<serial>/<relativePath>
    *   - Triggers R/<serial>/<relativePath> first to force an update
    */
-  async readSetting(relativePath, { serial, timeoutMs = 2000 } = {}) {
+  async readSetting(relativePath: string, { serial, timeoutMs = 2000 }: ReadSettingOptions = {}): Promise<unknown> {
     const s = serial ?? (await this.getSerial({ timeoutMs }));
     const topic = `N/${s}/${relativePath}`;
     const requestTopic = `R/${s}/${relativePath}`;
@@ -204,7 +244,7 @@ export class VictronMqttClient {
   /**
    * Generic write helper: writes {"value": X} to W/<serial>/<relativePath>
    */
-  async writeSetting(relativePath, value, { serial } = {}) {
+  async writeSetting(relativePath: string, value: unknown, { serial }: { serial?: string } = {}): Promise<void> {
     const s = serial ?? (await this.getSerial());
     const topic = `W/${s}/${relativePath}`;
     await this.publishJson(topic, { value });
@@ -219,7 +259,7 @@ export class VictronMqttClient {
    * Uses the system-level SoC at:
    *   N/<serial>/system/0/Dc/Battery/Soc
    */
-  async readSocPercent({ timeoutMs = 8000 } = {}) {
+  async readSocPercent({ timeoutMs = 8000 }: { timeoutMs?: number } = {}): Promise<{ soc_percent: number | null; raw: unknown }> {
     const s = await this.getSerial({ timeoutMs });
 
     // This will subscribe to N/s/system/0/Dc/Battery/Soc
@@ -227,7 +267,7 @@ export class VictronMqttClient {
     const payload = await this.readSetting('system/0/Dc/Battery/Soc', {
       serial: s,
       timeoutMs,
-    });
+    }) as { value?: unknown } | null;
 
     const rawValue = payload?.value;
 
@@ -260,7 +300,7 @@ export class VictronMqttClient {
    *     raw: { min, max }  // raw MQTT payloads
    *   }
    */
-  async readSocLimitsPercent({ timeoutMs = 8000 } = {}) {
+  async readSocLimitsPercent({ timeoutMs = 8000 }: { timeoutMs?: number } = {}): Promise<{ minSoc_percent: number | null; maxSoc_percent: number | null; raw: { min: unknown; max: unknown } }> {
     const s = await this.getSerial({ timeoutMs });
 
     const [minPayload, maxPayload] = await Promise.all([
@@ -272,9 +312,9 @@ export class VictronMqttClient {
         'settings/0/Settings/CGwacs/MaxChargePercentage',
         { serial: s, timeoutMs },
       ),
-    ]);
+    ]) as [{ value?: unknown } | null, { value?: unknown } | null];
 
-    const normalize = (payload) => {
+    const normalize = (payload: { value?: unknown } | null): number | null => {
       const raw = payload?.value;
       if (raw === null || raw === undefined || Array.isArray(raw)) {
         return null;
@@ -302,22 +342,12 @@ export class VictronMqttClient {
   /**
    * Write a single schedule slot:
    *   Settings/DynamicEss/Schedule/<slotIndex>/{Start,Duration,Strategy,Flags,Soc,Restrictions,AllowGridFeedIn}
-   *
-   * slot = {
-   *   startEpoch,       // seconds since epoch
-   *   durationSeconds,  // 900 in your case
-   *   strategy,         // 0..3
-   *   flags,            // usually 0
-   *   socTarget,        // integer 0..100
-   *   restrictions,     // 0..3
-   *   allowGridFeedIn,  // 0 or 1
-   * }
    */
-  async writeScheduleSlot(slotIndex, slot, { serial } = {}) {
+  async writeScheduleSlot(slotIndex: number, slot: ScheduleSlot, { serial }: { serial?: string } = {}): Promise<void> {
     const s = serial ?? (await this.getSerial());
     const base = `settings/0/Settings/DynamicEss/Schedule/${slotIndex}`;
 
-    const tasks = [];
+    const tasks: Promise<void>[] = [];
 
     if (slot.startEpoch != null) tasks.push(this.writeSetting(`${base}/Start`, Number(slot.startEpoch), { serial: s }));
     if (slot.durationSeconds != null) tasks.push(this.writeSetting(`${base}/Duration`, Number(slot.durationSeconds), { serial: s }));
@@ -332,7 +362,7 @@ export class VictronMqttClient {
 }
 
 // Convenience helper for one-off scripts
-export async function withVictronMqtt(config, fn) {
+export async function withVictronMqtt<T>(config: VictronMqttConfig, fn: (client: VictronMqttClient) => Promise<T>): Promise<T> {
   const client = new VictronMqttClient(config);
   try {
     return await fn(client);

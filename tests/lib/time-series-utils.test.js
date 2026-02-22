@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractWindow, getQuarterStart } from '../../lib/time-series-utils.js';
+import { extractWindow, getQuarterStart } from '../../lib/time-series-utils.ts';
 
 describe('Time Series Utils', () => {
   describe('getQuarterStart', () => {

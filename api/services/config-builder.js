@@ -1,7 +1,7 @@
 import { HttpError } from '../http-errors.js';
 import { loadSettings } from './settings-store.js';
 import { loadData } from './data-store.js';
-import { extractWindow, getQuarterStart } from '../../lib/time-series-utils.js';
+import { extractWindow, getQuarterStart } from '../../lib/time-series-utils.ts';
 
 // Clamp x/100 into [0,1], handling junk defensively
 function clamp01(x) {

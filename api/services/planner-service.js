@@ -1,9 +1,9 @@
 import highsFactory from 'highs';
 
-import { mapRowsToDess, mapRowsToDessV2, computeDessDiff } from '../../lib/dess-mapper.js';
-import { buildLP } from '../../lib/build-lp.js';
-import { parseSolution } from '../../lib/parse-solution.js';
-import { buildPlanSummary } from '../../lib/plan-summary.js';
+import { mapRowsToDess, mapRowsToDessV2, computeDessDiff } from '../../lib/dess-mapper.ts';
+import { buildLP } from '../../lib/build-lp.ts';
+import { parseSolution } from '../../lib/parse-solution.ts';
+import { buildPlanSummary } from '../../lib/plan-summary.ts';
 import { getSolverInputs } from './config-builder.js';
 import { refreshSeriesFromVrmAndPersist } from './vrm-refresh.js';
 import { setDynamicEssSchedule } from './mqtt-service.js';

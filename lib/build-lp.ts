@@ -1,3 +1,5 @@
+import type { SolverConfig } from './types.ts';
+
 export function buildLP({
   // time series data of length T
   load_W, // expected house load in W
@@ -28,7 +30,7 @@ export function buildLP({
 
   // variable parameters
   initialSoc_percent = 20,
-} = {}) {
+}: SolverConfig): string {
   if (!Array.isArray(load_W) || !Array.isArray(pv_W) || !Array.isArray(importPrice) || !Array.isArray(exportPrice)) {
     throw new Error("Array params must be arrays.");
   }
@@ -60,17 +62,17 @@ export function buildLP({
   const initialSoc_Wh = (initialSoc_percent / 100) * batteryCapacity_Wh;
 
   // Variable name helpers
-  const gridToLoad = (t) => `grid_to_load_${t}`;
-  const gridToBattery = (t) => `grid_to_battery_${t}`;
-  const pvToLoad = (t) => `pv_to_load_${t}`;
-  const pvToBattery = (t) => `pv_to_battery_${t}`;
-  const pvToGrid = (t) => `pv_to_grid_${t}`;
-  const batteryToLoad = (t) => `battery_to_load_${t}`;
-  const batteryToGrid = (t) => `battery_to_grid_${t}`;
-  const soc = (t) => `soc_${t}`;
-  const socShortfall = (t) => `soc_shortfall_${t}`;
+  const gridToLoad = (t: number) => `grid_to_load_${t}`;
+  const gridToBattery = (t: number) => `grid_to_battery_${t}`;
+  const pvToLoad = (t: number) => `pv_to_load_${t}`;
+  const pvToBattery = (t: number) => `pv_to_battery_${t}`;
+  const pvToGrid = (t: number) => `pv_to_grid_${t}`;
+  const batteryToLoad = (t: number) => `battery_to_load_${t}`;
+  const batteryToGrid = (t: number) => `battery_to_grid_${t}`;
+  const soc = (t: number) => `soc_${t}`;
+  const socShortfall = (t: number) => `soc_shortfall_${t}`;
 
-  const lines = [];
+  const lines: string[] = [];
 
   // ===============
   // Objective
@@ -175,7 +177,7 @@ export function buildLP({
   return lines.join("\n");
 }
 
-function selectTerminalPriceCentsPerKWh(mode, prices, customPrice_cents_per_kWh = 0) {
+function selectTerminalPriceCentsPerKWh(mode: string, prices: number[], customPrice_cents_per_kWh = 0): number {
   if (mode === "min") return Math.min(...prices);
   if (mode === "avg") return prices.reduce((a, b) => a + b, 0) / prices.length;
   if (mode === "max") return Math.max(...prices);
@@ -184,7 +186,7 @@ function selectTerminalPriceCentsPerKWh(mode, prices, customPrice_cents_per_kWh 
 }
 
 // Pretty numeric printing; avoids scientific notation and ensures pure numbers.
-function toNum(x) {
+function toNum(x: number): string {
   // keep reasonable precision for LP parser; strip trailing zeros
   const s = (Math.round((+x + Number.EPSILON) * 1e12) / 1e12).toString();
   return s.includes("e") ? (+x).toFixed(12) : s;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSolution } from '../../lib/parse-solution.js';
+import { parseSolution } from '../../lib/parse-solution.ts';
 
 describe('parseSolution', () => {
   const cfg = {

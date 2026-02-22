@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { postprocess, getSensorNames } from '../../lib/ha-postprocess.js';
+import { postprocess, getSensorNames } from '../../lib/ha-postprocess.ts';
 
 const sensors = [
   { id: 'sensor.grid_import_1', name: 'Grid Import', unit: 'kWh' },

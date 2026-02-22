@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapRowsToDess, mapRowsToDessV2, computeDessDiff, Strategy, Restrictions, FeedIn } from '../../lib/dess-mapper.js';
+import { mapRowsToDess, mapRowsToDessV2, computeDessDiff, Strategy, Restrictions, FeedIn } from '../../lib/dess-mapper.ts';
 
 describe('mapRowsToDess', () => {
   const cfg = {
