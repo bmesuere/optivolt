@@ -47,16 +47,16 @@ export function mapRowsToDess(rows: PlanRow[], cfg: SolverConfig): DessResult {
     const row = rows[t];
 
     // Feed-in: allow unless export price is negative.
-    const feedin = Number(row.ec) < 0 ? FeedIn.blocked : FeedIn.allowed;
+    const feedin = row.ec < 0 ? FeedIn.blocked : FeedIn.allowed;
 
-    // Primitive flows (absolute)
-    const g2l = Math.abs(Number(row.g2l) || 0);
-    const g2b = Math.abs(Number(row.g2b) || 0);
-    const pv2l = Math.abs(Number(row.pv2l) || 0);
-    const pv2b = Math.abs(Number(row.pv2b) || 0);
-    const pv2g = Math.abs(Number(row.pv2g) || 0);
-    const b2l = Math.abs(Number(row.b2l) || 0);
-    const b2g = Math.abs(Number(row.b2g) || 0);
+    // Primitive flows — all non-negative by LP construction
+    const g2l = row.g2l;
+    const g2b = row.g2b;
+    const pv2l = row.pv2l;
+    const pv2b = row.pv2b;
+    const pv2g = row.pv2g;
+    const b2l = row.b2l;
+    const b2g = row.b2g;
 
     // Flow booleans
     const hasG2L = g2l > FLOW_EPSILON_W;
@@ -70,8 +70,8 @@ export function mapRowsToDess(rows: PlanRow[], cfg: SolverConfig): DessResult {
     const hasNoPvFlow = pvFlow <= FLOW_EPSILON_W;
 
     // Expectations (from inputs)
-    const expectedPv = Number(row.pv) || 0;
-    const expectedLoad = Number(row.load) || 0;
+    const expectedPv = row.pv;
+    const expectedLoad = row.load;
     const pvCoversLoad = expectedPv >= (expectedLoad - FLOW_EPSILON_W);
     const loadExceedsPv = expectedLoad > (expectedPv + FLOW_EPSILON_W);
 
@@ -79,11 +79,11 @@ export function mapRowsToDess(rows: PlanRow[], cfg: SolverConfig): DessResult {
     const deficitOrNoPv = hasNoPvFlow || loadExceedsPv;
 
     // costs and prices
-    const importCost = Number(row.ic);
-    // const exportPrice = Number(row.ec);
+    const importCost = row.ic;
+    // const exportPrice = row.ec;
 
     // SoC refs
-    const _startOfSlotSoc_Wh = t > 0 ? Number(rows[t - 1].soc) : Number(row.soc);
+    const _startOfSlotSoc_Wh = t > 0 ? rows[t - 1].soc : row.soc;
     let socTarget_percent = row.soc_percent;
 
     // Strategy selection
@@ -193,15 +193,13 @@ function findHighestGridUsageCost(rows: PlanRow[], segment: Segment | null, cfg:
   let highestPrice = -Infinity;
   if (!segment) return highestPrice;
 
-  const maxDischarge = Number(cfg.maxDischargePower_W) - FLOW_EPSILON_W;
+  const maxDischarge = cfg.maxDischargePower_W - FLOW_EPSILON_W;
 
   for (let t = segment.start; t <= segment.end; t++) {
     const row = rows[t];
-    const g2l = Math.abs(Number(row.g2l) || 0);
-    const b2l = Math.abs(Number(row.b2l) || 0);
 
-    if (g2l > FLOW_EPSILON_W && b2l < maxDischarge) {
-      const price = Number(row.ic) || 0;
+    if (row.g2l > FLOW_EPSILON_W && row.b2l < maxDischarge) {
+      const price = row.ic;
       if (price > highestPrice) {
         highestPrice = price;
       }
@@ -222,10 +220,9 @@ function findHighestGridChargeCost(rows: PlanRow[], segment: Segment | null): nu
 
   for (let t = segment.start; t <= segment.end; t++) {
     const row = rows[t];
-    const g2b = Math.abs(Number(row.g2b) || 0);
 
-    if (g2b > FLOW_EPSILON_W) {
-      const price = Number(row.ic) || 0;
+    if (row.g2b > FLOW_EPSILON_W) {
+      const price = row.ic;
       if (price > highestPrice) {
         highestPrice = price;
       }
@@ -245,10 +242,9 @@ function findLowestGridExportRevenue(rows: PlanRow[], segment: Segment | null): 
 
   for (let t = segment.start; t <= segment.end; t++) {
     const row = rows[t];
-    const b2g = Math.abs(Number(row.b2g) || 0);
 
-    if (b2g > FLOW_EPSILON_W) {
-      const price = Number(row.ec) || 0;
+    if (row.b2g > FLOW_EPSILON_W) {
+      const price = row.ec;
       if (price < lowestPrice) {
         lowestPrice = price;
       }
@@ -268,10 +264,9 @@ function findLowestPvExportPrice(rows: PlanRow[], segment: Segment | null): numb
 
   for (let t = segment.start; t <= segment.end; t++) {
     const row = rows[t];
-    const pv2g = Math.abs(Number(row.pv2g) || 0);
 
-    if (pv2g > FLOW_EPSILON_W) {
-      const price = Number(row.ec) || 0;
+    if (row.pv2g > FLOW_EPSILON_W) {
+      const price = row.ec;
       if (price < lowestPrice) {
         lowestPrice = price;
       }
@@ -284,7 +279,7 @@ function findLowestPvExportPrice(rows: PlanRow[], segment: Segment | null): numb
  * Checks if a rows's SoC is at (or very close to) either the min or max boundary.
  */
 function isAtSocBoundary(row: PlanRow, cfg: SolverConfig): boolean {
-  const soc = Number(row.soc_percent);
+  const soc = row.soc_percent;
   const atMin = soc <= cfg.minSoc_percent + SOC_EPSILON_PERCENT;
   const atMax = soc >= cfg.maxSoc_percent - SOC_EPSILON_PERCENT;
   return atMin || atMax;
@@ -328,7 +323,7 @@ function getSegmentForIndex(segments: Segment[], index: number): Segment | null 
  *   in the first SoC segment (or null if none).
  */
 function computeDessDiagnostics(rows: PlanRow[], segments: Segment[], cfg: SolverConfig): DessDiagnostics {
-  if (!Array.isArray(rows) || !rows.length) {
+  if (!rows.length) {
     return {
       gridBatteryTippingPoint_cents_per_kWh: -Infinity,
       gridChargeTippingPoint_cents_per_kWh: -Infinity,
@@ -381,22 +376,20 @@ export function mapRowsToDessV2(rows: PlanRow[], cfg: SolverConfig): DessResult 
     const row = rows[t];
 
     // Feed-in: same rule as v1
-    const feedin = Number(row.ec) < 0 ? FeedIn.blocked : FeedIn.allowed;
+    const feedin = row.ec < 0 ? FeedIn.blocked : FeedIn.allowed;
 
-    const importCost = Number(row.ic);
-    const exportPrice = Number(row.ec);
+    const importCost = row.ic;
+    const exportPrice = row.ec;
     let socTarget_percent = row.soc_percent;
 
     // Expected PV/load for PV surplus check
-    const expectedPv = Number(row.pv) || 0;
-    const expectedLoad = Number(row.load) || 0;
-    const pvSurplus = expectedPv > expectedLoad + FLOW_EPSILON_W;
+    const pvSurplus = row.pv > row.load + FLOW_EPSILON_W;
 
     // Precompute flow totals for saturation checks
-    const gridImport = Number(row.g2l) + Number(row.g2b);
-    const gridExport = Number(row.b2g) + Number(row.pv2g);
-    const chargePower = Number(row.g2b) + Number(row.pv2b);
-    const dischargePower = Number(row.b2g) + Number(row.b2l);
+    const gridImport = row.g2l + row.g2b;
+    const gridExport = row.b2g + row.pv2g;
+    const chargePower = row.g2b + row.pv2b;
+    const dischargePower = row.b2g + row.b2l;
 
     // O(1) tipping-point lookup for this slot's segment
     const seg = getSegmentForIndex(segments, t);

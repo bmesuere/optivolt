@@ -1,4 +1,4 @@
-import type { SolverConfig } from './types.ts';
+import type { SolverConfig, TerminalSocValuation } from './types.ts';
 
 export function buildLP({
   // time series data of length T
@@ -31,10 +31,6 @@ export function buildLP({
   // variable parameters
   initialSoc_percent = 20,
 }: SolverConfig): string {
-  if (!Array.isArray(load_W) || !Array.isArray(pv_W) || !Array.isArray(importPrice) || !Array.isArray(exportPrice)) {
-    throw new Error("Array params must be arrays.");
-  }
-
   const T = load_W.length;
   if (pv_W.length !== T || importPrice.length !== T || exportPrice.length !== T) {
     throw new Error("Arrays must have same length");
@@ -153,16 +149,16 @@ export function buildLP({
   lines.push("Bounds");
   for (let t = 0; t < T; t++) {
     // Grid → load/battery (cannot exceed import limit; load cap for the load branch)
-    lines.push(` 0 <= ${gridToLoad(t)} <= ${toNum(Math.min(maxGridImport_W, +load_W[t]))}`);
+    lines.push(` 0 <= ${gridToLoad(t)} <= ${toNum(Math.min(maxGridImport_W, load_W[t]))}`);
     lines.push(` 0 <= ${gridToBattery(t)} <= ${toNum(Math.min(maxGridImport_W, maxChargePower_W))}`);
 
     // PV splits (no curtailment overall; per-branch caps keep things sane)
-    lines.push(` 0 <= ${pvToLoad(t)} <= ${toNum(+load_W[t])}`);
-    lines.push(` 0 <= ${pvToBattery(t)} <= ${toNum(Math.min(+pv_W[t], maxChargePower_W))}`);
-    lines.push(` 0 <= ${pvToGrid(t)} <= ${toNum(Math.min(+pv_W[t], maxGridExport_W))}`);
+    lines.push(` 0 <= ${pvToLoad(t)} <= ${toNum(load_W[t])}`);
+    lines.push(` 0 <= ${pvToBattery(t)} <= ${toNum(Math.min(pv_W[t], maxChargePower_W))}`);
+    lines.push(` 0 <= ${pvToGrid(t)} <= ${toNum(Math.min(pv_W[t], maxGridExport_W))}`);
 
     // Battery → load/grid (cannot exceed discharge or respective sinks)
-    lines.push(` 0 <= ${batteryToLoad(t)} <= ${toNum(Math.min(maxDischargePower_W, +load_W[t]))}`);
+    lines.push(` 0 <= ${batteryToLoad(t)} <= ${toNum(Math.min(maxDischargePower_W, load_W[t]))}`);
     lines.push(` 0 <= ${batteryToGrid(t)} <= ${toNum(Math.min(maxDischargePower_W, maxGridExport_W))}`);
 
     // SOC bounds
@@ -177,11 +173,11 @@ export function buildLP({
   return lines.join("\n");
 }
 
-function selectTerminalPriceCentsPerKWh(mode: string, prices: number[], customPrice_cents_per_kWh = 0): number {
+function selectTerminalPriceCentsPerKWh(mode: TerminalSocValuation, prices: number[], customPrice_cents_per_kWh = 0): number {
   if (mode === "min") return Math.min(...prices);
   if (mode === "avg") return prices.reduce((a, b) => a + b, 0) / prices.length;
   if (mode === "max") return Math.max(...prices);
-  if (mode === "custom") return Number.isFinite(+customPrice_cents_per_kWh) ? +customPrice_cents_per_kWh : 0;
+  if (mode === "custom") return customPrice_cents_per_kWh;
   return 0; // "zero"
 }
 

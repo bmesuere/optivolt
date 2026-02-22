@@ -44,7 +44,7 @@ export interface SolverConfig {
  * A time-series source object as stored in data.json.
  */
 export interface TimeSeries {
-  start: string | number | Date;
+  start: string;
   step?: number;
   values: number[];
 }
@@ -58,8 +58,8 @@ export interface PlanRow {
   timestampMs: number;
   load: number;       // expected load W
   pv: number;         // expected PV W
-  ic: number | null;  // import price c€/kWh
-  ec: number | null;  // export price c€/kWh
+  ic: number;  // import price c€/kWh
+  ec: number;  // export price c€/kWh
   g2l: number;   // grid → load W
   g2b: number;   // grid → battery W
   pv2l: number;  // PV → load W

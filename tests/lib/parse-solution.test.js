@@ -51,7 +51,4 @@ describe('parseSolution', () => {
      expect(rows[0].pv2l).toBe(100);
   });
 
-  it('throws if timing options are missing', () => {
-    expect(() => parseSolution({}, cfg, {})).toThrow('Missing');
-  });
 });

@@ -7,7 +7,7 @@ export interface VictronMqttConfig {
   password?: string;
   protocol?: string;
   reconnectPeriod?: number;
-  serial?: string | null;
+  serial?: string;
 }
 
 interface WaitForMessageOptions {
@@ -21,13 +21,13 @@ interface ReadSettingOptions {
 }
 
 export interface ScheduleSlot {
-  startEpoch?: number | null;
-  durationSeconds?: number | null;
-  strategy?: number | null;
-  flags?: number | null;
-  socTarget?: number | null;
-  restrictions?: number | null;
-  allowGridFeedIn?: number | null;
+  startEpoch?: number;
+  durationSeconds?: number;
+  strategy?: number;
+  flags?: number;
+  socTarget?: number;
+  restrictions?: number;
+  allowGridFeedIn?: number;
 }
 
 export class VictronMqttClient {
@@ -48,7 +48,7 @@ export class VictronMqttClient {
     password = '',
     protocol = 'mqtt',    // 'mqtt', 'ws', 'wss', ...
     reconnectPeriod = 0,  // 0 = no auto reconnect by default
-    serial = null,        // optional: if you already know the portal id
+    serial,               // optional: if you already know the portal id
   }: VictronMqttConfig = {}) {
     this.host = host;
     this.port = port;
@@ -57,7 +57,7 @@ export class VictronMqttClient {
     this.protocol = protocol;
     this.reconnectPeriod = reconnectPeriod;
 
-    this.serial = serial;         // cached portal id once known
+    this.serial = serial ?? null;  // cached portal id once known
     this._serialPromise = null;   // in-flight detection, if any
     this._clientPromise = null;
   }
@@ -349,13 +349,13 @@ export class VictronMqttClient {
 
     const tasks: Promise<void>[] = [];
 
-    if (slot.startEpoch != null) tasks.push(this.writeSetting(`${base}/Start`, Number(slot.startEpoch), { serial: s }));
-    if (slot.durationSeconds != null) tasks.push(this.writeSetting(`${base}/Duration`, Number(slot.durationSeconds), { serial: s }));
-    if (slot.strategy != null) tasks.push(this.writeSetting(`${base}/Strategy`, Number(slot.strategy), { serial: s }));
-    if (slot.flags != null) tasks.push(this.writeSetting(`${base}/Flags`, Number(slot.flags), { serial: s }));
-    if (slot.socTarget != null) tasks.push(this.writeSetting(`${base}/Soc`, Number(slot.socTarget), { serial: s }));
-    if (slot.restrictions != null) tasks.push(this.writeSetting(`${base}/Restrictions`, Number(slot.restrictions), { serial: s }));
-    if (slot.allowGridFeedIn != null) tasks.push(this.writeSetting(`${base}/AllowGridFeedIn`, Number(slot.allowGridFeedIn), { serial: s }));
+    if (slot.startEpoch !== undefined) tasks.push(this.writeSetting(`${base}/Start`, slot.startEpoch, { serial: s }));
+    if (slot.durationSeconds !== undefined) tasks.push(this.writeSetting(`${base}/Duration`, slot.durationSeconds, { serial: s }));
+    if (slot.strategy !== undefined) tasks.push(this.writeSetting(`${base}/Strategy`, slot.strategy, { serial: s }));
+    if (slot.flags !== undefined) tasks.push(this.writeSetting(`${base}/Flags`, slot.flags, { serial: s }));
+    if (slot.socTarget !== undefined) tasks.push(this.writeSetting(`${base}/Soc`, slot.socTarget, { serial: s }));
+    if (slot.restrictions !== undefined) tasks.push(this.writeSetting(`${base}/Restrictions`, slot.restrictions, { serial: s }));
+    if (slot.allowGridFeedIn !== undefined) tasks.push(this.writeSetting(`${base}/AllowGridFeedIn`, slot.allowGridFeedIn, { serial: s }));
 
     await Promise.all(tasks);
   }

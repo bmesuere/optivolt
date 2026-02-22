@@ -357,7 +357,7 @@ function num(x: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 function safeMul(a: number, b: number): number {
-  const n = Number(a) * Number(b);
+  const n = a * b;
   return Number.isFinite(n) ? n : 0;
 }
 function boolish(v: unknown): boolean { return v === true || v === 1 || v === '1'; }
@@ -391,13 +391,9 @@ function ensureWindow({ startSec, endSec, startMs, endMs }: Partial<VRMWindow> =
  */
 function toSeries(arr: [number, number][] | undefined): Map<number, number> {
   const map = new Map<number, number>();
-  if (Array.isArray(arr)) {
-    for (const row of arr) {
-      if (Array.isArray(row) && row.length >= 2) {
-        const t = Number(row[0]);
-        const v = Number(row[1]);
-        if (Number.isFinite(t) && Number.isFinite(v)) map.set(t, v);
-      }
+  if (arr) {
+    for (const [t, v] of arr) {
+      if (Number.isFinite(t) && Number.isFinite(v)) map.set(t, v);
     }
   }
   return map;
@@ -407,7 +403,7 @@ function toSeries(arr: [number, number][] | undefined): Map<number, number> {
  * Align a (ms -> value) map to a fixed ms timeline, filling missing with fallback.
  */
 function alignToTimeline(seriesMap: Map<number, number>, timeline: number[], fallback = 0): number[] {
-  return timeline.map(ms => (seriesMap.has(ms) ? Number(seriesMap.get(ms)) : fallback));
+  return timeline.map(ms => seriesMap.get(ms) ?? fallback);
 }
 
 /**
@@ -432,7 +428,7 @@ function fillHourlyWAcrossQuarterHours(seriesMap: Map<number, number>, timeline:
     if (hourStart !== currentHourStart) {
       currentHourStart = hourStart;
       const w = seriesMap.get(hourStart); // value is already Watts at hour start
-      currentHourW = (Number.isFinite(w) && w! > 0) ? Number(w) : 0;
+      currentHourW = (Number.isFinite(w) && w! > 0) ? w! : 0;
     }
 
     result[i] = currentHourW;

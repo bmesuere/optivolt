@@ -10,10 +10,6 @@ describe('buildLP', () => {
     exportPrice: Array(T).fill(5),
   };
 
-  it('throws if required arrays are missing', () => {
-    expect(() => buildLP({})).toThrow('Array params must be arrays');
-  });
-
   it('throws if arrays have mismatched lengths', () => {
     expect(() => buildLP({
       ...mockData,

@@ -76,7 +76,7 @@ export function postprocess(
   }
 
   // Compute derived series
-  if (derived && derived.length > 0) {
+  if (derived.length > 0) {
     for (const time of timestamps) {
       const sensorsMap = sensorsByTime.get(time)!;
       for (const { name, formula } of derived) {

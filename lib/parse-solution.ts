@@ -14,26 +14,16 @@ export interface HighsSolution {
 }
 
 interface ParseSolutionOpts {
-  startMs: number | string;
-  stepMin: number | string;
+  startMs: number;
+  stepMin: number;
 }
 
 export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: ParseSolutionOpts): PlanRow[] {
   const T = cfg.load_W.length;
 
-  // unpack timeline info
-  const startMs = Number(opts.startMs);
-  const stepMin = Number(opts.stepMin);
+  const timestampsMs = synthesizeFromStart(opts.startMs, opts.stepMin, T);
 
-  if (!Number.isFinite(startMs) || !Number.isFinite(stepMin)) {
-    throw new Error(
-      `parseSolution: Missing 'startMs' or 'stepMin' in options. This is a server logic error.`
-    );
-  }
-
-  const timestampsMs = synthesizeFromStart(startMs, stepMin, T);
-
-  const cap = Math.max(1e-9, Number(cfg.batteryCapacity_Wh));
+  const cap = Math.max(1e-9, cfg.batteryCapacity_Wh);
 
   // --- 1. Reconstruct solver columns into per-slot arrays ---
   const g2l = Array(T).fill(0);
@@ -83,8 +73,8 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
 
       load: round(cfg.load_W[t]),
       pv: round(cfg.pv_W[t]),
-      ic: cfg.importPrice?.[t] ?? null,
-      ec: cfg.exportPrice?.[t] ?? null,
+      ic: cfg.importPrice[t],
+      ec: cfg.exportPrice[t],
 
       g2l: round(g2l[t]),
       g2b: round(g2b[t]),

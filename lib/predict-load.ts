@@ -81,7 +81,7 @@ export function predict(
   const aggregate = aggregation === 'median' ? median : mean;
 
   // Predict for explicit targets if provided, otherwise for all history entries
-  const entriesToPredict = Array.isArray(targets) ? targets : sensorHistory;
+  const entriesToPredict = targets ?? sensorHistory;
   const results: PredictionResult[] = [];
 
   for (const entry of entriesToPredict) {

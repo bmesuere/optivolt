@@ -31,10 +31,10 @@ export function buildPlanSummary(rows: PlanRow[], cfg: Pick<SolverConfig, 'stepS
     };
   }
 
-  const stepMinutes = Number(cfg.stepSize_m ?? 15);
+  const stepMinutes = cfg.stepSize_m;
   const stepHours =
     Number.isFinite(stepMinutes) && stepMinutes > 0 ? stepMinutes / 60 : 0.25;
-  const W2kWh = (x: number) => (Number(x) || 0) * stepHours / 1000;
+  const W2kWh = (x: number) => x * stepHours / 1000;
 
   let loadTotal = 0;
   let pvTotal = 0;
@@ -65,9 +65,8 @@ export function buildPlanSummary(rows: PlanRow[], cfg: Pick<SolverConfig, 'stepS
     batteryToGrid += b2gK;
     importEnergy += impK;
 
-    const price = Number(row.ic);
-    if (impK > 0 && Number.isFinite(price)) {
-      priceTimesEnergy += price * impK;
+    if (impK > 0) {
+      priceTimesEnergy += row.ic * impK;
     }
   }
 
