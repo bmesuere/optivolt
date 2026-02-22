@@ -51,7 +51,7 @@ describe('Custom Data Injection', () => {
     });
     saveData.mockResolvedValue();
     loadSettings.mockResolvedValue({
-      dataSources: { prices: 'vrm' } // default
+      dataSources: { prices: 'api', load: 'api', pv: 'api', soc: 'api' } // allow custom data in tests
     });
     saveSettings.mockResolvedValue();
   });
@@ -87,7 +87,20 @@ describe('Custom Data Injection', () => {
       .send({ invalidKey: {} });
 
     expect(res.status).toBe(400);
-    expect(res.body.message).toBe('No valid data keys provided');
+    expect(res.body.message).toBe('No valid data keys provided or settings are not set to API');
+    expect(saveData).not.toHaveBeenCalled();
+  });
+
+  it('POST /data should reject valid keys if setting is not API', async () => {
+    loadSettings.mockResolvedValue({
+      dataSources: { prices: 'vrm' }
+    });
+    const res = await request(app)
+      .post('/data')
+      .send({ importPrice: { start: '2024-02-01T00:00:00Z', step: 60, values: [99] } });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('No valid data keys provided or settings are not set to API');
     expect(saveData).not.toHaveBeenCalled();
   });
 

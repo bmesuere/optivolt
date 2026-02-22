@@ -10,6 +10,7 @@ import { debounce } from "./src/utils.js";
 import { refreshVrmSettings } from "./src/api/api.js";
 import { loadInitialConfig, saveConfig } from "./src/config-store.js";
 import { requestRemoteSolve } from "./src/api/api.js";
+import { initPredictionsTab } from "./src/predictions.js";
 
 // Import new modules
 import {
@@ -42,12 +43,42 @@ const persistConfigDebounced = debounce((cfg) => {
 // ---------- Boot ----------
 boot();
 
+function setupTabSwitcher() {
+  const tabOptimizer = document.getElementById('tab-optimizer');
+  const tabPredictions = document.getElementById('tab-predictions');
+  const panelOptimizer = document.getElementById('panel-optimizer');
+  const panelPredictions = document.getElementById('panel-predictions');
+
+  if (!tabOptimizer || !tabPredictions || !panelOptimizer || !panelPredictions) return;
+
+  // Complete class strings — replace wholesale to avoid stale hover/state classes
+  const ACTIVE_CLS = 'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium bg-white text-ink shadow-sm dark:bg-slate-700 dark:text-slate-100 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50';
+  const INACTIVE_CLS = 'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50';
+
+  function activateTab(isOptimizer) {
+    // Use Tailwind's .hidden class (display:none !important) so it beats utility classes like .grid
+    panelOptimizer.classList.toggle('hidden', !isOptimizer);
+    panelPredictions.classList.toggle('hidden', isOptimizer);
+
+    tabOptimizer.setAttribute('aria-selected', String(isOptimizer));
+    tabPredictions.setAttribute('aria-selected', String(!isOptimizer));
+
+    tabOptimizer.className = isOptimizer ? ACTIVE_CLS : INACTIVE_CLS;
+    tabPredictions.className = isOptimizer ? INACTIVE_CLS : ACTIVE_CLS;
+  }
+
+  tabOptimizer.addEventListener('click', () => activateTab(true));
+  tabPredictions.addEventListener('click', () => activateTab(false));
+}
+
 async function boot() {
   const { config: initialConfig, source } = await loadInitialConfig();
 
   hydrateUI(els, initialConfig);
 
   setupSystemCardCollapsible(els);
+  setupTabSwitcher();
+  await initPredictionsTab();
 
   // Wire inputs with callbacks
   wireGlobalInputs(els, {

@@ -1,7 +1,7 @@
 name: Optivolt
 slug: optivolt
-version: "0.1.0"
-description: Plan and control Victron ESS with forecasts & dynamic tariffs.
+version: "0.2.0"
+description: Plan and control Victron ESS with forecasts & dynamic tariffs!
 url: https://github.com/bmesuere/optivolt
 arch:
   - aarch64
@@ -14,6 +14,7 @@ ingress: true
 ingress_port: 3000
 panel_title: Optivolt
 panel_icon: mdi:home-battery-outline
+homeassistant_api: true
 
 ports:
   "3000/tcp": 3070

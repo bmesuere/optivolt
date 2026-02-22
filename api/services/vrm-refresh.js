@@ -70,7 +70,9 @@ export async function refreshSeriesFromVrmAndPersist() {
   const settings = await loadSettings();
   const sources = settings.dataSources || {};
 
-  const shouldFetchForecasts = sources.load === 'vrm' || sources.pv === 'vrm';
+  const shouldFetchVrmLoad = sources.load === 'vrm';
+  const shouldFetchVrmPv = sources.pv === 'vrm';
+  const shouldFetchForecasts = shouldFetchVrmLoad || shouldFetchVrmPv;
   const shouldFetchPrices = sources.prices === 'vrm';
   const shouldFetchSoc = sources.soc === 'mqtt';
 
@@ -99,6 +101,7 @@ export async function refreshSeriesFromVrmAndPersist() {
     else console.error('Failed to read SoC from MQTT:', socResult.reason?.message ?? String(socResult.reason));
   }
 
+
   // Load previous data for fallback (we overwrite specific keys if VRM usage is active)
   const baseData = await loadData();
 
@@ -113,8 +116,7 @@ export async function refreshSeriesFromVrmAndPersist() {
   // Build new data structures (or keep existing)
 
   let load = baseData.load;
-  // If we fetched forecasts AND the user wants VRM load, use it
-  if (shouldFetchForecasts && sources.load !== 'api' && forecasts) {
+  if (shouldFetchVrmLoad && forecasts) {
     load = {
       start: getStart(forecasts, 'load'),
       step: forecasts?.step_minutes ?? 15,
@@ -123,7 +125,7 @@ export async function refreshSeriesFromVrmAndPersist() {
   }
 
   let pv = baseData.pv;
-  if (shouldFetchForecasts && sources.pv !== 'api' && forecasts) {
+  if (shouldFetchVrmPv && forecasts) {
     pv = {
       start: getStart(forecasts, 'pv'),
       step: forecasts?.step_minutes ?? 15,

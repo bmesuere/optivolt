@@ -114,7 +114,7 @@ export function renderTable({ rows, cfg, targets, showKwh, dessDiff }) {
     <thead>
       <tr class="align-bottom">
         ${cols.map(c =>
-    `<th class="px-2 py-1 border-b font-medium text-right align-bottom border-slate-200/80 dark:border-slate-700/70 bg-slate-50 dark:bg-slate-900" ${c.tip ? `title="${escapeHtml(c.tip)}"` : ""}>${c.headerHtml}</th>`
+    `<th class="px-2 py-2 border-b text-[10px] font-semibold uppercase tracking-wider text-right align-bottom border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500" ${c.tip ? `title="${escapeHtml(c.tip)}"` : ""}>${c.headerHtml}</th>`
   ).join("")}
       </tr>
     </thead>`;
@@ -145,7 +145,7 @@ export function renderTable({ rows, cfg, targets, showKwh, dessDiff }) {
     </tbody>`;
 
   table.innerHTML = thead + tbody;
-  if (tableUnit) tableUnit.textContent = `Units: ${showKwh ? "kWh" : "W"}`;
+  if (tableUnit) tableUnit.textContent = showKwh ? "kWh" : "W";
 
   // helpers (module-local)
   function fmtEnergy(x, { dash = true } = {}) {

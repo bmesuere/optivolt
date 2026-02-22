@@ -1,5 +1,6 @@
 import express from 'express';
 import { loadData, saveData } from '../services/data-store.js';
+import { loadSettings } from '../services/settings-store.js';
 import { HttpError, toHttpError } from '../http-errors.js';
 
 const router = express.Router();
@@ -31,13 +32,23 @@ router.post('/', async (req, res, next) => {
     }
 
     const currentData = await loadData();
+    const settings = await loadSettings();
+    const dataSources = settings?.dataSources || {};
+
+    const sourceMapping = {
+      load: dataSources.load,
+      pv: dataSources.pv,
+      importPrice: dataSources.prices,
+      exportPrice: dataSources.prices,
+      soc: dataSources.soc
+    };
 
     // keys allowed to be updated
     const allowedKeys = ['load', 'pv', 'importPrice', 'exportPrice', 'soc'];
-    const keysToUpdate = Object.keys(payload).filter(k => allowedKeys.includes(k));
+    const keysToUpdate = Object.keys(payload).filter(k => allowedKeys.includes(k) && sourceMapping[k] === 'api');
 
     if (keysToUpdate.length === 0) {
-      throw new HttpError(400, 'No valid data keys provided', { details: { keysUpdated: [] } });
+      throw new HttpError(400, 'No valid data keys provided or settings are not set to API', { details: { keysUpdated: [] } });
     }
 
     const nextData = { ...currentData };
@@ -58,6 +69,7 @@ router.post('/', async (req, res, next) => {
 
     try {
       await saveData(nextData);
+      logDataUpdateCall(keysToUpdate);
       res.json({ message: 'Data updated successfully', keysUpdated: keysToUpdate });
     } catch (saveError) {
       next(toHttpError(saveError, 500, 'Failed to persist data'));
@@ -69,6 +81,15 @@ router.post('/', async (req, res, next) => {
     next(toHttpError(error, 500));
   }
 });
+
+
+function logDataUpdateCall(keysUpdated) {
+  const timestamp = new Date().toISOString();
+  console.log('[data] update', {
+    timestamp,
+    keysUpdated,
+  });
+}
 
 function validateSeries(obj, name) {
   if (!obj || typeof obj !== 'object') throw new Error(`Invalid ${name} object`);

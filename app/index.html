@@ -72,7 +72,176 @@
       border-color: rgb(255 255 255 / 0.1);
       background-color: #111827;
     }
+
+    /* === Custom fonts === */
+    body {
+      font-family: 'Outfit', system-ui, sans-serif;
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+    }
+
+    /* === Refined form inputs === */
+    .form-input:focus,
+    .form-select:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+    }
+
+    /* === Sidebar section label === */
+    .sidebar-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+
+    .sidebar-label::before {
+      content: '';
+      display: block;
+      width: 3px;
+      height: 0.75rem;
+      border-radius: 9999px;
+      background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%);
+      flex-shrink: 0;
+    }
+
+    :root.dark .sidebar-label {
+      color: #64748b;
+    }
+
+    /* === Toggle switch === */
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.625rem;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .toggle input[type="checkbox"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+    }
+
+    .toggle-knob {
+      position: relative;
+      width: 2.25rem;
+      height: 1.25rem;
+      background: #e2e8f0;
+      border-radius: 9999px;
+      transition: background 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .toggle-knob::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 1rem;
+      height: 1rem;
+      background: white;
+      border-radius: 9999px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      transition: transform 0.2s ease;
+    }
+
+    .toggle input:checked~.toggle-knob {
+      background: #0284c7;
+    }
+
+    .toggle input:checked~.toggle-knob::after {
+      transform: translateX(1rem);
+    }
+
+    .toggle input:focus-visible~.toggle-knob {
+      outline: 2px solid #38bdf8;
+      outline-offset: 2px;
+    }
+
+    :root.dark .toggle-knob {
+      background: #334155;
+    }
+
+    /* === Summary panel === */
+    .summary-panel {
+      border-radius: 0.625rem;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      overflow: hidden;
+    }
+
+    :root.dark .summary-panel {
+      background: rgba(2, 6, 23, 0.5);
+      border-color: rgba(255, 255, 255, 0.07);
+    }
+
+    .summary-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0.75rem;
+      gap: 0.75rem;
+    }
+
+    .summary-row+.summary-row,
+    .summary-block+.summary-row,
+    .summary-row+.summary-block,
+    .summary-block+.summary-block {
+      border-top: 1px solid #f1f5f9;
+    }
+
+    :root.dark .summary-row+.summary-row,
+    :root.dark .summary-block+.summary-row,
+    :root.dark .summary-row+.summary-block,
+    :root.dark .summary-block+.summary-block {
+      border-top-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .summary-block {
+      padding: 0.5rem 0.75rem;
+    }
+
+    .stat-label {
+      font-size: 0.625rem;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      white-space: nowrap;
+    }
+
+    :root.dark .stat-label {
+      color: #475569;
+    }
+
+    .stat-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: #0f172a;
+    }
+
+    :root.dark .stat-value {
+      color: #cbd5e1;
+    }
   </style>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -85,9 +254,32 @@
   class="min-h-full w-full bg-fixed bg-gradient-to-b from-slate-50 to-slate-100 text-ink dark:from-slate-900 dark:to-slate-950 dark:text-slate-100">
   <!-- Header -->
   <header class="border-b border-white/60 dark:border-white/5 bg-white/70 dark:bg-slate-900/60 backdrop-blur">
-    <div class="mx-auto w-full max-w-7xl px-4 py-2 sm:py-3 flex items-center justify-between">
-      <h1 class="text-2xl font-semibold tracking-tight">Optivolt DESS</h1>
+    <div class="relative mx-auto w-full max-w-7xl px-4 py-2 sm:py-3 flex items-center justify-between">
+      <h1 class="text-2xl font-bold tracking-tight shrink-0">Optivolt <span
+          class="text-xl font-normal text-slate-400 dark:text-slate-500">DESS</span></h1>
       <div class="flex items-center gap-2">
+        <nav role="tablist" class="sm:absolute sm:left-1/2 sm:-translate-x-1/2">
+          <div class="flex rounded-full bg-slate-100 p-0.5 dark:bg-slate-800">
+            <button id="tab-optimizer" role="tab" aria-selected="true" aria-controls="panel-optimizer"
+              class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium bg-white text-ink shadow-sm dark:bg-slate-700 dark:text-slate-100 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+              <!-- Lightning bolt / optimizer icon -->
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"
+                aria-hidden="true">
+                <path d="M7 2v11h3v9l7-12h-4l4-8z" />
+              </svg>
+              <span class="hidden sm:inline">Optimizer</span>
+            </button>
+            <button id="tab-predictions" role="tab" aria-selected="false" aria-controls="panel-predictions"
+              class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+              <!-- Trending up / predictions icon -->
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"
+                aria-hidden="true">
+                <path d="M3.5 18.5l6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17l1.5 1.5z" />
+              </svg>
+              <span class="hidden sm:inline">Predictions</span>
+            </button>
+          </div>
+        </nav>
         <!-- Appearance icon button -->
         <button id="themeToggle"
           class="rounded-full border border-slate-200 bg-white p-2 text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
@@ -105,7 +297,7 @@
           </svg>
         </button>
         <a href="https://github.com/bmesuere/optivolt" target="_blank" rel="noopener"
-          class="rounded-pill border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+          class="hidden sm:inline-flex items-center h-9 rounded-pill border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
           GitHub
         </a>
       </div>
@@ -113,22 +305,24 @@
   </header>
 
   <!-- Main -->
-  <main class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3">
+  <main id="panel-optimizer" role="tabpanel" aria-labelledby="tab-optimizer"
+    class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3">
     <!-- Settings (now scrolls with the page) -->
     <aside class="lg:col-span-1 min-w-0">
-      <div id="sidebar-stack" class="space-y-6 lg:pr-1">
+      <div id="sidebar-stack" class="space-y-6">
 
 
 
         <!-- Settings (Algorithm) -->
         <section id="card-algo" class="card">
-          <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-base font-semibold">Settings</h2>
+          <div class="mb-4">
+            <h2 class="sidebar-label">Settings</h2>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <label class="text-sm">
-              <span class="whitespace-nowrap">Terminal SoC valuation</span>
+              <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Terminal
+                SoC</span>
               <select id="terminal" class="form-select">
                 <option value="zero" selected>zero</option>
                 <option value="min">min</option>
@@ -138,134 +332,94 @@
               </select>
             </label>
             <label class="text-sm">
-              <span class="whitespace-nowrap">Custom terminal price</span>
-              <div class="mt-1 relative">
+              <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Custom
+                price</span>
+              <div class="relative">
                 <input id="terminal-custom" type="number" step="0.1" min="0" placeholder="e.g. 17.4"
                   class="form-input pr-16 disabled:opacity-50 disabled:cursor-not-allowed" disabled />
-                <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-500">
+                <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-slate-400">
                   c€/kWh
                 </span>
               </div>
             </label>
           </div>
 
-          <!-- Run options -->
-          <div class="mt-4 space-y-2 text-sm">
-            <label class="flex items-center gap-2">
-              <input id="update-data-before-run" type="checkbox"
-                class="rounded border-slate-300 dark:border-white/10 dark:bg-slate-800">
-              <span class="text-ink-soft">Update data before recompute</span>
+          <!-- Run options as toggles -->
+          <div class="mt-4 pt-4 border-t border-slate-100 dark:border-white/5 space-y-3">
+            <label class="toggle">
+              <input id="update-data-before-run" type="checkbox">
+              <span class="toggle-knob"></span>
+              <span class="text-sm text-slate-600 dark:text-slate-400">Update data before recompute</span>
             </label>
-            <label class="flex items-center gap-2">
-              <input id="push-to-victron" type="checkbox"
-                class="rounded border-slate-300 dark:border-white/10 dark:bg-slate-800">
-              <span class="text-ink-soft">Push schedule to Victron</span>
+            <label class="toggle">
+              <input id="push-to-victron" type="checkbox">
+              <span class="toggle-knob"></span>
+              <span class="text-sm text-slate-600 dark:text-slate-400">Push schedule to Victron</span>
             </label>
           </div>
 
-          <!-- Recompute BELOW fields -->
-          <div class="mt-4 flex justify-center">
+          <!-- Recompute -->
+          <div class="mt-4">
             <button id="run" title="Recompute (⌘+Enter)"
-              class="w-full sm:w-auto rounded-pill bg-sky-600 px-4 py-2 text-white shadow-soft hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+              class="w-full rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-sky-400/50 transition-all">
               Recompute
             </button>
           </div>
 
           <!-- Plan summary -->
-          <div class="mt-4 rounded-lg bg-slate-50 px-3 py-3 text-sm text-ink-soft dark:bg-slate-800/60">
-            <div class="flex items-center justify-between gap-3">
-              <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Status
+          <div class="mt-4 summary-panel">
+            <div class="summary-row">
+              <span class="stat-label">Status</span>
+              <div id="status" class="text-sm font-medium text-ink dark:text-slate-100">Initializing…</div>
+            </div>
+            <div class="grid grid-cols-2 border-t border-slate-100 dark:border-white/5">
+              <div class="px-3 py-2.5 border-b border-r border-slate-100 dark:border-white/5">
+                <div class="stat-label mb-0.5">Current SoC</div>
+                <div class="stat-value"><span id="plan-soc-now">—</span><span
+                    class="text-[10px] opacity-50 ml-0.5">%</span></div>
               </div>
-              <div id="status" class="text-sm font-medium text-ink dark:text-slate-100">
-                Initializing…
+              <div class="px-3 py-2.5 border-b border-slate-100 dark:border-white/5">
+                <div class="stat-label mb-0.5">Plan start</div>
+                <div id="plan-ts-start" class="stat-value">—</div>
+              </div>
+              <div class="px-3 py-2.5 border-b border-r border-slate-100 dark:border-white/5">
+                <div class="stat-label mb-0.5">Predicted load</div>
+                <div id="sum-load-kwh" class="stat-value">—</div>
+              </div>
+              <div class="px-3 py-2.5 border-b border-slate-100 dark:border-white/5">
+                <div class="stat-label mb-0.5">Predicted PV</div>
+                <div id="sum-pv-kwh" class="stat-value">—</div>
+              </div>
+              <div class="px-3 py-2.5 col-span-2">
+                <div class="stat-label mb-0.5">Avg. import price</div>
+                <div id="avg-import-cent" class="stat-value">—</div>
               </div>
             </div>
-
-            <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
-              <div>
-                <dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Current SoC
-                </dt>
-                <dd class="font-mono text-sm text-ink dark:text-slate-100">
-                  <span id="plan-soc-now">—</span><span class="text-xs"> %</span>
-                </dd>
+            <div class="summary-block border-t border-slate-100 dark:border-white/5">
+              <div class="flex items-baseline justify-between mb-2">
+                <span class="stat-label">Load split</span>
+                <span class="text-[11px] text-slate-400 dark:text-slate-600">grid · battery · PV</span>
               </div>
-              <div>
-                <dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Plan start
-                </dt>
-                <dd id="plan-ts-start" class="font-mono text-sm text-ink dark:text-slate-100">
-                  —
-                </dd>
+              <div class="flex font-mono text-[11px] text-slate-500 dark:text-slate-400 justify-between mb-2">
+                <span id="sum-load-grid-kwh" title="Grid">—</span>
+                <span id="sum-load-batt-kwh" title="Battery">—</span>
+                <span id="sum-load-pv-kwh" title="PV">—</span>
               </div>
-              <div>
-                <dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Predicted load
-                </dt>
-                <dd id="sum-load-kwh" class="font-mono text-sm text-ink dark:text-slate-100">
-                  —
-                </dd>
+              <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80"
+                id="load-split-bar"></div>
+            </div>
+            <div class="summary-block border-t border-slate-100 dark:border-white/5">
+              <div class="flex items-baseline justify-between mb-2">
+                <span class="stat-label">Tipping points</span>
+                <span class="text-[11px] text-slate-400 dark:text-slate-600">charge · use · export</span>
               </div>
-              <div>
-                <dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Predicted PV
-                </dt>
-                <dd id="sum-pv-kwh" class="font-mono text-sm text-ink dark:text-slate-100">
-                  —
-                </dd>
+              <div class="flex font-mono text-[11px] text-slate-500 dark:text-slate-400 justify-between mb-2">
+                <span id="grid-charge-point-cent" title="Grid charge">—</span>
+                <span id="tipping-point-cent" title="Grid/battery">—</span>
+                <span id="export-point-cent" title="Battery export">—</span>
               </div>
-              <div class="col-span-2">
-                <dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Load split (grid / battery / PV)
-                </dt>
-                <dd class="mt-1">
-                  <div class="flex text-[11px] font-mono text-slate-600 dark:text-slate-300">
-                    <span id="sum-load-grid-kwh" class="flex-1" title="Grid">—</span>
-                    <span id="sum-load-batt-kwh" class="flex-1 text-center" title="Battery">—</span>
-                    <span id="sum-load-pv-kwh" class="flex-1 text-right" title="PV">—</span>
-                  </div>
-                  <!-- Mini stacked bar: grid / battery / PV -->
-                  <div class="mt-2">
-                    <div class="flex h-2 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80"
-                      id="load-split-bar">
-                      <!-- Will be populated by JS -->
-                    </div>
-                  </div>
-                </dd>
-              </div>
-            </dl>
-
-            <div class="mt-3 grid grid-cols-1 gap-y-1 dark:border-white/10">
-              <div class="mt-2">
-                <dt class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Tipping points (charge / use / export)
-                </dt>
-                <dd class="mt-1">
-                  <div class="flex text-[11px] font-mono text-slate-600 dark:text-slate-300">
-                    <span id="grid-charge-point-cent" class="flex-1" title="Grid charge">—</span>
-                    <span id="tipping-point-cent" class="flex-1 text-center" title="Grid/battery">—</span>
-                    <span id="export-point-cent" class="flex-1 text-right" title="Battery export">—</span>
-                  </div>
-                  <!-- Energy Flow Bar -->
-                  <div class="mt-2">
-                    <div class="flex h-2 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80"
-                      id="flow-split-bar">
-                      <!-- Will be populated by JS -->
-                    </div>
-                  </div>
-                </dd>
-              </div>
-
-              <div
-                class="flex items-baseline justify-between gap-3 border-t border-slate-200/70 pt-2 dark:border-white/10 mt-2">
-                <span class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Avg. import price
-                </span>
-                <span id="avg-import-cent" class="font-mono text-sm text-ink dark:text-slate-100">
-                  —
-                </span>
-              </div>
+              <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80"
+                id="flow-split-bar"></div>
             </div>
           </div>
         </section>
@@ -273,7 +427,18 @@
         <!-- System settings (Fixed) -->
         <section id="card-system" class="card">
           <div id="system-settings-header" class="mb-3 flex items-center justify-between gap-3">
+            <h2 class="sidebar-label">System settings</h2>
             <div class="flex items-center gap-2">
+              <button id="vrm-fetch-settings" type="button" title="Fetch settings from Victron VRM"
+                class="inline-flex items-center justify-center h-9 w-9 rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 sm:w-auto sm:px-3 sm:gap-2 sm:rounded-pill sm:text-sm">
+                <!-- autorenew icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24">
+                  <title>autorenew</title>
+                  <path fill="currentColor"
+                    d="M12 19C12 19.34 12.03 19.67 12.08 20H6.5C5 20 3.69 19.5 2.61 18.43C1.54 17.38 1 16.09 1 14.58C1 13.28 1.39 12.12 2.17 11.1S4 9.43 5.25 9.15C5.67 7.62 6.5 6.38 7.75 5.43S10.42 4 12 4C13.95 4 15.6 4.68 16.96 6.04C18.32 7.4 19 9.05 19 11C20.15 11.13 21.1 11.63 21.86 12.5C21.92 12.55 21.96 12.63 22 12.69C21.1 12.25 20.08 12 19 12C18.31 12 17.63 12.11 17 12.29V11C17 9.62 16.5 8.44 15.54 7.46C14.56 6.5 13.38 6 12 6S9.44 6.5 8.46 7.46C7.5 8.44 7 9.62 7 11H6.5C5.53 11 4.71 11.34 4.03 12.03C3.34 12.71 3 13.53 3 14.5S3.34 16.29 4.03 17C4.71 17.66 5.53 18 6.5 18H12.08C12.03 18.33 12 18.66 12 19M23.83 20.64L22.83 22.37C22.76 22.5 22.63 22.5 22.5 22.5L21.27 22C21 22.18 20.73 22.34 20.43 22.47L20.24 23.79C20.22 23.91 20.11 24 20 24H18C17.86 24 17.76 23.91 17.74 23.79L17.55 22.47C17.24 22.35 16.96 22.18 16.7 22L15.46 22.5C15.34 22.5 15.21 22.5 15.15 22.37L14.15 20.64C14.09 20.53 14.12 20.4 14.21 20.32L15.27 19.5C15.25 19.33 15.24 19.17 15.24 19S15.25 18.67 15.27 18.5L14.21 17.68C14.11 17.6 14.09 17.47 14.15 17.36L15.15 15.63C15.22 15.5 15.35 15.5 15.46 15.5L16.7 16C16.96 15.82 17.25 15.66 17.55 15.53L17.74 14.21C17.76 14.09 17.87 14 18 14H20C20.11 14 20.22 14.09 20.23 14.21L20.42 15.53C20.73 15.65 21 15.82 21.27 16L22.5 15.5C22.63 15.5 22.76 15.5 22.82 15.63L23.82 17.36C23.88 17.47 23.85 17.6 23.76 17.68L22.7 18.5C22.73 18.67 22.74 18.83 22.74 19S22.72 19.33 22.7 19.5L23.77 20.32C23.86 20.4 23.89 20.53 23.83 20.64M20.5 19C20.5 18.17 19.82 17.5 19 17.5S17.5 18.17 17.5 19 18.16 20.5 19 20.5 20.5 19.83 20.5 19Z" />
+                </svg>
+                <span class="hidden sm:inline">Fetch settings</span>
+              </button>
               <button id="system-settings-toggle" type="button"
                 class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 lg:hidden"
                 aria-expanded="false" aria-controls="system-settings-body">
@@ -283,18 +448,7 @@
                   <path fill="currentColor" d="m12 15l-5-5h10Z" />
                 </svg>
               </button>
-              <h2 class="text-base font-semibold">System settings</h2>
             </div>
-            <button id="vrm-fetch-settings" type="button" title="Fetch settings from Victron VRM"
-              class="inline-flex items-center gap-2 rounded-pill border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
-              <!-- autorenew icon -->
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24">
-                <title>autorenew</title>
-                <path fill="currentColor"
-                  d="M12 19C12 19.34 12.03 19.67 12.08 20H6.5C5 20 3.69 19.5 2.61 18.43C1.54 17.38 1 16.09 1 14.58C1 13.28 1.39 12.12 2.17 11.1S4 9.43 5.25 9.15C5.67 7.62 6.5 6.38 7.75 5.43S10.42 4 12 4C13.95 4 15.6 4.68 16.96 6.04C18.32 7.4 19 9.05 19 11C20.15 11.13 21.1 11.63 21.86 12.5C21.92 12.55 21.96 12.63 22 12.69C21.1 12.25 20.08 12 19 12C18.31 12 17.63 12.11 17 12.29V11C17 9.62 16.5 8.44 15.54 7.46C14.56 6.5 13.38 6 12 6S9.44 6.5 8.46 7.46C7.5 8.44 7 9.62 7 11H6.5C5.53 11 4.71 11.34 4.03 12.03C3.34 12.71 3 13.53 3 14.5S3.34 16.29 4.03 17C4.71 17.66 5.53 18 6.5 18H12.08C12.03 18.33 12 18.66 12 19M23.83 20.64L22.83 22.37C22.76 22.5 22.63 22.5 22.5 22.5L21.27 22C21 22.18 20.73 22.34 20.43 22.47L20.24 23.79C20.22 23.91 20.11 24 20 24H18C17.86 24 17.76 23.91 17.74 23.79L17.55 22.47C17.24 22.35 16.96 22.18 16.7 22L15.46 22.5C15.34 22.5 15.21 22.5 15.15 22.37L14.15 20.64C14.09 20.53 14.12 20.4 14.21 20.32L15.27 19.5C15.25 19.33 15.24 19.17 15.24 19S15.25 18.67 15.27 18.5L14.21 17.68C14.11 17.6 14.09 17.47 14.15 17.36L15.15 15.63C15.22 15.5 15.35 15.5 15.46 15.5L16.7 16C16.96 15.82 17.25 15.66 17.55 15.53L17.74 14.21C17.76 14.09 17.87 14 18 14H20C20.11 14 20.22 14.09 20.23 14.21L20.42 15.53C20.73 15.65 21 15.82 21.27 16L22.5 15.5C22.63 15.5 22.76 15.5 22.82 15.63L23.82 17.36C23.88 17.47 23.85 17.6 23.76 17.68L22.7 18.5C22.73 18.67 22.74 18.83 22.74 19S22.72 19.33 22.7 19.5L23.77 20.32C23.86 20.4 23.89 20.53 23.83 20.64M20.5 19C20.5 18.17 19.82 17.5 19 17.5S17.5 18.17 17.5 19 18.16 20.5 19 20.5 20.5 19.83 20.5 19Z" />
-              </svg>
-              <span class="hidden sm:inline">Fetch settings</span>
-            </button>
           </div>
 
           <div id="system-settings-body" class="grid grid-cols-1 gap-3 md:grid-cols-2 hidden lg:grid">
@@ -348,7 +502,7 @@
 
             <!-- Data Sources Subsection -->
             <div class="md:col-span-2 mt-4 border-t border-slate-100 pt-4 dark:border-white/10">
-              <h3 class="mb-3 text-sm font-semibold">Data Sources</h3>
+              <h3 class="sidebar-label mb-3">Data Sources</h3>
               <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <label class="text-sm">Prices
                   <select id="source-prices" class="form-select">
@@ -379,6 +533,7 @@
 
             <!-- Algorithm Version Subsection -->
             <div class="md:col-span-2 mt-4 border-t border-slate-100 pt-4 dark:border-white/10">
+              <h3 class="sidebar-label mb-3">Algorithm</h3>
               <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <label class="text-sm">DESS mapper
                   <select id="dess-algorithm" class="form-select">
@@ -396,28 +551,28 @@
     <!-- Results (charts) -->
     <section class="lg:col-span-2 space-y-6 min-w-0">
       <div class="card">
-        <h3 class="mb-3 text-base font-semibold">Power flows</h3>
+        <h3 class="mb-3 sidebar-label">Power flows</h3>
         <div class="h-72 w-full">
           <canvas id="flows" class="h-full w-full"></canvas>
         </div>
       </div>
 
       <div class="card">
-        <h3 class="mb-3 text-base font-semibold">Battery SoC</h3>
+        <h3 class="mb-3 sidebar-label">Battery SoC</h3>
         <div class="h-40 w-full">
           <canvas id="soc" class="h-full w-full"></canvas>
         </div>
       </div>
 
       <div class="card">
-        <h3 class="mb-3 text-base font-semibold">Energy prices</h3>
+        <h3 class="mb-3 sidebar-label">Energy prices</h3>
         <div class="h-56 w-full">
           <canvas id="prices" class="h-full w-full"></canvas>
         </div>
       </div>
 
       <div class="card">
-        <h3 class="mb-3 text-base font-semibold">Predicted load and solar</h3>
+        <h3 class="mb-3 sidebar-label">Predicted load and solar</h3>
         <div class="h-56 w-full">
           <canvas id="loadpv" class="h-full w-full"></canvas>
         </div>
@@ -427,23 +582,247 @@
     <!-- Full-width table -->
     <section class="lg:col-span-3 min-w-0">
       <div class="card overflow-auto">
-        <h3 class="mb-3 text-base font-semibold">Schedule table</h3>
-        <div class="mb-2 flex items-center justify-between gap-3">
-          <label class="inline-flex items-center gap-2 text-sm">
-            <input id="table-kwh" type="checkbox" class="rounded border-slate-300">
-            <span>Show kWh in table</span>
-          </label>
-          <!-- dynamic unit badge -->
-          <span id="table-unit"
-            class="inline-flex items-center rounded-full border border-slate-200 px-2 py-0.5 text-xs text-slate-700 dark:border-white/10 dark:text-slate-200">
-            Units: W
-          </span>
+        <div class="mb-4 flex items-center justify-between gap-4">
+          <h3 class="sidebar-label">Schedule table</h3>
+          <div class="flex items-center gap-3">
+            <label class="toggle">
+              <input id="table-kwh" type="checkbox">
+              <span class="toggle-knob"></span>
+              <span class="text-sm text-slate-600 dark:text-slate-400">Show kWh</span>
+            </label>
+            <span id="table-unit"
+              class="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-[0.625rem] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              W
+            </span>
+          </div>
         </div>
         <table id="table" class="min-w-full text-sm"></table>
       </div>
     </section>
   </main>
 
+
+  <!-- Predictions Panel -->
+  <div id="panel-predictions" role="tabpanel" aria-labelledby="tab-predictions"
+    class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3 hidden">
+
+    <!-- Sidebar -->
+    <aside class="lg:col-span-1 min-w-0 space-y-6">
+
+      <!-- Settings (was Prediction Control) -->
+      <section class="card">
+        <div class="mb-4">
+          <h2 class="sidebar-label">Settings</h2>
+        </div>
+        <div class="space-y-3">
+          <label class="block text-sm">
+            <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Sensor</span>
+            <select id="pred-active-sensor" class="form-select" data-predictions-only="true">
+              <option value="" disabled selected>Select a sensor…</option>
+            </select>
+          </label>
+
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block text-sm">
+              <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Lookback
+                (weeks)</span>
+              <input id="pred-active-lookback" type="number" min="1" class="form-input" data-predictions-only="true" />
+            </label>
+            <label class="block text-sm">
+              <span
+                class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Aggregation</span>
+              <select id="pred-active-agg" class="form-select" data-predictions-only="true">
+                <option value="mean">Mean</option>
+                <option value="median">Median</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="block text-sm">
+            <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Day
+              Filter</span>
+            <select id="pred-active-filter" class="form-select" data-predictions-only="true">
+              <option value="same">Same day of week</option>
+              <option value="weekday-weekend">Weekday / Weekend</option>
+              <option value="weekday-sat-sun">Weekday / Sat / Sun</option>
+              <option value="all">All days</option>
+            </select>
+          </label>
+
+          <!-- Recompute -->
+          <div class="mt-4">
+            <button id="pred-recompute" type="button"
+              class="w-full rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-sky-400/50 transition-all">
+              Recompute
+            </button>
+          </div>
+
+          <!-- Summary -->
+          <div class="mt-4 summary-panel">
+            <div class="summary-row">
+              <span class="stat-label">Status</span>
+              <span id="summary-status" class="text-sm font-medium text-ink dark:text-slate-100">--</span>
+            </div>
+            <div class="grid grid-cols-2 border-t border-slate-100 dark:border-white/5">
+              <div class="px-3 py-2.5 border-b border-r border-slate-100 dark:border-white/5">
+                <div class="stat-label mb-0.5">Min Load</div>
+                <div class="stat-value"><span id="summary-min">--</span><span
+                    class="text-[10px] opacity-50 ml-1">W</span></div>
+              </div>
+              <div class="px-3 py-2.5 border-b border-slate-100 dark:border-white/5">
+                <div class="stat-label mb-0.5">Peak Load</div>
+                <div class="stat-value"><span id="summary-peak">--</span><span
+                    class="text-[10px] opacity-50 ml-1">W</span></div>
+              </div>
+              <div class="px-3 py-2.5 border-r border-slate-100 dark:border-white/5">
+                <div class="stat-label mb-0.5">Total Load</div>
+                <div class="stat-value"><span id="summary-total">--</span><span
+                    class="text-[10px] opacity-50 ml-1">kWh</span></div>
+              </div>
+              <div class="px-3 py-2.5">
+                <div class="stat-label mb-0.5">Avg Error</div>
+                <div class="stat-value"><span id="summary-error">--</span><span
+                    class="text-[10px] opacity-50 ml-1">W</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- System Settings (collapsible) -->
+      <section class="card">
+        <div class="flex items-center justify-end mb-3 lg:hidden">
+          <button id="pred-settings-toggle" type="button"
+            class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 lg:hidden">
+            <svg id="pred-settings-toggle-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+              class="h-4 w-4 transition-transform">
+              <path fill="currentColor" d="m12 15l-5-5h10Z" />
+            </svg>
+          </button>
+        </div>
+
+        <div id="pred-settings-body" class="space-y-4 hidden lg:block">
+          <!-- Connection -->
+          <div id="pred-ha-settings-group">
+            <h3 class="sidebar-label mb-2">Home Assistant Settings</h3>
+            <div class="space-y-3">
+              <label class="block text-sm">WebSocket URL
+                <input id="pred-ha-url" type="url" placeholder="ws://homeassistant.local:8123/api/websocket"
+                  class="form-input" data-predictions-only="true" />
+              </label>
+              <label class="block text-sm">Access Token
+                <input id="pred-ha-token" type="password" placeholder="eyJ…" class="form-input"
+                  data-predictions-only="true" />
+              </label>
+            </div>
+          </div>
+
+          <hr id="pred-ha-settings-divider" class="border-slate-100 dark:border-white/10" />
+
+          <!-- Sensors -->
+          <div>
+            <h3 class="sidebar-label mb-2">Sensors</h3>
+            <div class="space-y-3">
+              <label class="block text-sm">Sensors (JSON)
+                <textarea id="pred-sensors" rows="4" class="form-input font-mono text-xs" data-predictions-only="true"
+                  placeholder='[{"id":"sensor.xxx","name":"Grid Import","unit":"kWh"}]'></textarea>
+              </label>
+              <label class="block text-sm">Derived (JSON)
+                <textarea id="pred-derived" rows="4" class="form-input font-mono text-xs" data-predictions-only="true"
+                  placeholder='[{"name":"Total Load","formula":["+Grid Import","-Grid Export"]}]'></textarea>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Full Comparison -->
+      <section class="card">
+        <div class="mb-4">
+          <h2 class="sidebar-label">Compare Strategies</h2>
+        </div>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Run full validation on all combinations for the last
+          7 days.</p>
+        <button id="pred-run-validation" type="button"
+          class="w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400/50 transition-colors">
+          Run Comparison
+        </button>
+        <p id="pred-status" class="mt-3 text-sm text-ink-soft dark:text-slate-400"></p>
+      </section>
+
+    </aside>
+
+    <!-- Main: Results -->
+    <section class="lg:col-span-2 space-y-6 min-w-0">
+
+      <!-- Forecast & Recent Accuracy Chart -->
+      <section class="card">
+        <h2 class="mb-3 sidebar-label">Forecast</h2>
+        <div class="h-80 w-full">
+          <canvas id="pred-forecast-chart" class="h-full w-full"></canvas>
+        </div>
+      </section>
+
+      <!-- History Comparison Chart -->
+      <section class="card">
+        <h2 class="mb-3 sidebar-label">Historical Accuracy</h2>
+        <div class="h-80 w-full">
+          <canvas id="pred-history-chart" class="h-full w-full"></canvas>
+        </div>
+      </section>
+
+      <!-- Comparison Results -->
+      <div id="pred-results" hidden class="space-y-6">
+        <!-- Results Chart (Specific strategy from table) -->
+        <section id="pred-chart-section" class="card" hidden>
+          <h2 id="pred-chart-title" class="mb-3 sidebar-label">Detailed Accuracy</h2>
+          <div class="h-72 w-full">
+            <canvas id="pred-accuracy-chart" class="h-full w-full"></canvas>
+          </div>
+        </section>
+
+        <!-- Metrics table -->
+        <section class="card overflow-auto">
+          <div class="mb-4">
+            <h2 class="sidebar-label mb-3">Strategy Comparison</h2>
+            <div class="flex flex-wrap gap-2" id="pred-sensor-tabs"></div>
+          </div>
+
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left">
+                <th
+                  class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900">
+                  Lookback</th>
+                <th
+                  class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900">
+                  Day filter</th>
+                <th
+                  class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900">
+                  Agg</th>
+                <th
+                  class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900 text-right">
+                  MAE</th>
+                <th
+                  class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900 text-right">
+                  RMSE</th>
+                <th
+                  class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900 text-right">
+                  MAPE</th>
+                <th
+                  class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900 text-right">
+                  n</th>
+                <th
+                  class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900">
+                  Actions</th>
+              </tr>
+            </thead>
+            <tbody id="pred-metrics-body"></tbody>
+          </table>
+        </section>
+      </div>
+
+  </div>
 
   <footer class="mx-auto w-full max-w-7xl px-4 py-8 text-center text-xs text-ink-soft">
     Built with HiGHS (WASM) + Chart.js + Tailwind. Changes run instantly.
