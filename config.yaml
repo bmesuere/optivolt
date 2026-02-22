@@ -1,7 +1,7 @@
 name: Optivolt
 slug: optivolt
-version: "0.1.0"
-description: Plan and control Victron ESS with forecasts & dynamic tariffs.
+version: "0.2.0"
+description: Plan and control Victron ESS with forecasts & dynamic tariffs!
 url: https://github.com/bmesuere/optivolt
 arch:
   - aarch64

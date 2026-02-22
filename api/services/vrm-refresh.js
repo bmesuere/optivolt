@@ -2,8 +2,6 @@ import { VRMClient } from '../../lib/vrm-api.js';
 import { loadSettings, saveSettings } from './settings-store.js';
 import { loadData, saveData } from './data-store.js';
 import { readVictronSocPercent, readVictronSocLimits } from './mqtt-service.js';
-import { loadPredictionConfig } from './prediction-config-store.js';
-import { runForecast } from './prediction-service.js';
 
 function createClientFromEnv() {
   const installationId = (process.env.VRM_INSTALLATION_ID ?? '').trim();

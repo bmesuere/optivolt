@@ -6,4 +6,5 @@ const host = process.env.HOST ?? '0.0.0.0';
 
 app.listen(port, host, () => {
   console.log(`Server listening on http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
+  console.log(`Node version: ${process.version}`);
 });

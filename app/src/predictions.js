@@ -215,10 +215,6 @@ function renderForecastChart({ forecast }) {
   const canvas = document.getElementById('pred-forecast-chart');
   if (!canvas) return;
 
-  // Clean up legacy chart instance if it exists
-  // Clean up legacy chart instance if it exists
-  // renderChart handles this via canvas._chart
-
   // Aggregate 15-min slots into hourly kWh buckets for display
   const hourMap = new Map();
   const values = forecast.values || [];
