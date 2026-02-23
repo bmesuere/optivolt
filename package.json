@@ -16,7 +16,7 @@
   "main": "api/index.ts",
   "scripts": {
     "api": "node ./api/index.ts",
-    "dev": "dotenv -e .env.local -- nodemon --ignore 'data/' ./api/index.ts",
+    "dev": "dotenv -e .env.local -- nodemon --exec node --ignore 'data/' ./api/index.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "typecheck": "tsc --noEmit",
