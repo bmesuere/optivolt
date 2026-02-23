@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
-import app from '../../api/app.js';
+import app from '../../api/app.ts';
 
 // Mock dependencies
 vi.mock('../../api/services/settings-store.ts');

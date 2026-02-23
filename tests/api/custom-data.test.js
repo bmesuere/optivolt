@@ -3,8 +3,8 @@ import request from 'supertest';
 import express from 'express';
 import { loadData, saveData } from '../../api/services/data-store.ts';
 import { loadSettings, saveSettings } from '../../api/services/settings-store.ts';
-import dataRouter from '../../api/routes/data.js';
-import calculateRouter from '../../api/routes/calculate.js';
+import dataRouter from '../../api/routes/data.ts';
+import calculateRouter from '../../api/routes/calculate.ts';
 
 // Mock dependencies
 vi.mock('../../api/services/data-store.ts', async (importOriginal) => {
