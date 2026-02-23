@@ -1,18 +1,14 @@
 import type { PlanRow, SolverConfig } from './types.ts';
 
-// Minimal type for the HiGHS solver result columns.
-// HiGHS can return columns as either an array (with a Name field) or an object keyed by name.
+// Minimal type for the HiGHS solver result columns (keyed by variable name).
 interface HighsColumn {
-  Name?: string;
-  Value?: number;
   Primal?: number;
-  value?: number;
 }
 
 export interface HighsSolution {
   Status?: string;
   ObjectiveValue?: number;
-  Columns?: HighsColumn[] | Record<string, HighsColumn>;
+  Columns?: Record<string, HighsColumn>;
 }
 
 interface ParseSolutionOpts {
@@ -37,10 +33,7 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
   const b2g = Array(T).fill(0);
   const soc = Array(T).fill(0);
 
-  const cols = result.Columns || [];
-  const entries: [string, HighsColumn][] = Array.isArray(cols)
-    ? cols.map(c => [c.Name ?? '', c])
-    : Object.entries(cols);
+  const entries = Object.entries(result.Columns ?? {});
 
   for (const [name, col] of entries) {
     const t = parseIndex(name);
@@ -55,12 +48,6 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
     else if (name.startsWith("battery_to_load_")) b2l[t] = v;
     else if (name.startsWith("battery_to_grid_")) b2g[t] = v;
     else if (name.startsWith("soc_")) soc[t] = v;
-
-    // backwards-compatible names
-    else if (name.startsWith("grid_import_")) g2l[t] += v;
-    else if (name.startsWith("grid_export_")) pv2g[t] += v;
-    else if (name.startsWith("bat_charge_")) g2b[t] += v;
-    else if (name.startsWith("bat_discharge_")) b2l[t] += v;
   }
 
   // --- 2. Build rows (flows, soc, etc.) ---
@@ -104,11 +91,7 @@ function parseIndex(varName: string): number | null {
 }
 
 function valueOf(col: HighsColumn): number {
-  if (col == null) return 0;
-  if (typeof col.Value === "number") return col.Value;
-  if (typeof col.Primal === "number") return col.Primal;
-  if (typeof col.value === "number") return col.value;
-  return 0;
+  return col.Primal ?? 0;
 }
 
 function round(x: number): number {

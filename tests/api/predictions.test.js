@@ -3,10 +3,10 @@ import request from 'supertest';
 import app from '../../api/app.js';
 
 vi.mock('../../api/services/prediction-config-store.ts');
-vi.mock('../../api/services/prediction-service.js');
+vi.mock('../../api/services/prediction-service.ts');
 
 import { loadPredictionConfig, savePredictionConfig } from '../../api/services/prediction-config-store.ts';
-import { runValidation, runForecast } from '../../api/services/prediction-service.js';
+import { runValidation, runForecast } from '../../api/services/prediction-service.ts';
 
 const mockConfig = {
   haUrl: 'ws://homeassistant.local:8123/api/websocket',

@@ -8,21 +8,30 @@ const DATA_PATH = path.join(DATA_DIR, 'data.json');
 const DEFAULT_PATH = fileURLToPath(new URL('../defaults/default-data.json', import.meta.url));
 
 function validateTimeSeries(ts: TimeSeries, label: string): void {
+  if (!ts || typeof ts !== 'object') {
+    throw new Error(`Invalid ${label}: must be an object`);
+  }
   if (Number.isNaN(new Date(ts.start).getTime())) {
     throw new Error(`Invalid ${label}: 'start' is not a valid timestamp (${ts.start})`);
+  }
+  if (!Array.isArray(ts.values)) {
+    throw new Error(`Invalid ${label}: 'values' must be an array`);
   }
   if (ts.step !== undefined && ts.step <= 0) {
     throw new Error(`Invalid ${label}: 'step' must be a positive number`);
   }
 }
 
-function validateData(d: Data): Data {
+export function validateData(d: Data): Data {
   validateTimeSeries(d.load, 'load');
   validateTimeSeries(d.pv, 'pv');
   validateTimeSeries(d.importPrice, 'importPrice');
   validateTimeSeries(d.exportPrice, 'exportPrice');
   if (!Number.isFinite(d.soc.value)) {
     throw new Error('Invalid soc: value must be a finite number; refresh VRM data first');
+  }
+  if (Number.isNaN(new Date(d.soc.timestamp).getTime())) {
+    throw new Error(`Invalid soc: 'timestamp' is not a valid timestamp (${d.soc.timestamp})`);
   }
   return d;
 }
@@ -56,6 +65,7 @@ export async function loadData(): Promise<Data> {
  * Persist data to DATA_DIR/data.json (pretty-printed).
  */
 export async function saveData(data: Data): Promise<void> {
+  validateData(data);
   await writeJson(DATA_PATH, data);
 }
 

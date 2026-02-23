@@ -1,25 +1,50 @@
 /**
- * prediction-service.js
+ * prediction-service.ts
  *
  * Orchestrates HA data fetch → postprocess → predict/validate.
  */
 
-import { fetchHaStats } from './ha-client.js';
+import { fetchHaStats } from './ha-client.ts';
 import { postprocess, getSensorNames } from '../../lib/ha-postprocess.ts';
+import type { StatRecord } from '../../lib/ha-postprocess.ts';
 import {
   predict,
   validate,
   generateAllConfigs,
   buildForecastSeriesRange,
 } from '../../lib/predict-load.ts';
+import type { DayFilter, Aggregation, PredictionResult, ForecastSeries } from '../../lib/predict-load.ts';
+import type { PredictionConfig } from '../types.ts';
+
+type PredictTarget = Pick<StatRecord, 'date' | 'time' | 'hour' | 'dayOfWeek'> & { value?: number | null };
+
+interface ValidationEntry {
+  sensor: string;
+  lookbackWeeks: number;
+  dayFilter: DayFilter;
+  aggregation: Aggregation;
+  mae: number;
+  rmse: number;
+  mape: number;
+  n: number;
+  nSkipped: number;
+  validationPredictions: PredictionResult[];
+}
+
+interface ValidationRunResult {
+  sensorNames: string[];
+  results: ValidationEntry[];
+}
+
+interface ForecastRunResult {
+  forecast: ForecastSeries;
+  recent: PredictionResult[];
+}
 
 /**
  * Run full validation across all config combinations.
- *
- * @param {Object} config  prediction config (haUrl, haToken, historyStart, sensors, derived, validationWindow)
- * @returns {{ sensorNames: string[], results: Array }}
  */
-export async function runValidation(config) {
+export async function runValidation(config: PredictionConfig): Promise<ValidationRunResult> {
   const { haUrl, haToken, sensors, derived, validationWindow } = config;
   const entityIds = sensors.map(s => s.id);
 
@@ -38,14 +63,14 @@ export async function runValidation(config) {
   const sensorNames = getSensorNames(data);
   const allConfigs = generateAllConfigs(sensorNames);
 
-  const results = [];
+  const results: ValidationEntry[] = [];
   for (const cfg of allConfigs) {
     const predictions = predict(data, cfg);
-    const metrics = validate(predictions, validationWindow);
+    // validationWindow is always set by loadPredictionConfig()
+    const metrics = validate(predictions, validationWindow!);
 
-    // Only include validation-window predictions for chart rendering
-    const windowStart = new Date(validationWindow.start).getTime();
-    const windowEnd = new Date(validationWindow.end).getTime();
+    const windowStart = new Date(validationWindow!.start).getTime();
+    const windowEnd = new Date(validationWindow!.end).getTime();
 
     const validationPredictions = predictions.filter(
       p => p.time >= windowStart && p.time < windowEnd
@@ -70,17 +95,15 @@ export async function runValidation(config) {
 
 /**
  * Run forecast for tomorrow using the active config.
- *
- * @param {Object} config  prediction config with activeConfig set
- * @returns {{ start: string, step: number, values: number[] }}
+ * Caller must ensure config.activeConfig is set.
  */
-export async function runForecast(config) {
+export async function runForecast(config: PredictionConfig): Promise<ForecastRunResult> {
   const { haUrl, haToken, sensors, derived, activeConfig } = config;
   const entityIds = sensors.map(s => s.id);
 
-  // +1 week when we need recent accuracy for the UI chart
+  // activeConfig is guaranteed by the route's assertCondition check
   const extraWeeks = config.includeRecent !== false ? 1 : 0;
-  const totalWeeks = activeConfig.lookbackWeeks + extraWeeks;
+  const totalWeeks = activeConfig!.lookbackWeeks + extraWeeks;
   const startTime = new Date(Date.now() - totalWeeks * 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const rawData = await fetchHaStats({
@@ -108,22 +131,16 @@ export async function runForecast(config) {
     end.setHours(0, 0, 0, 0);
   }
 
-  // Define targets:
-  // 1. Recent (past 7 days) for validation/chart context
-  // 2. Future (from next hour to end) for forecast
-
   const recentStart = now.getTime() - 7 * 24 * 60 * 60 * 1000;
   const recentEnd = now.getTime();
 
-  // Filter history for recent targets (ensure we only target the active sensor)
   const recentTargets = data.filter(d =>
-    d.sensor === activeConfig.sensor &&
+    d.sensor === activeConfig!.sensor &&
     d.time >= recentStart &&
     d.time <= recentEnd
   );
 
-  // Generate future targets
-  const futureTargets = [];
+  const futureTargets: PredictTarget[] = [];
   const futureStart = Math.floor(now.getTime() / 3600000) * 3600000;
   const futureEnd = end.getTime();
 
@@ -134,28 +151,25 @@ export async function runForecast(config) {
       time: t,
       hour: d.getHours(),
       dayOfWeek: d.getDay(),
-      value: null
+      value: null,
     });
   }
 
-  const allTargets = [...recentTargets, ...futureTargets];
-  const predictions = predict(data, activeConfig, allTargets);
+  const allTargets: PredictTarget[] = [...recentTargets, ...futureTargets];
+  const predictions = predict(data, activeConfig!, allTargets);
 
-  // Align start to recent 15m slot
   const startMs = Math.floor(now.getTime() / (15 * 60 * 1000)) * (15 * 60 * 1000);
   const startIso = new Date(startMs).toISOString();
   const endIso = end.toISOString();
 
   const forecastSeries = buildForecastSeriesRange(predictions, startIso, endIso);
 
-  // Recent accuracy (optional)
-  let recent = [];
+  let recent: PredictionResult[] = [];
   if (config.includeRecent !== false) {
-    const recentEnd = Date.now();
-    const past7d = recentEnd - 7 * 24 * 60 * 60 * 1000;
+    const past7d = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
     recent = predictions
-      .filter(p => p.time <= recentEnd && p.time >= past7d)
+      .filter(p => p.time <= Date.now() && p.time >= past7d)
       .map(p => ({
         date: p.date,
         time: p.time,

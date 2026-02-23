@@ -1,8 +1,9 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
-import { loadData, saveData } from '../services/data-store.ts';
+import { loadData, saveData, validateData } from '../services/data-store.ts';
 import { loadSettings } from '../services/settings-store.ts';
-import { HttpError, toHttpError } from '../http-errors.ts';
+import { assertCondition, toHttpError } from '../http-errors.ts';
+import type { TimeSeries, SocData, Data } from '../types.ts';
 
 const router = express.Router();
 
@@ -18,10 +19,11 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = req.body as Record<string, unknown>;
-
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-      throw new HttpError(400, 'Payload must be a JSON object');
-    }
+    assertCondition(
+      !!payload && typeof payload === 'object' && !Array.isArray(payload),
+      400,
+      'Payload must be a JSON object',
+    );
 
     const currentData = await loadData();
     const settings = await loadSettings();
@@ -38,29 +40,37 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     const allowedKeys = ['load', 'pv', 'importPrice', 'exportPrice', 'soc'];
     const keysToUpdate = Object.keys(payload).filter(k => allowedKeys.includes(k) && sourceMapping[k] === 'api');
 
-    if (keysToUpdate.length === 0) {
-      throw new HttpError(400, 'No valid data keys provided or settings are not set to API', { details: { keysUpdated: [] } });
+    assertCondition(
+      keysToUpdate.length > 0,
+      400,
+      'No valid data keys provided or settings are not set to API',
+    );
+
+    const nextData: Data = { ...currentData };
+
+    for (const key of keysToUpdate) {
+      const value = payload[key];
+      assertCondition(
+        !!value && typeof value === 'object' && !Array.isArray(value),
+        400,
+        `'${key}' must be a JSON object`,
+      );
+      if (key === 'soc') {
+        nextData.soc = value as SocData;
+      } else if (key === 'load' || key === 'pv' || key === 'importPrice' || key === 'exportPrice') {
+        nextData[key] = value as TimeSeries;
+      }
     }
 
-    const nextData = { ...currentData } as Record<string, unknown>;
-
     try {
-      for (const key of keysToUpdate) {
-        const series = payload[key];
-        if (key === 'soc') {
-          validateSoC(series);
-        } else {
-          validateSeries(series, key);
-        }
-        nextData[key] = series;
-      }
+      validateData(nextData);
     } catch (validationError) {
       const msg = validationError instanceof Error ? validationError.message : String(validationError);
       return next(toHttpError(validationError, 400, msg));
     }
 
     try {
-      await saveData(nextData as unknown as typeof currentData);
+      await saveData(nextData);
       logDataUpdateCall(keysToUpdate);
       res.json({ message: 'Data updated successfully', keysUpdated: keysToUpdate });
     } catch (saveError) {
@@ -77,29 +87,6 @@ function logDataUpdateCall(keysUpdated: string[]): void {
     timestamp: new Date().toISOString(),
     keysUpdated,
   });
-}
-
-function validateSeries(obj: unknown, name: string): void {
-  if (!obj || typeof obj !== 'object') throw new Error(`Invalid ${name} object`);
-  const o = obj as Record<string, unknown>;
-
-  if (!o.start) throw new Error(`${name} missing 'start' ISO timestamp`);
-  if (isNaN(Date.parse(o.start as string))) throw new Error(`${name} 'start' must be a valid ISO string`);
-
-  if (!Array.isArray(o.values)) throw new Error(`${name} must contain 'values' array`);
-
-  if (o.step !== undefined) {
-    if (!Number.isFinite(o.step) || (o.step as number) <= 0) {
-      throw new Error(`${name} 'step' must be a positive number`);
-    }
-  }
-}
-
-function validateSoC(obj: unknown): void {
-  if (!obj || typeof obj !== 'object') throw new Error('Invalid soc object');
-  const o = obj as Record<string, unknown>;
-  if (!Number.isFinite(o.value)) throw new Error('soc must contain numeric "value"');
-  if (!o.timestamp || isNaN(Date.parse(o.timestamp as string))) throw new Error('soc must contain valid "timestamp" ISO string');
 }
 
 export default router;

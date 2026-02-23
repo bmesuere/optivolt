@@ -2,8 +2,7 @@ import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { HttpError, assertCondition, toHttpError } from '../http-errors.ts';
 import { loadPredictionConfig, savePredictionConfig } from '../services/prediction-config-store.ts';
-// @ts-ignore - prediction-service.js is not yet converted to TypeScript
-import { runValidation, runForecast } from '../services/prediction-service.js';
+import { runValidation, runForecast } from '../services/prediction-service.ts';
 import { loadData, saveData } from '../services/data-store.ts';
 import { loadSettings } from '../services/settings-store.ts';
 import type { PredictionConfig } from '../types.ts';

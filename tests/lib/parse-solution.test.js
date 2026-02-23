@@ -16,15 +16,14 @@ describe('parseSolution', () => {
   };
 
   it('correctly parses HiGHS columns into rows', () => {
-    // Mock result from HiGHS
     const result = {
-      Columns: [
-        { Name: 'grid_to_load_0', Primal: 400 },
-        { Name: 'pv_to_load_0', Primal: 100 },
-        { Name: 'grid_to_load_1', Primal: 600 },
-        { Name: 'soc_0', Primal: 200 },
-        { Name: 'soc_1', Primal: 200 },
-      ],
+      Columns: {
+        'grid_to_load_0': { Primal: 400 },
+        'pv_to_load_0': { Primal: 100 },
+        'grid_to_load_1': { Primal: 600 },
+        'soc_0': { Primal: 200 },
+        'soc_1': { Primal: 200 },
+      },
     };
 
     const rows = parseSolution(result, cfg, opts);
@@ -37,18 +36,6 @@ describe('parseSolution', () => {
     expect(rows[0].soc_percent).toBe(20);
     expect(rows[0].timestampMs).toBe(1700000000000);
     expect(rows[1].timestampMs).toBe(1700000000000 + 3600000);
-  });
-
-  it('handles object-based column format (newer HiGHS versions or defaults)', () => {
-    const result = {
-        Columns: {
-            'grid_to_load_0': { Primal: 400 },
-            'pv_to_load_0': { Primal: 100 }
-        }
-    };
-     const rows = parseSolution(result, cfg, opts);
-     expect(rows[0].g2l).toBe(400);
-     expect(rows[0].pv2l).toBe(100);
   });
 
 });
