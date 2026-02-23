@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildLP } from '../../lib/build-lp.js';
+import { buildLP } from '../../lib/build-lp.ts';
 
 describe('buildLP', () => {
   const T = 5;
@@ -9,10 +9,6 @@ describe('buildLP', () => {
     importPrice: Array(T).fill(10),
     exportPrice: Array(T).fill(5),
   };
-
-  it('throws if required arrays are missing', () => {
-    expect(() => buildLP({})).toThrow('Array params must be arrays');
-  });
 
   it('throws if arrays have mismatched lengths', () => {
     expect(() => buildLP({

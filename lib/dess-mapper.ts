@@ -1,6 +1,8 @@
 // Mapper that attaches DESS decisions per slot.
 // Assumes a complete, valid cfg is provided.
 
+import type { PlanRow, SolverConfig, DessDiagnostics, DessResult, DessSlot } from './types.ts';
+
 const FLOW_EPSILON_W = 1; // treat flows below this as zero
 const SOC_EPSILON_PERCENT = 0.5; // treat SoC within this of min/max as at boundary
 
@@ -10,7 +12,7 @@ export const Strategy = {
   proBattery: 2,      // excess PV to battery, excess load from grid
   proGrid: 3,         // excess PV to grid, excess load from battery
   unknown: -1,
-};
+} as const;
 
 export const Restrictions = {
   none: 0,            // no restrictions between battery and grid
@@ -18,31 +20,43 @@ export const Restrictions = {
   gridToBattery: 2,   // restrict grid → battery
   both: 3,            // block both directions
   unknown: -1,
-};
+} as const;
 
 export const FeedIn = {
   allowed: 1,
   blocked: 0,
-};
+} as const;
 
-export function mapRowsToDess(rows, cfg) {
+interface Segment {
+  start: number;
+  end: number;
+}
+
+interface SegmentTippingPoints {
+  gridChargeTp: number;
+  gridBatteryTp: number;
+  batteryExportTp: number;
+  pvExportTp: number;
+}
+
+export function mapRowsToDess(rows: PlanRow[], cfg: SolverConfig): DessResult {
   const segments = buildSegments(rows, cfg);
-  const perSlot = new Array(rows.length);
+  const perSlot = new Array<DessSlot>(rows.length);
 
   for (let t = 0; t < rows.length; t++) {
     const row = rows[t];
 
     // Feed-in: allow unless export price is negative.
-    const feedin = Number(row.ec) < 0 ? FeedIn.blocked : FeedIn.allowed;
+    const feedin = row.ec < 0 ? FeedIn.blocked : FeedIn.allowed;
 
-    // Primitive flows (absolute)
-    const g2l = Math.abs(Number(row.g2l) || 0);
-    const g2b = Math.abs(Number(row.g2b) || 0);
-    const pv2l = Math.abs(Number(row.pv2l) || 0);
-    const pv2b = Math.abs(Number(row.pv2b) || 0);
-    const pv2g = Math.abs(Number(row.pv2g) || 0);
-    const b2l = Math.abs(Number(row.b2l) || 0);
-    const b2g = Math.abs(Number(row.b2g) || 0);
+    // Primitive flows — all non-negative by LP construction
+    const g2l = row.g2l;
+    const g2b = row.g2b;
+    const pv2l = row.pv2l;
+    const pv2b = row.pv2b;
+    const pv2g = row.pv2g;
+    const b2l = row.b2l;
+    const b2g = row.b2g;
 
     // Flow booleans
     const hasG2L = g2l > FLOW_EPSILON_W;
@@ -56,24 +70,24 @@ export function mapRowsToDess(rows, cfg) {
     const hasNoPvFlow = pvFlow <= FLOW_EPSILON_W;
 
     // Expectations (from inputs)
-    const expectedPv = Number(row.pv) || 0;
-    const expectedLoad = Number(row.load) || 0;
+    const expectedPv = row.pv;
+    const expectedLoad = row.load;
     const pvCoversLoad = expectedPv >= (expectedLoad - FLOW_EPSILON_W);
     const loadExceedsPv = expectedLoad > (expectedPv + FLOW_EPSILON_W);
 
-    // Combine branches: “no PV flow” behaves like “expected deficit”
+    // Combine branches: "no PV flow" behaves like "expected deficit"
     const deficitOrNoPv = hasNoPvFlow || loadExceedsPv;
 
     // costs and prices
-    const importCost = Number(row.ic);
-    // const exportPrice = Number(row.ec);
+    const importCost = row.ic;
+    // const exportPrice = row.ec;
 
     // SoC refs
-    const _startOfSlotSoc_Wh = t > 0 ? Number(rows[t - 1].soc) : Number(row.soc);
+    const _startOfSlotSoc_Wh = t > 0 ? rows[t - 1].soc : row.soc;
     let socTarget_percent = row.soc_percent;
 
     // Strategy selection
-    let strategy = Strategy.unknown;
+    let strategy: number = Strategy.unknown;
 
     if (hasG2B) {
       // There's a grid charging flow which probably means electricity is cheap.
@@ -146,7 +160,7 @@ export function mapRowsToDess(rows, cfg) {
     }
 
     // Restrictions: start with both blocked; allow only directions actually used
-    let restrictions;
+    let restrictions: number;
     if (hasG2B && hasB2G) {
       restrictions = Restrictions.none;
     } else if (hasG2B && !hasB2G) {
@@ -175,19 +189,17 @@ export function mapRowsToDess(rows, cfg) {
  * We want to find the tipping point price where battery usage is favored over grid usage.
  * Within the given segment, we look for grid→load flows and keep track of the highest price observed during these flows.
  */
-function findHighestGridUsageCost(rows, segment, cfg) {
+function findHighestGridUsageCost(rows: PlanRow[], segment: Segment | null, cfg: SolverConfig): number {
   let highestPrice = -Infinity;
   if (!segment) return highestPrice;
 
-  const maxDischarge = Number(cfg.maxDischargePower_W) - FLOW_EPSILON_W;
+  const maxDischarge = cfg.maxDischargePower_W - FLOW_EPSILON_W;
 
   for (let t = segment.start; t <= segment.end; t++) {
     const row = rows[t];
-    const g2l = Math.abs(Number(row.g2l) || 0);
-    const b2l = Math.abs(Number(row.b2l) || 0);
 
-    if (g2l > FLOW_EPSILON_W && b2l < maxDischarge) {
-      const price = Number(row.ic) || 0;
+    if (row.g2l > FLOW_EPSILON_W && row.b2l < maxDischarge) {
+      const price = row.ic;
       if (price > highestPrice) {
         highestPrice = price;
       }
@@ -200,7 +212,7 @@ function findHighestGridUsageCost(rows, segment, cfg) {
  * We want to find the tipping point price where grid charging is favored.
  * Within the given segment, we look for grid→battery flows and keep track of the highest price observed during these flows.
  */
-function findHighestGridChargeCost(rows, segment) {
+function findHighestGridChargeCost(rows: PlanRow[], segment: Segment | null): number {
   let highestPrice = -Infinity;
   if (!segment) return highestPrice;
 
@@ -208,10 +220,9 @@ function findHighestGridChargeCost(rows, segment) {
 
   for (let t = segment.start; t <= segment.end; t++) {
     const row = rows[t];
-    const g2b = Math.abs(Number(row.g2b) || 0);
 
-    if (g2b > FLOW_EPSILON_W) {
-      const price = Number(row.ic) || 0;
+    if (row.g2b > FLOW_EPSILON_W) {
+      const price = row.ic;
       if (price > highestPrice) {
         highestPrice = price;
       }
@@ -225,16 +236,15 @@ function findHighestGridChargeCost(rows, segment) {
  * Within the given segment, we look for battery→grid flows and keep track of the LOWEST export price (revenue) observed.
  * (i.e. we were willing to sell at this low price, so we'd definitely sell at higher prices).
  */
-function findLowestGridExportRevenue(rows, segment) {
+function findLowestGridExportRevenue(rows: PlanRow[], segment: Segment | null): number {
   let lowestPrice = Infinity;
   if (!segment) return lowestPrice;
 
   for (let t = segment.start; t <= segment.end; t++) {
     const row = rows[t];
-    const b2g = Math.abs(Number(row.b2g) || 0);
 
-    if (b2g > FLOW_EPSILON_W) {
-      const price = Number(row.ec) || 0;
+    if (row.b2g > FLOW_EPSILON_W) {
+      const price = row.ec;
       if (price < lowestPrice) {
         lowestPrice = price;
       }
@@ -248,16 +258,15 @@ function findLowestGridExportRevenue(rows, segment) {
  * Within the given segment, we look for pv→grid flows and keep track of the LOWEST export price.
  * (i.e. we were willing to export PV at this low price, so we'd definitely export at higher prices).
  */
-function findLowestPvExportPrice(rows, segment) {
+function findLowestPvExportPrice(rows: PlanRow[], segment: Segment | null): number {
   let lowestPrice = Infinity;
   if (!segment) return lowestPrice;
 
   for (let t = segment.start; t <= segment.end; t++) {
     const row = rows[t];
-    const pv2g = Math.abs(Number(row.pv2g) || 0);
 
-    if (pv2g > FLOW_EPSILON_W) {
-      const price = Number(row.ec) || 0;
+    if (row.pv2g > FLOW_EPSILON_W) {
+      const price = row.ec;
       if (price < lowestPrice) {
         lowestPrice = price;
       }
@@ -269,15 +278,15 @@ function findLowestPvExportPrice(rows, segment) {
 /**
  * Checks if a rows's SoC is at (or very close to) either the min or max boundary.
  */
-function isAtSocBoundary(row, cfg) {
-  const soc = Number(row.soc_percent);
+function isAtSocBoundary(row: PlanRow, cfg: SolverConfig): boolean {
+  const soc = row.soc_percent;
   const atMin = soc <= cfg.minSoc_percent + SOC_EPSILON_PERCENT;
   const atMax = soc >= cfg.maxSoc_percent - SOC_EPSILON_PERCENT;
   return atMin || atMax;
 }
 
-function buildSegments(rows, cfg) {
-  const segments = [];
+function buildSegments(rows: PlanRow[], cfg: SolverConfig): Segment[] {
+  const segments: Segment[] = [];
   let segmentStart = 0;
 
   for (let t = 0; t < rows.length; t++) {
@@ -292,7 +301,7 @@ function buildSegments(rows, cfg) {
   return segments;
 }
 
-function getSegmentForIndex(segments, index) {
+function getSegmentForIndex(segments: Segment[], index: number): Segment | null {
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i];
     if (index >= segment.start && index <= segment.end) {
@@ -313,8 +322,8 @@ function getSegmentForIndex(segments, index) {
  * - pvExportTippingPoint_cents_per_kWh: lowest PV export price
  *   in the first SoC segment (or null if none).
  */
-function computeDessDiagnostics(rows, segments, cfg) {
-  if (!Array.isArray(rows) || !rows.length) {
+function computeDessDiagnostics(rows: PlanRow[], segments: Segment[], cfg: SolverConfig): DessDiagnostics {
+  if (!rows.length) {
     return {
       gridBatteryTippingPoint_cents_per_kWh: -Infinity,
       gridChargeTippingPoint_cents_per_kWh: -Infinity,
@@ -348,12 +357,12 @@ function computeDessDiagnostics(rows, segments, cfg) {
  *      (only when expected PV > expected load)
  *   5. else                         → selfConsumption + block both
  */
-export function mapRowsToDessV2(rows, cfg) {
+export function mapRowsToDessV2(rows: PlanRow[], cfg: SolverConfig): DessResult {
   const segments = buildSegments(rows, cfg);
-  const perSlot = new Array(rows.length);
+  const perSlot = new Array<DessSlot>(rows.length);
 
   // Precompute tipping points once per segment (avoids O(T²) re-scanning)
-  const segTps = new Map();
+  const segTps = new Map<Segment, SegmentTippingPoints>();
   for (const seg of segments) {
     segTps.set(seg, {
       gridChargeTp: findHighestGridChargeCost(rows, seg),
@@ -367,29 +376,27 @@ export function mapRowsToDessV2(rows, cfg) {
     const row = rows[t];
 
     // Feed-in: same rule as v1
-    const feedin = Number(row.ec) < 0 ? FeedIn.blocked : FeedIn.allowed;
+    const feedin = row.ec < 0 ? FeedIn.blocked : FeedIn.allowed;
 
-    const importCost = Number(row.ic);
-    const exportPrice = Number(row.ec);
+    const importCost = row.ic;
+    const exportPrice = row.ec;
     let socTarget_percent = row.soc_percent;
 
     // Expected PV/load for PV surplus check
-    const expectedPv = Number(row.pv) || 0;
-    const expectedLoad = Number(row.load) || 0;
-    const pvSurplus = expectedPv > expectedLoad + FLOW_EPSILON_W;
+    const pvSurplus = row.pv > row.load + FLOW_EPSILON_W;
 
     // Precompute flow totals for saturation checks
-    const gridImport = Number(row.g2l) + Number(row.g2b);
-    const gridExport = Number(row.b2g) + Number(row.pv2g);
-    const chargePower = Number(row.g2b) + Number(row.pv2b);
-    const dischargePower = Number(row.b2g) + Number(row.b2l);
+    const gridImport = row.g2l + row.g2b;
+    const gridExport = row.b2g + row.pv2g;
+    const chargePower = row.g2b + row.pv2b;
+    const dischargePower = row.b2g + row.b2l;
 
     // O(1) tipping-point lookup for this slot's segment
     const seg = getSegmentForIndex(segments, t);
-    const { gridChargeTp, gridBatteryTp, batteryExportTp, pvExportTp } = segTps.get(seg);
+    const { gridChargeTp, gridBatteryTp, batteryExportTp, pvExportTp } = segTps.get(seg!)!;
 
-    let strategy;
-    let restrictions;
+    let strategy: number;
+    let restrictions: number;
 
     if (importCost <= gridChargeTp) {
       // Electricity is cheap enough to charge the battery from grid
@@ -441,9 +448,12 @@ export function mapRowsToDessV2(rows, cfg) {
  * Compare v1 and v2 DESS outputs slot-by-slot.
  * Returns { totalSlots, diffCount, diffs[] }.
  */
-export function computeDessDiff(v1PerSlot, v2PerSlot) {
+export function computeDessDiff(
+  v1PerSlot: DessSlot[],
+  v2PerSlot: DessSlot[],
+): { totalSlots: number; diffCount: number; diffs: Array<{ slot: number; v1: DessSlot | null; v2: DessSlot | null }> } {
   const totalSlots = Math.max(v1PerSlot.length, v2PerSlot.length);
-  const diffs = [];
+  const diffs: Array<{ slot: number; v1: DessSlot | null; v2: DessSlot | null }> = [];
 
   for (let i = 0; i < totalSlots; i++) {
     const a = v1PerSlot[i];

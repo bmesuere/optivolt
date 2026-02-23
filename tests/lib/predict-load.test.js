@@ -7,7 +7,7 @@ import {
   validate,
   generateAllConfigs,
   buildForecastSeriesRange,
-} from '../../lib/predict-load.js';
+} from '../../lib/predict-load.ts';
 
 // ---------------------------------------------------------------------------
 // getDayBucket

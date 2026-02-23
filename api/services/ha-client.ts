@@ -1,30 +1,46 @@
 /**
- * ha-client.js
+ * ha-client.ts
  *
  * Home Assistant WebSocket client for fetching long-term statistics.
  * Uses the Node.js built-in WebSocket (Node >= 22).
  * Creates a new WebSocket connection per call.
  */
 
+import type { HaReading } from '../../lib/ha-postprocess.ts';
+
+interface FetchHaStatsOptions {
+  haUrl: string;
+  haToken: string;
+  entityIds: string[];
+  startTime: string;
+  endTime?: string;
+  period?: string;
+  timeoutMs?: number;
+}
+
+type HaWsMessage =
+  | { type: 'auth_required' }
+  | { type: 'auth_ok' }
+  | { type: 'auth_invalid'; message: string }
+  | { type: 'result'; success: true; result: Record<string, HaReading[]> }
+  | { type: 'result'; success: false; error?: { message?: string } };
+
 /**
  * Fetch statistics from HA via WebSocket.
- *
- * @param {{
- *   haUrl: string,
- *   haToken: string,
- *   entityIds: string[],
- *   startTime: string,
- *   endTime?: string,
- *   period?: string,
- *   timeoutMs?: number
- * }} options
- * @returns {Promise<Object>} raw HA statistics_during_period result
  */
-export async function fetchHaStats({ haUrl, haToken, entityIds, startTime, endTime, period = 'hour', timeoutMs = 30000 }) {
+export async function fetchHaStats({
+  haUrl,
+  haToken,
+  entityIds,
+  startTime,
+  endTime,
+  period = 'hour',
+  timeoutMs = 30000,
+}: FetchHaStatsOptions): Promise<Record<string, HaReading[]>> {
   // If running as an add-on, always prioritize the supervisor proxy
   const isAddon = !!process.env.SUPERVISOR_TOKEN;
   const targetUrl = isAddon ? 'ws://supervisor/core/websocket' : haUrl;
-  const targetToken = isAddon ? process.env.SUPERVISOR_TOKEN : haToken;
+  const targetToken: string = isAddon ? process.env.SUPERVISOR_TOKEN! : haToken;
 
   const ws = new WebSocket(targetUrl);
 
@@ -41,7 +57,7 @@ export async function fetchHaStats({ haUrl, haToken, entityIds, startTime, endTi
       }
     }, timeoutMs);
 
-    const done = (fn) => {
+    const done = (fn: () => void): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -49,9 +65,9 @@ export async function fetchHaStats({ haUrl, haToken, entityIds, startTime, endTi
     };
 
     ws.onmessage = (event) => {
-      let msg;
+      let msg: HaWsMessage;
       try {
-        msg = JSON.parse(event.data);
+        msg = JSON.parse(event.data as string) as HaWsMessage;
       } catch {
         return;
       }
@@ -61,14 +77,14 @@ export async function fetchHaStats({ haUrl, haToken, entityIds, startTime, endTi
 
       } else if (msg.type === 'auth_ok') {
         authenticated = true;
-        const request = {
+        const request: Record<string, unknown> = {
           id: commandId++,
           type: 'recorder/statistics_during_period',
           start_time: startTime,
           statistic_ids: entityIds,
           period,
         };
-        if (endTime) request.end_time = endTime;
+        if (endTime) request['end_time'] = endTime;
         ws.send(JSON.stringify(request));
 
       } else if (msg.type === 'auth_invalid') {
@@ -85,9 +101,10 @@ export async function fetchHaStats({ haUrl, haToken, entityIds, startTime, endTi
       }
     };
 
-    ws.onerror = (err) => {
+    ws.onerror = (event) => {
       ws.close();
-      done(() => reject(new Error(`HA WebSocket error: ${err?.message ?? String(err)}`)));
+      const msg = (event as ErrorEvent).message ?? String(event);
+      done(() => reject(new Error(`HA WebSocket error: ${msg}`)));
     };
 
     ws.onclose = () => {

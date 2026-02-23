@@ -1,19 +1,20 @@
 import express from 'express';
-import { assertCondition, toHttpError } from '../http-errors.js';
-import { loadSettings, saveSettings } from '../services/settings-store.js';
+import type { Request, Response, NextFunction } from 'express';
+import { assertCondition, toHttpError } from '../http-errors.ts';
+import { loadSettings, saveSettings } from '../services/settings-store.ts';
 
 const router = express.Router();
 
-router.get('/', async (_req, res, next) => {
+router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const settings = await loadSettings();
-    res.json(settings || {});
+    res.json(settings);
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to read settings'));
   }
 });
 
-router.post('/', async (req, res, next) => {
+router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const incoming = req.body ?? {};
     assertCondition(

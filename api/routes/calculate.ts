@@ -1,25 +1,16 @@
 import express from 'express';
-import { toHttpError } from '../http-errors.js';
-import { planAndMaybeWrite } from '../services/planner-service.js';
+import type { Request, Response, NextFunction } from 'express';
+import { toHttpError } from '../http-errors.ts';
+import { planAndMaybeWrite } from '../services/planner-service.ts';
 
 const router = express.Router();
 
-/**
- * POST /calculate
- *
- * Optional body:
- * {
- *   "updateData": true,
- *   "writeToVictron": true    // optional: write schedule to Victron
- * }
- */
-router.post('/', async (req, res, next) => {
+router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = req.body ?? {};
     const shouldUpdateData = !!body.updateData;
     const shouldWriteToVictron = !!body.writeToVictron;
 
-    // minimal logging: call + parsed parameters
     logCalculateCall(body, {
       updateData: shouldUpdateData,
       writeToVictron: shouldWriteToVictron,
@@ -46,22 +37,21 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-function logCalculateCall(rawBody, parsed) {
-  const timestamp = new Date().toISOString();
+function logCalculateCall(rawBody: unknown, parsed: { updateData: boolean; writeToVictron: boolean }): void {
   console.log('[calculate] request', {
-    timestamp,
+    timestamp: new Date().toISOString(),
     rawBody: rawBody ?? null,
     parsed,
   });
 }
 
-function logCalculateError(error) {
-  const timestamp = new Date().toISOString();
+function logCalculateError(error: unknown): void {
+  const err = error instanceof Error ? error : undefined;
   console.error('[calculate] error', {
-    timestamp,
-    message: error?.message,
-    name: error?.name,
-    stack: error?.stack,
+    timestamp: new Date().toISOString(),
+    message: err?.message,
+    name: err?.name,
+    stack: err?.stack,
   });
 }
 

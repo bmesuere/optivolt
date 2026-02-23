@@ -2,14 +2,12 @@
  * Utility functions for handling time series data.
  */
 
+import type { TimeSeries } from './types.ts';
 
 /**
  * Rounds a date down to the nearest step (default 15 minutes).
- * @param {Date|number|string} date
- * @param {number} stepMinutes
- * @returns {number} timestamp (ms)
  */
-export function getQuarterStart(date = new Date(), stepMinutes = 15) {
+export function getQuarterStart(date: Date | number | string = new Date(), stepMinutes = 15): number {
   const d = new Date(date);
   const q = Math.floor(d.getMinutes() / stepMinutes) * stepMinutes;
   d.setMinutes(q, 0, 0);
@@ -18,16 +16,9 @@ export function getQuarterStart(date = new Date(), stepMinutes = 15) {
 
 /**
  * Extracts a window of data from a source time series to match a target start time.
- *
- * @param {Object} source The source data object.
- * @param {string|number|Date} source.start ISO string, timestamp or Date of the series start.
- * @param {number} [source.step=15] Step size in minutes.
- * @param {number[]} source.values The array of values.
- * @param {number} targetStartMs The target start timestamp in ms.
- * @param {number} targetEndMs The target end timestamp in ms (exclusive).
- * @returns {number[]} The sliced and aligned array.
+ * Missing slots are padded with 0.
  */
-export function extractWindow(source, targetStartMs, targetEndMs) {
+export function extractWindow(source: TimeSeries, targetStartMs: number, targetEndMs: number): number[] {
   const sourceStartMs = new Date(source.start).getTime();
   const stepMs = (source.step || 15) * 60 * 1000;
 
@@ -40,7 +31,7 @@ export function extractWindow(source, targetStartMs, targetEndMs) {
   const targetDurationMs = targetEndMs - targetStartMs;
   const targetSlots = Math.floor(targetDurationMs / stepMs);
 
-  const result = [];
+  const result: number[] = [];
 
   for (let i = 0; i < targetSlots; i++) {
     const sourceIndex = offsetSlots + i;

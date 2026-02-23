@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
-import app from '../../api/app.js';
+import app from '../../api/app.ts';
 
 // Mock dependencies
-vi.mock('../../api/services/settings-store.js');
-vi.mock('../../api/services/data-store.js');
-vi.mock('../../api/services/vrm-refresh.js');
-vi.mock('../../api/services/mqtt-service.js');
+vi.mock('../../api/services/settings-store.ts');
+vi.mock('../../api/services/data-store.ts');
+vi.mock('../../api/services/vrm-refresh.ts');
+vi.mock('../../api/services/mqtt-service.ts');
 
-import { loadSettings } from '../../api/services/settings-store.js';
-import { loadData } from '../../api/services/data-store.js';
-import { refreshSeriesFromVrmAndPersist } from '../../api/services/vrm-refresh.js';
-import { setDynamicEssSchedule } from '../../api/services/mqtt-service.js';
+import { loadSettings } from '../../api/services/settings-store.ts';
+import { loadData } from '../../api/services/data-store.ts';
+import { refreshSeriesFromVrmAndPersist } from '../../api/services/vrm-refresh.ts';
+import { setDynamicEssSchedule } from '../../api/services/mqtt-service.ts';
 
 const mockSettings = {
   stepSize_m: 60,

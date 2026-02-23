@@ -4,7 +4,7 @@ Minimal client for Victron VRM API
 
 Example:
 
-import { VRMClient } from './vrmApi.js';
+import { VRMClient } from './vrm-api.ts';
 
 const vrm = new VRMClient({
   baseURL: 'https://vrmapi.victronenergy.com',
@@ -25,42 +25,117 @@ const win = VRMClient.windowLastHourToNextMidnightUTC();
 const forecasts2 = await vrm.fetchForecasts(win);
 ----------------------------------------------------------------------------- */
 
+interface VRMClientConfig {
+  baseURL?: string;
+  installationId?: string;
+  token?: string;
+}
+
+interface VRMWindow {
+  startMs: number;
+  endMs: number;
+  startSec: number;
+  endSec: number;
+}
+
+interface FetchOptions {
+  query?: Record<string, string | number | null | undefined>;
+  method?: string;
+  body?: unknown;
+}
+
+export interface VRMDessFlags {
+  isOn: boolean;
+  isGreenModeOn: boolean;
+  isPeriodicFullChargeOn: boolean;
+  alwaysApplyBatteryFlowRestriction: boolean;
+}
+
+export interface VRMDessLimits {
+  gridExportLimit_W: number | null;
+  gridImportLimit_W: number | null;
+  batteryChargeLimit_W: number | null;
+  batteryDischargeLimit_W: number | null;
+}
+
+export interface VRMDessSettings {
+  raw: unknown;
+  idSite: unknown;
+  gridSell: boolean;
+  batteryCapacity_kWh: number;
+  batteryCapacity_Wh: number;
+  dischargePower_W: number;
+  chargePower_W: number;
+  maxPowerFromGrid_W: number;
+  maxPowerToGrid_W: number;
+  batteryCosts_eur_per_kWh: number;
+  batteryCosts_cents_per_kWh: number;
+  batteryFlowRestriction: unknown;
+  buyPriceFormula: unknown;
+  sellPriceFormula: unknown;
+  biddingZoneCode: unknown;
+  buyPriceSamplingRate_mins: number | null;
+  sellPriceSamplingRate_mins: number | null;
+  flags: VRMDessFlags;
+  limits: VRMDessLimits;
+  updatedOn: string | null;
+  createdOn: string | null;
+}
+
+export interface VRMForecasts {
+  step_minutes: number;
+  timestamps: number[];
+  timestamps_iso: string[];
+  load_W: number[];
+  pv_W: number[];
+  raw: unknown;
+}
+
+export interface VRMPrices {
+  step_minutes: number;
+  timestamps: number[];
+  timestamps_iso: string[];
+  importPrice_eur_per_kwh: number[];
+  exportPrice_eur_per_kwh: number[];
+  importPrice_cents_per_kwh: number[];
+  exportPrice_cents_per_kwh: number[];
+  raw: unknown;
+}
 
 export class VRMClient {
-  /**
-   * @param {object} opts
-   * @param {string} opts.baseURL - e.g. "https://vrmapi.victronenergy.com"
-   * @param {string} opts.installationId - numeric idSite / installation id as string
-   * @param {string} opts.token - VRM API token
-   */
-  constructor({ baseURL, installationId, token } = {}) {
+  baseURL: string;
+  installationId: string;
+  token: string;
+  defaultIntervalMins: number;
+
+  constructor({ baseURL, installationId, token }: VRMClientConfig = {}) {
     this.baseURL = (baseURL || 'https://vrmapi.victronenergy.com').replace(/\/+$/, '') + "/v2";
     this.installationId = installationId || '';
     this.token = token || '';
     this.defaultIntervalMins = 15;
   }
 
-  setAuth({ installationId, token } = {}) {
+  setAuth({ installationId, token }: { installationId?: string | null; token?: string | null } = {}): void {
     if (installationId != null) this.installationId = String(installationId);
     if (token != null) this.token = token;
   }
 
-  setBaseURL(baseURL) {
+  setBaseURL(baseURL: string): void {
     this.baseURL = String(baseURL || '').replace(/\/+$/, '') + "/v2";
   }
 
   // ----------------------------- Core fetch helper -----------------------------
 
-  async _fetch(path, { query = {}, method = 'GET', body } = {}) {
+  async _fetch(path: string, { query = {}, method = 'GET', body }: FetchOptions = {}): Promise<unknown> {
     if (!this.token) throw new Error('Missing VRM API token');
     const url = new URL(this.baseURL + (path.startsWith('/') ? path : `/${path}`));
     Object.entries(query).forEach(([k, v]) => v != null && url.searchParams.set(k, String(v)));
 
-    const headers = {
+    const headers: Record<string, string> = {
       'Accept': 'application/json',
       'X-Authorization': `Token ${this.token}`
     };
-    const init = { method, headers };
+    const init: RequestInit = { method, headers };
     if (body != null) {
       headers['Content-Type'] = 'application/json';
       init.body = JSON.stringify(body);
@@ -94,7 +169,7 @@ export class VRMClient {
  * We do the time arithmetic in local time first — because "midnight" in your
  * billing world is local midnight — then call .getTime() to convert to UTC ms.
  */
-  static windowOptimizationHorizon() {
+  static windowOptimizationHorizon(): VRMWindow {
     const nowLocal = new Date(); // browser local time
     const y = nowLocal.getFullYear();
     const m = nowLocal.getMonth();
@@ -126,14 +201,14 @@ export class VRMClient {
 
 
   // Make a continuous 15-min timeline in [startMs, endMs)
-  static buildTimeline15Min(startMs, endMs) {
+  static buildTimeline15Min(startMs: number, endMs: number): number[] {
     const step = 15 * 60 * 1000;
-    const arr = [];
+    const arr: number[] = [];
     for (let t = startMs; t < endMs; t += step) arr.push(t);
     return arr;
   }
 
-  static toISO(ms) { return new Date(ms).toISOString(); }
+  static toISO(ms: number): string { return new Date(ms).toISOString(); }
 
   // ------------------------------ Settings (DESS) ------------------------------
 
@@ -141,15 +216,15 @@ export class VRMClient {
    * GET /installations/{id}/dynamic-ess-settings
    * Normalizes key fields to W/Wh and €/kWh & c€/kWh.
    */
-  async fetchDynamicEssSettings() {
+  async fetchDynamicEssSettings(): Promise<VRMDessSettings> {
     if (!this.installationId) throw new Error('Missing installationId');
-    const data = await this._fetch(`/installations/${this.installationId}/dynamic-ess-settings`);
+    const data = await this._fetch(`/installations/${this.installationId}/dynamic-ess-settings`) as { success?: boolean; data?: Record<string, unknown> };
     if (!data?.success) throw new Error('dynamic-ess-settings: success=false');
 
     const d = data.data || {};
     // VRM returns: batteryCapacity (kWh), dischargePower (kW), chargePower (kW), maxPowerFromGrid (kW), maxPowerToGrid (kW), batteryCosts (€/kWh)
     const batteryCapacity_kWh = num(d.batteryCapacity);
-    const settings = {
+    const settings: VRMDessSettings = {
       raw: d,
       idSite: d.idSite,
       gridSell: boolish(d.gridSell),
@@ -179,8 +254,8 @@ export class VRMClient {
         batteryChargeLimit_W: safeMul(num(d.batteryChargeLimit), 1000) || null,
         batteryDischargeLimit_W: safeMul(num(d.batteryDischargeLimit), 1000) || null
       },
-      updatedOn: d.updatedOn || null,
-      createdOn: d.createdOn || null
+      updatedOn: (d.updatedOn as string) || null,
+      createdOn: (d.createdOn as string) || null
     };
 
     return settings;
@@ -194,18 +269,8 @@ export class VRMClient {
    * VRM returns hourly kWh values at the hour mark and zeros at the other 15-minute slots.
    * This converts each hourly kWh spike into a constant average power over that hour in W,
    * and fills all 4×15-min slots of the hour with that W.
-   *
-   * @param {{startSec?:number,endSec?:number,startMs?:number,endMs?:number}} [opts]
-   * @returns {{
-   *   step_minutes:number,
-   *   timestamps:number[],          // ms since epoch
-   *   timestamps_iso:string[],
-   *   load_W:number[],
-   *   pv_W:number[],
-   *   raw:any
-   * }}
    */
-  async fetchForecasts(opts = {}) {
+  async fetchForecasts(opts: Partial<VRMWindow> = {}): Promise<VRMForecasts> {
     if (!this.installationId) throw new Error('Missing installationId');
 
     const win = ensureWindow(opts);
@@ -215,7 +280,7 @@ export class VRMClient {
       start: win.startSec,
       end: win.endSec
     };
-    const data = await this._fetch(`/installations/${this.installationId}/stats`, { query: q });
+    const data = await this._fetch(`/installations/${this.installationId}/stats`, { query: q }) as { success?: boolean; records?: Record<string, [number, number][]> };
     if (!data?.success) throw new Error('forecast stats: success=false');
 
     // Expected keys (from your examples):
@@ -247,20 +312,8 @@ export class VRMClient {
    * Keys:
    *   - deGb: buy prices (€/kWh) at every 15min slot
    *   - deGs: sell prices (€/kWh) at every 15min slot
-   *
-   * @param {{startSec?:number,endSec?:number,startMs?:number,endMs?:number}} [opts]
-   * @returns {{
-   *   step_minutes:number,
-   *   timestamps:number[],
-   *   timestamps_iso:string[],
-   *   importPrice_eur_per_kwh:number[],
-   *   exportPrice_eur_per_kwh:number[],
-   *   importPrice_cents_per_kwh:number[],
-   *   exportPrice_cents_per_kwh:number[],
-   *   raw:any
-   * }}
    */
-  async fetchPrices(opts = {}) {
+  async fetchPrices(opts: Partial<VRMWindow> = {}): Promise<VRMPrices> {
     if (!this.installationId) throw new Error('Missing installationId');
 
     const win = ensureWindow(opts);
@@ -270,7 +323,7 @@ export class VRMClient {
       start: win.startSec,
       end: win.endSec
     };
-    const data = await this._fetch(`/installations/${this.installationId}/stats`, { query: q });
+    const data = await this._fetch(`/installations/${this.installationId}/stats`, { query: q }) as { success?: boolean; records?: Record<string, [number, number][]> };
     if (!data?.success) throw new Error('prices stats: success=false');
 
     const rec = data.records || {};
@@ -299,20 +352,20 @@ export class VRMClient {
 
 /* ------------------------------- Helpers ------------------------------- */
 
-function num(x) {
+function num(x: unknown): number {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
-function safeMul(a, b) {
-  const n = Number(a) * Number(b);
+function safeMul(a: number, b: number): number {
+  const n = a * b;
   return Number.isFinite(n) ? n : 0;
 }
-function boolish(v) { return v === true || v === 1 || v === '1'; }
+function boolish(v: unknown): boolean { return v === true || v === 1 || v === '1'; }
 
 /**
  * Ensure a valid start/end window, defaulting to last full hour → next midnight local time.
  */
-function ensureWindow({ startSec, endSec, startMs, endMs } = {}) {
+function ensureWindow({ startSec, endSec, startMs, endMs }: Partial<VRMWindow> = {}): VRMWindow {
   if (startMs != null && endMs != null) {
     return {
       startMs,
@@ -336,15 +389,11 @@ function ensureWindow({ startSec, endSec, startMs, endMs } = {}) {
 /**
  * Convert VRM stats array [[ms,value], ...] to a Map(ms -> value).
  */
-function toSeries(arr) {
-  const map = new Map();
-  if (Array.isArray(arr)) {
-    for (const row of arr) {
-      if (Array.isArray(row) && row.length >= 2) {
-        const t = Number(row[0]);
-        const v = Number(row[1]);
-        if (Number.isFinite(t) && Number.isFinite(v)) map.set(t, v);
-      }
+function toSeries(arr: [number, number][] | undefined): Map<number, number> {
+  const map = new Map<number, number>();
+  if (arr) {
+    for (const [t, v] of arr) {
+      if (Number.isFinite(t) && Number.isFinite(v)) map.set(t, v);
     }
   }
   return map;
@@ -353,18 +402,18 @@ function toSeries(arr) {
 /**
  * Align a (ms -> value) map to a fixed ms timeline, filling missing with fallback.
  */
-function alignToTimeline(seriesMap, timeline, fallback = 0) {
-  return timeline.map(ms => (seriesMap.has(ms) ? Number(seriesMap.get(ms)) : fallback));
+function alignToTimeline(seriesMap: Map<number, number>, timeline: number[], fallback = 0): number[] {
+  return timeline.map(ms => seriesMap.get(ms) ?? fallback);
 }
 
 /**
  * Forecast series are given as **W at the full hour** (non-zero only on hh:00) and zeros elsewhere.
  * Fill each hour's 4 quarter-hours with that **W**.
  */
-function fillHourlyWAcrossQuarterHours(seriesMap, timeline) {
-  const result = new Array(timeline.length).fill(0);
+function fillHourlyWAcrossQuarterHours(seriesMap: Map<number, number>, timeline: number[]): number[] {
+  const result = new Array<number>(timeline.length).fill(0);
 
-  let currentHourStart = null;
+  let currentHourStart: number | null = null;
   let currentHourW = 0;
 
   for (let i = 0; i < timeline.length; i++) {
@@ -379,7 +428,7 @@ function fillHourlyWAcrossQuarterHours(seriesMap, timeline) {
     if (hourStart !== currentHourStart) {
       currentHourStart = hourStart;
       const w = seriesMap.get(hourStart); // value is already Watts at hour start
-      currentHourW = (Number.isFinite(w) && w > 0) ? Number(w) : 0;
+      currentHourW = (Number.isFinite(w) && w! > 0) ? w! : 0;
     }
 
     result[i] = currentHourW;

@@ -1,24 +1,23 @@
 import express from 'express';
-import { HttpError, assertCondition, toHttpError } from '../http-errors.js';
-import {
-  refreshSettingsFromVrmAndPersist
-} from '../services/vrm-refresh.js';
+import type { Request, Response, NextFunction } from 'express';
+import { HttpError, assertCondition, toHttpError } from '../http-errors.ts';
+import { refreshSettingsFromVrmAndPersist } from '../services/vrm-refresh.ts';
 
 const router = express.Router();
 
-function validateEnvOrThrow() {
+function validateEnvOrThrow(): void {
   const installationId = (process.env.VRM_INSTALLATION_ID ?? '').trim();
   const token = (process.env.VRM_TOKEN ?? '').trim();
   assertCondition(installationId.length > 0, 400, 'VRM Site ID not configured in add-on settings');
   assertCondition(token.length > 0, 400, 'VRM API token not configured in add-on settings');
 }
-function asHttp(error, message, defaultStatus = 502) {
+
+function asHttp(error: unknown, message: string, defaultStatus = 502): HttpError {
   const status = error instanceof HttpError ? error.statusCode : defaultStatus;
   return toHttpError(error, status, message);
 }
 
-// Refresh only static-ish system settings (persist)
-router.post('/refresh-settings', async (_req, res, next) => {
+router.post('/refresh-settings', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     validateEnvOrThrow();
     const saved = await refreshSettingsFromVrmAndPersist();

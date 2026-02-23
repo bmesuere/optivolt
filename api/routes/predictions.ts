@@ -1,13 +1,15 @@
 import express from 'express';
-import { assertCondition, toHttpError } from '../http-errors.js';
-import { loadPredictionConfig, savePredictionConfig } from '../services/prediction-config-store.js';
-import { runValidation, runForecast } from '../services/prediction-service.js';
-import { loadData, saveData } from '../services/data-store.js';
-import { loadSettings } from '../services/settings-store.js';
+import type { Request, Response, NextFunction } from 'express';
+import { HttpError, assertCondition, toHttpError } from '../http-errors.ts';
+import { loadPredictionConfig, savePredictionConfig } from '../services/prediction-config-store.ts';
+import { runValidation, runForecast } from '../services/prediction-service.ts';
+import { loadData, saveData } from '../services/data-store.ts';
+import { loadSettings } from '../services/settings-store.ts';
+import type { PredictionConfig } from '../types.ts';
 
 const router = express.Router();
 
-router.get('/config', async (_req, res, next) => {
+router.get('/config', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const config = await loadPredictionConfig();
     res.json({
@@ -19,7 +21,7 @@ router.get('/config', async (_req, res, next) => {
   }
 });
 
-router.post('/config', async (req, res, next) => {
+router.post('/config', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const incoming = req.body ?? {};
     assertCondition(
@@ -38,16 +40,16 @@ router.post('/config', async (req, res, next) => {
   }
 });
 
-router.post('/validate', async (req, res, next) => {
+router.post('/validate', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const config = await loadPredictionConfig();
 
     assertCondition(
-      !!process.env.SUPERVISOR_TOKEN || (config.haUrl && config.haToken),
+      !!process.env.SUPERVISOR_TOKEN || (config.haUrl.length > 0 && config.haToken.length > 0),
       400,
       'haUrl and haToken are required when not running as an add-on'
     );
-    assertCondition(config.sensors?.length > 0, 400, 'At least one sensor must be configured');
+    assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
 
     logPredictionCall('validate', { sensors: config.sensors.length });
 
@@ -55,7 +57,7 @@ router.post('/validate', async (req, res, next) => {
     try {
       result = await runValidation(config);
     } catch (err) {
-      const msg = err?.message ?? String(err);
+      const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('auth') || msg.includes('WebSocket') || msg.includes('timed out')) {
         throw toHttpError(err, 502, `HA connection error: ${msg}`);
       }
@@ -64,11 +66,11 @@ router.post('/validate', async (req, res, next) => {
 
     res.json(result);
   } catch (error) {
-    next(error instanceof Error && error.statusCode ? error : toHttpError(error, 500, 'Validation failed'));
+    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Validation failed'));
   }
 });
 
-router.post('/forecast', async (req, res, next) => {
+router.post('/forecast', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const config = await loadPredictionConfig();
 
@@ -79,12 +81,11 @@ router.post('/forecast', async (req, res, next) => {
     const result = await executeForecast(config, 'forecast');
     res.json(result);
   } catch (error) {
-    next(error instanceof Error && error.statusCode ? error : toHttpError(error, 500, 'Forecast failed'));
+    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Forecast failed'));
   }
 });
 
-// Automation endpoint: future slots only (no recent accuracy data)
-router.get('/forecast/now', async (req, res, next) => {
+router.get('/forecast/now', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const config = await loadPredictionConfig();
     config.includeRecent = false;
@@ -92,28 +93,27 @@ router.get('/forecast/now', async (req, res, next) => {
     const result = await executeForecast(config, 'forecast/now');
     res.json(result);
   } catch (error) {
-    next(error instanceof Error && error.statusCode ? error : toHttpError(error, 500, 'Forecast failed'));
+    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Forecast failed'));
   }
 });
 
-async function executeForecast(config, logLabel) {
+async function executeForecast(config: PredictionConfig, logLabel: string): Promise<unknown> {
   assertCondition(
-    !!process.env.SUPERVISOR_TOKEN || (config.haUrl && config.haToken),
+    !!process.env.SUPERVISOR_TOKEN || (config.haUrl.length > 0 && config.haToken.length > 0),
     400,
     'haUrl and haToken are required when not running as an add-on'
   );
-  assertCondition(config.activeConfig, 400, 'activeConfig is required');
-  assertCondition(config.sensors?.length > 0, 400, 'At least one sensor must be configured');
+  assertCondition(config.activeConfig != null, 400, 'activeConfig is required');
+  assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
 
   logPredictionCall(logLabel, { activeConfig: config.activeConfig });
 
   try {
     const result = await runForecast(config);
 
-    // Save the forecast directly to the data store under the 'load' key
-    if (result.forecast && result.forecast.values) {
+    if (result?.forecast?.values) {
       const settings = await loadSettings();
-      if (settings?.dataSources?.load === 'api') {
+      if (settings.dataSources.load === 'api') {
         const currentData = await loadData();
         currentData.load = result.forecast;
         await saveData(currentData);
@@ -122,7 +122,7 @@ async function executeForecast(config, logLabel) {
 
     return result;
   } catch (err) {
-    const msg = err?.message ?? String(err);
+    const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('auth') || msg.includes('WebSocket') || msg.includes('timed out')) {
       throw toHttpError(err, 502, `HA connection error: ${msg}`);
     }
@@ -130,11 +130,10 @@ async function executeForecast(config, logLabel) {
   }
 }
 
-function logPredictionCall(type, meta) {
-  const timestamp = new Date().toISOString();
+function logPredictionCall(type: string, meta: Record<string, unknown>): void {
   console.log(`[predict] ${type}`, {
-    timestamp,
-    ...meta
+    timestamp: new Date().toISOString(),
+    ...meta,
   });
 }
 
