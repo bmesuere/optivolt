@@ -13,10 +13,10 @@
   "license": "MIT",
   "author": "Bart Mesuere",
   "type": "module",
-  "main": "api/index.js",
+  "main": "api/index.ts",
   "scripts": {
-    "api": "node ./api/index.js",
-    "dev": "dotenv -e .env.local -- nodemon --ignore 'data/' ./api/index.js",
+    "api": "node ./api/index.ts",
+    "dev": "dotenv -e .env.local -- nodemon --ignore 'data/' ./api/index.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "typecheck": "tsc --noEmit",

@@ -17,7 +17,7 @@ function validateTimeSeries(ts: TimeSeries, label: string): void {
   if (!Array.isArray(ts.values)) {
     throw new Error(`Invalid ${label}: 'values' must be an array`);
   }
-  if (ts.step !== undefined && ts.step <= 0) {
+  if (ts.step !== undefined && !(Number.isFinite(ts.step) && ts.step > 0)) {
     throw new Error(`Invalid ${label}: 'step' must be a positive number`);
   }
 }
