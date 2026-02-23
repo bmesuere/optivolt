@@ -1,4 +1,4 @@
-import app from './app.js';
+import app from './app.ts';
 
 const rawPort = Number.parseInt(process.env.PORT ?? '', 10);
 const port = Number.isFinite(rawPort) ? rawPort : 3000;

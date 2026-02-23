@@ -1,12 +1,12 @@
 import express from 'express';
-import { loadData, saveData } from '../services/data-store.js';
-import { loadSettings } from '../services/settings-store.js';
-import { HttpError, toHttpError } from '../http-errors.js';
+import type { Request, Response, NextFunction } from 'express';
+import { loadData, saveData } from '../services/data-store.ts';
+import { loadSettings } from '../services/settings-store.ts';
+import { HttpError, toHttpError } from '../http-errors.ts';
 
 const router = express.Router();
 
-// GET /data - Returns the full current data state
-router.get('/', async (req, res, next) => {
+router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const data = await loadData();
     res.json(data);
@@ -15,17 +15,9 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-/**
- * POST /data - Update specific data series
- * Payload example:
- * {
- *   "importPrice": { "start": "...", "step": 15, "values": [...] },
- *   "exportPrice": { "start": "...", "step": 15, "values": [...] }
- * }
- */
-router.post('/', async (req, res, next) => {
+router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const payload = req.body;
+    const payload = req.body as Record<string, unknown>;
 
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new HttpError(400, 'Payload must be a JSON object');
@@ -33,17 +25,16 @@ router.post('/', async (req, res, next) => {
 
     const currentData = await loadData();
     const settings = await loadSettings();
-    const dataSources = settings?.dataSources || {};
+    const dataSources = settings.dataSources;
 
-    const sourceMapping = {
+    const sourceMapping: Record<string, string> = {
       load: dataSources.load,
       pv: dataSources.pv,
       importPrice: dataSources.prices,
       exportPrice: dataSources.prices,
-      soc: dataSources.soc
+      soc: dataSources.soc,
     };
 
-    // keys allowed to be updated
     const allowedKeys = ['load', 'pv', 'importPrice', 'exportPrice', 'soc'];
     const keysToUpdate = Object.keys(payload).filter(k => allowedKeys.includes(k) && sourceMapping[k] === 'api');
 
@@ -51,7 +42,7 @@ router.post('/', async (req, res, next) => {
       throw new HttpError(400, 'No valid data keys provided or settings are not set to API', { details: { keysUpdated: [] } });
     }
 
-    const nextData = { ...currentData };
+    const nextData = { ...currentData } as Record<string, unknown>;
 
     try {
       for (const key of keysToUpdate) {
@@ -64,11 +55,12 @@ router.post('/', async (req, res, next) => {
         nextData[key] = series;
       }
     } catch (validationError) {
-      return next(toHttpError(validationError, 400, validationError.message));
+      const msg = validationError instanceof Error ? validationError.message : String(validationError);
+      return next(toHttpError(validationError, 400, msg));
     }
 
     try {
-      await saveData(nextData);
+      await saveData(nextData as unknown as typeof currentData);
       logDataUpdateCall(keysToUpdate);
       res.json({ message: 'Data updated successfully', keysUpdated: keysToUpdate });
     } catch (saveError) {
@@ -76,41 +68,38 @@ router.post('/', async (req, res, next) => {
     }
 
   } catch (error) {
-    // Catch-all for unexpected synchronous errors in the route setup (unlikely),
-    // or if toHttpError throws.
     next(toHttpError(error, 500));
   }
 });
 
-
-function logDataUpdateCall(keysUpdated) {
-  const timestamp = new Date().toISOString();
+function logDataUpdateCall(keysUpdated: string[]): void {
   console.log('[data] update', {
-    timestamp,
+    timestamp: new Date().toISOString(),
     keysUpdated,
   });
 }
 
-function validateSeries(obj, name) {
+function validateSeries(obj: unknown, name: string): void {
   if (!obj || typeof obj !== 'object') throw new Error(`Invalid ${name} object`);
+  const o = obj as Record<string, unknown>;
 
-  if (!obj.start) throw new Error(`${name} missing 'start' ISO timestamp`);
-  if (isNaN(Date.parse(obj.start))) throw new Error(`${name} 'start' must be a valid ISO string`);
+  if (!o.start) throw new Error(`${name} missing 'start' ISO timestamp`);
+  if (isNaN(Date.parse(o.start as string))) throw new Error(`${name} 'start' must be a valid ISO string`);
 
-  // We strictly expect 'values' array now
-  if (!Array.isArray(obj.values)) throw new Error(`${name} must contain 'values' array`);
+  if (!Array.isArray(o.values)) throw new Error(`${name} must contain 'values' array`);
 
-  if (obj.step !== undefined) {
-    if (!Number.isFinite(obj.step) || obj.step <= 0) {
+  if (o.step !== undefined) {
+    if (!Number.isFinite(o.step) || (o.step as number) <= 0) {
       throw new Error(`${name} 'step' must be a positive number`);
     }
   }
 }
 
-function validateSoC(obj) {
+function validateSoC(obj: unknown): void {
   if (!obj || typeof obj !== 'object') throw new Error('Invalid soc object');
-  if (!Number.isFinite(obj.value)) throw new Error('soc must contain numeric "value"');
-  if (!obj.timestamp || isNaN(Date.parse(obj.timestamp))) throw new Error('soc must contain valid "timestamp" ISO string');
+  const o = obj as Record<string, unknown>;
+  if (!Number.isFinite(o.value)) throw new Error('soc must contain numeric "value"');
+  if (!o.timestamp || isNaN(Date.parse(o.timestamp as string))) throw new Error('soc must contain valid "timestamp" ISO string');
 }
 
 export default router;

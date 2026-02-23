@@ -1,22 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import { loadData, saveData } from '../../api/services/data-store.js';
-import { loadSettings, saveSettings } from '../../api/services/settings-store.js';
+import { loadData, saveData } from '../../api/services/data-store.ts';
+import { loadSettings, saveSettings } from '../../api/services/settings-store.ts';
 import dataRouter from '../../api/routes/data.js';
 import calculateRouter from '../../api/routes/calculate.js';
 
 // Mock dependencies
-vi.mock('../../api/services/data-store.js');
-vi.mock('../../api/services/settings-store.js');
-vi.mock('../../api/services/vrm-refresh.js', async (importOriginal) => {
+vi.mock('../../api/services/data-store.ts');
+vi.mock('../../api/services/settings-store.ts');
+vi.mock('../../api/services/vrm-refresh.ts', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
     refreshSeriesFromVrmAndPersist: vi.fn(),
   };
 });
-vi.mock('../../api/services/planner-service.js', () => ({
+vi.mock('../../api/services/planner-service.ts', () => ({
   planAndMaybeWrite: vi.fn().mockResolvedValue({
     cfg: { initialSoc_percent: 50 },
     data: { tsStart: '2024-01-01T00:00:00Z', load: { start: '2024-01-01T00:00:00Z' } },

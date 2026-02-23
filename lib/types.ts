@@ -37,7 +37,7 @@ export interface SolverConfig {
   initialSoc_percent: number;
 
   // Algorithm selection
-  dessAlgorithm?: string;
+  dessAlgorithm: 'v1' | 'v2';
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { buildSolverConfigFromSettings } from '../../../api/services/config-builder.js';
+import { buildSolverConfigFromSettings } from '../../../api/services/config-builder.ts';
 
 /**
  * These tests verify the "Smart Reader" logic in config-builder.js.

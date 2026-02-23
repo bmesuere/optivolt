@@ -10,6 +10,8 @@ interface HighsColumn {
 }
 
 export interface HighsSolution {
+  Status?: string;
+  ObjectiveValue?: number;
   Columns?: HighsColumn[] | Record<string, HighsColumn>;
 }
 

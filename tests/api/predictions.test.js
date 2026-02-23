@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../../api/app.js';
 
-vi.mock('../../api/services/prediction-config-store.js');
+vi.mock('../../api/services/prediction-config-store.ts');
 vi.mock('../../api/services/prediction-service.js');
 
-import { loadPredictionConfig, savePredictionConfig } from '../../api/services/prediction-config-store.js';
+import { loadPredictionConfig, savePredictionConfig } from '../../api/services/prediction-config-store.ts';
 import { runValidation, runForecast } from '../../api/services/prediction-service.js';
 
 const mockConfig = {

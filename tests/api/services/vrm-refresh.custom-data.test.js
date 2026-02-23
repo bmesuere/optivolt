@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { refreshSeriesFromVrmAndPersist } from '../../../api/services/vrm-refresh.js';
-import { loadSettings, saveSettings } from '../../../api/services/settings-store.js';
-import { loadData, saveData } from '../../../api/services/data-store.js';
-import * as mqttService from '../../../api/services/mqtt-service.js';
+import { refreshSeriesFromVrmAndPersist } from '../../../api/services/vrm-refresh.ts';
+import { loadSettings, saveSettings } from '../../../api/services/settings-store.ts';
+import { loadData, saveData } from '../../../api/services/data-store.ts';
+import * as mqttService from '../../../api/services/mqtt-service.ts';
 
 // 1. Define hoisted mocks so they are available inside vi.mock factory
 const { mockFetchForecasts, mockFetchPrices } = vi.hoisted(() => {
@@ -13,7 +13,7 @@ const { mockFetchForecasts, mockFetchPrices } = vi.hoisted(() => {
 });
 
 // 2. Mock VRMClient manually using a class to support 'new'
-vi.mock('../../../lib/vrm-api.js', () => {
+vi.mock('../../../lib/vrm-api.ts', () => {
   return {
     VRMClient: class {
       constructor() {
@@ -25,9 +25,9 @@ vi.mock('../../../lib/vrm-api.js', () => {
 });
 
 // Mock other dependencies
-vi.mock('../../../api/services/settings-store.js');
-vi.mock('../../../api/services/data-store.js');
-vi.mock('../../../api/services/mqtt-service.js');
+vi.mock('../../../api/services/settings-store.ts');
+vi.mock('../../../api/services/data-store.ts');
+vi.mock('../../../api/services/mqtt-service.ts');
 
 describe('vrm-refresh logic with custom data', () => {
   beforeEach(() => {
