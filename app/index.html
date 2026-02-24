@@ -408,6 +408,10 @@
               <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80"
                 id="load-split-bar"></div>
             </div>
+            <div id="rebalance-status-row" class="summary-row border-t border-slate-100 dark:border-white/5 hidden">
+              <span class="stat-label">Rebalancing</span>
+              <span id="rebalance-status" class="text-sm font-medium"></span>
+            </div>
             <div class="summary-block border-t border-slate-100 dark:border-white/5">
               <div class="flex items-baseline justify-between mb-2">
                 <span class="stat-label">Tipping points</span>
@@ -540,6 +544,16 @@
                     <option value="v1" selected>v1 (flow analysis)</option>
                     <option value="v2">v2 (tipping points)</option>
                   </select>
+                </label>
+                <label class="text-sm">Hold duration (hours)
+                  <input id="rebalance-hold-hours" type="number" min="0.25" step="0.25" class="form-input" />
+                </label>
+              </div>
+              <div class="mt-3">
+                <label class="toggle">
+                  <input id="rebalance-enabled" type="checkbox">
+                  <span class="toggle-knob"></span>
+                  <span class="text-sm text-slate-600 dark:text-slate-400">Schedule battery rebalancing</span>
                 </label>
               </div>
             </div>

@@ -4,7 +4,9 @@ import { buildLP } from '../../lib/build-lp.ts';
 import { parseSolution, type HighsSolution } from '../../lib/parse-solution.ts';
 import { buildPlanSummary } from '../../lib/plan-summary.ts';
 import type { SolverConfig, PlanSummary } from '../../lib/types.ts';
-import { getSolverInputs } from './config-builder.ts';
+import { getSolverInputs, buildSolverConfigFromSettings } from './config-builder.ts';
+import { saveSettings } from './settings-store.ts';
+import { saveData } from './data-store.ts';
 import { refreshSeriesFromVrmAndPersist } from './vrm-refresh.ts';
 import { setDynamicEssSchedule } from './mqtt-service.ts';
 import type { PlanRowWithDess, Data } from '../types.ts';
@@ -55,7 +57,16 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
     }
   }
 
-  const { cfg, timing, data } = await getSolverInputs();
+  let { cfg, timing, data, settings } = await getSolverInputs();
+
+  // Pre-solve bookkeeping: if a rebalance cycle just completed, auto-disable
+  if (settings.rebalanceEnabled && (cfg.rebalanceRemainingSlots ?? Infinity) === 0) {
+    data = { ...data, rebalanceState: { startMs: null } };
+    settings = { ...settings, rebalanceEnabled: false };
+    await Promise.all([saveSettings(settings), saveData(data)]);
+    // Rebuild cfg without rebalance constraints
+    cfg = buildSolverConfigFromSettings(settings, data, timing.startMs);
+  }
 
   const lpText = buildLP(cfg);
   const highs = await getHighsInstance();
@@ -75,7 +86,21 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
     dessDiff = computeDessDiff(v1Result.perSlot, perSlot);
   }
 
-  const summary = buildPlanSummary(rowsWithDess, cfg, diagnostics);
+  // Post-solve bookkeeping: if rebalancing is enabled but hasn't started, check actual SoC
+  if (settings.rebalanceEnabled && (data.rebalanceState?.startMs == null)) {
+    if (data.soc.value >= settings.maxSoc_percent) {
+      data = { ...data, rebalanceState: { startMs: timing.startMs } };
+      await saveData(data);
+    }
+  }
+
+  const rebalanceCtx = settings.rebalanceEnabled ? {
+    enabled: true,
+    startMs: data.rebalanceState?.startMs ?? null,
+    remainingSlots: cfg.rebalanceRemainingSlots ?? 0,
+  } : undefined;
+
+  const summary = buildPlanSummary(rowsWithDess, cfg, diagnostics, rebalanceCtx);
 
   return { cfg, data, timing, result, rows: rowsWithDess, summary, dessDiff };
 }

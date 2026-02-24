@@ -71,3 +71,61 @@ describe('buildLP', () => {
     expect(lp).toMatch(/c_soc_1:.*= 0\b/);
   });
 });
+
+describe('buildLP — MILP rebalancing', () => {
+  const T = 8;
+  const D = 3; // hold window in slots
+  const mockData = {
+    load_W: Array(T).fill(500),
+    pv_W: Array(T).fill(0),
+    importPrice: Array(T).fill(10),
+    exportPrice: Array(T).fill(5),
+    batteryCapacity_Wh: 10000,
+    maxSoc_percent: 100,
+  };
+
+  it('does NOT include Binaries block when rebalanceRemainingSlots is 0', () => {
+    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: 0 });
+    expect(lp).not.toContain('Binaries');
+    expect(lp).not.toContain('start_balance_');
+  });
+
+  it('does NOT include Binaries block when rebalanceRemainingSlots is undefined', () => {
+    const lp = buildLP(mockData);
+    expect(lp).not.toContain('Binaries');
+    expect(lp).not.toContain('start_balance_');
+  });
+
+  it('includes a Binaries block with start_balance_k variables when D > 0', () => {
+    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: 100 });
+    expect(lp).toContain('Binaries');
+    // T=8, D=3 → start positions 0..5 (T-D = 5)
+    for (let k = 0; k <= T - D; k++) {
+      expect(lp).toContain(`start_balance_${k}`);
+    }
+    // No variable beyond T-D
+    expect(lp).not.toContain(`start_balance_${T - D + 1}`);
+  });
+
+  it('includes exactly-one-start constraint', () => {
+    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: 100 });
+    // All T-D+1 start variables must appear in c_balance_start
+    expect(lp).toContain('c_balance_start:');
+    expect(lp).toMatch(/c_balance_start:.*= 1/);
+  });
+
+  it('includes per-slot SoC forcing constraints referencing targetSoc_Wh', () => {
+    const targetSoc_Wh = (100 / 100) * 10000; // = 10000
+    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: 100 });
+    // Every slot that can be in the window should have a c_rebalance_t constraint
+    expect(lp).toContain('c_rebalance_0:');
+    expect(lp).toContain(`${targetSoc_Wh}`);
+  });
+
+  it('does NOT include rebalancing constraints when D > T', () => {
+    // D = 20 > T = 8 → clamp to 0
+    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: 20, rebalanceTargetSoc_percent: 100 });
+    expect(lp).not.toContain('Binaries');
+    expect(lp).not.toContain('c_balance_start');
+  });
+});

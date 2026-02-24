@@ -8,7 +8,16 @@
 
 import type { PlanRow, SolverConfig, DessDiagnostics, PlanSummary } from './types.ts';
 
-export function buildPlanSummary(rows: PlanRow[], cfg: Pick<SolverConfig, 'stepSize_m'>, dessDiagnostics: Partial<DessDiagnostics> = {}): PlanSummary {
+export function buildPlanSummary(
+  rows: PlanRow[],
+  cfg: Pick<SolverConfig, 'stepSize_m'>,
+  dessDiagnostics: Partial<DessDiagnostics> = {},
+  rebalance?: { enabled: boolean; startMs: number | null; remainingSlots: number },
+): PlanSummary {
+  const rebalanceStatus = rebalance?.enabled
+    ? (rebalance.startMs != null ? 'active' : 'scheduled')
+    : 'disabled';
+
   if (!Array.isArray(rows) || rows.length === 0) {
     return {
       loadTotal_kWh: 0,
@@ -28,6 +37,7 @@ export function buildPlanSummary(rows: PlanRow[], cfg: Pick<SolverConfig, 'stepS
         dessDiagnostics.batteryExportTippingPoint_cents_per_kWh ?? null,
       pvExportTippingPoint_cents_per_kWh:
         dessDiagnostics.pvExportTippingPoint_cents_per_kWh ?? null,
+      rebalanceStatus,
     };
   }
 
@@ -99,5 +109,6 @@ export function buildPlanSummary(rows: PlanRow[], cfg: Pick<SolverConfig, 'stepS
       Number.isFinite(dessDiagnostics.pvExportTippingPoint_cents_per_kWh)
         ? dessDiagnostics.pvExportTippingPoint_cents_per_kWh!
         : null,
+    rebalanceStatus,
   };
 }

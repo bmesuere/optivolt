@@ -38,6 +38,8 @@ export interface Settings {
   terminalSocCustomPrice_cents_per_kWh: number;
   dataSources: DataSources;
   dessAlgorithm: 'v1' | 'v2';
+  rebalanceEnabled: boolean;
+  rebalanceHoldHours: number;
 }
 
 // ----------------------------- Persisted data ---------------------------
@@ -47,12 +49,17 @@ export interface SocData {
   value: number;
 }
 
+export interface RebalanceState {
+  startMs: number | null;
+}
+
 export interface Data {
   load: TimeSeries;
   pv: TimeSeries;
   importPrice: TimeSeries;
   exportPrice: TimeSeries;
   soc: SocData;
+  rebalanceState?: RebalanceState;
 }
 
 // ----------------------------- Plan rows with DESS ----------------------

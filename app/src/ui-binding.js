@@ -11,6 +11,8 @@ export function getElements() {
     sourcePv: $("#source-pv"),
     sourceSoc: $("#source-soc"),
     dessAlgorithm: $("#dess-algorithm"),
+    rebalanceEnabled: $("#rebalance-enabled"),
+    rebalanceHoldHours: $("#rebalance-hold-hours"),
 
     // numeric inputs
     step: $("#step"),
@@ -52,6 +54,8 @@ export function getElements() {
     gridBatteryTp: $("#tipping-point-cent"),
     gridChargeTp: $("#grid-charge-point-cent"),
     batteryExportTp: $("#export-point-cent"),
+    rebalanceStatus: $("#rebalance-status"),
+    rebalanceStatusRow: $("#rebalance-status-row"),
 
     // VRM section
     vrmFetchSettings: $("#vrm-fetch-settings"),

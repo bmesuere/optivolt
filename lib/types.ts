@@ -38,6 +38,11 @@ export interface SolverConfig {
 
   // Algorithm selection
   dessAlgorithm: 'v1' | 'v2';
+
+  // Rebalancing (optional — only present when rebalanceEnabled is true)
+  rebalanceHoldSlots?: number;
+  rebalanceRemainingSlots?: number;
+  rebalanceTargetSoc_percent?: number;
 }
 
 /**
@@ -120,4 +125,5 @@ export interface PlanSummary {
   gridChargeTippingPoint_cents_per_kWh: number | null;
   batteryExportTippingPoint_cents_per_kWh: number | null;
   pvExportTippingPoint_cents_per_kWh: number | null;
+  rebalanceStatus: 'disabled' | 'scheduled' | 'active';
 }

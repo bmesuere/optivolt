@@ -12,7 +12,7 @@ const NUMERIC_FIELDS: (keyof Settings)[] = [
   'maxChargePower_W', 'maxDischargePower_W',
   'maxGridImport_W', 'maxGridExport_W', 'chargeEfficiency_percent',
   'dischargeEfficiency_percent', 'batteryCost_cent_per_kWh', 'idleDrain_W',
-  'terminalSocCustomPrice_cents_per_kWh',
+  'terminalSocCustomPrice_cents_per_kWh', 'rebalanceHoldHours',
 ];
 
 function validateSettings(s: Settings): Settings {
