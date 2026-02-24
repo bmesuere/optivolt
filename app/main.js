@@ -184,7 +184,7 @@ async function onRun() {
       dessDiff: result.dessDiff,
     });
 
-    renderAllCharts(rows, cfgForViz);
+    renderAllCharts(rows, cfgForViz, result.rebalanceWindow ?? null);
   } catch (err) {
     console.error(err);
     if (els.status) {
@@ -196,8 +196,8 @@ async function onRun() {
   }
 }
 
-function renderAllCharts(rows, cfg) {
-  drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m);
+function renderAllCharts(rows, cfg, rebalanceWindow = null) {
+  drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, rebalanceWindow);
   drawSocChart(els.soc, rows, cfg.stepSize_m);
   drawPricesStepLines(els.prices, rows, cfg.stepSize_m);
   drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m);

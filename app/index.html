@@ -344,6 +344,15 @@
             </label>
           </div>
 
+          <!-- Rebalancing toggle -->
+          <div class="mt-4">
+            <label class="toggle">
+              <input id="rebalance-enabled" type="checkbox">
+              <span class="toggle-knob"></span>
+              <span class="text-sm text-slate-600 dark:text-slate-400">Schedule battery rebalancing</span>
+            </label>
+          </div>
+
           <!-- Run options as toggles -->
           <div class="mt-4 pt-4 border-t border-slate-100 dark:border-white/5 space-y-3">
             <label class="toggle">
@@ -371,6 +380,10 @@
             <div class="summary-row">
               <span class="stat-label">Status</span>
               <div id="status" class="text-sm font-medium text-ink dark:text-slate-100">Initializing…</div>
+            </div>
+            <div id="rebalance-status-row" class="summary-row border-t border-slate-100 dark:border-white/5 hidden">
+              <span class="stat-label">Rebalancing</span>
+              <span id="rebalance-status" class="text-sm font-medium"></span>
             </div>
             <div class="grid grid-cols-2 border-t border-slate-100 dark:border-white/5">
               <div class="px-3 py-2.5 border-b border-r border-slate-100 dark:border-white/5">
@@ -407,10 +420,6 @@
               </div>
               <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80"
                 id="load-split-bar"></div>
-            </div>
-            <div id="rebalance-status-row" class="summary-row border-t border-slate-100 dark:border-white/5 hidden">
-              <span class="stat-label">Rebalancing</span>
-              <span id="rebalance-status" class="text-sm font-medium"></span>
             </div>
             <div class="summary-block border-t border-slate-100 dark:border-white/5">
               <div class="flex items-baseline justify-between mb-2">
@@ -503,6 +512,9 @@
             <label class="text-sm">Idle drain (W)
               <input id="idle-drain" type="number" min="0" step="1" class="form-input" />
             </label>
+            <label class="text-sm">Rebalance hold (h)
+              <input id="rebalance-hold-hours" type="number" min="0.25" step="0.25" class="form-input" />
+            </label>
 
             <!-- Data Sources Subsection -->
             <div class="md:col-span-2 mt-4 border-t border-slate-100 pt-4 dark:border-white/10">
@@ -544,16 +556,6 @@
                     <option value="v1" selected>v1 (flow analysis)</option>
                     <option value="v2">v2 (tipping points)</option>
                   </select>
-                </label>
-                <label class="text-sm">Hold duration (hours)
-                  <input id="rebalance-hold-hours" type="number" min="0.25" step="0.25" class="form-input" />
-                </label>
-              </div>
-              <div class="mt-3">
-                <label class="toggle">
-                  <input id="rebalance-enabled" type="checkbox">
-                  <span class="toggle-knob"></span>
-                  <span class="text-sm text-slate-600 dark:text-slate-400">Schedule battery rebalancing</span>
                 </label>
               </div>
             </div>

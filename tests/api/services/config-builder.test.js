@@ -77,4 +77,19 @@ describe('buildSolverConfigFromSettings — rebalancing', () => {
     const cfg = buildSolverConfigFromSettings(settings, makeData({ startMs }), NOW_MS);
     expect(cfg.rebalanceRemainingSlots).toBe(0);
   });
+
+  it('uses Math.ceil so the hold is never shorter than requested (fractional hours)', () => {
+    // 1.1h / 0.25h = 4.4 → ceil → 5 slots (not round-down 4)
+    const settings = { ...mockSettings, rebalanceEnabled: true, rebalanceHoldHours: 1.1 };
+    const cfg = buildSolverConfigFromSettings(settings, makeData({ startMs: null }), NOW_MS);
+    expect(cfg.rebalanceHoldSlots).toBe(5); // ceil(4.4) = 5
+    expect(cfg.rebalanceRemainingSlots).toBe(5);
+  });
+
+  it('clamps holdSlots to at least 1 when rebalanceHoldHours is 0', () => {
+    const settings = { ...mockSettings, rebalanceEnabled: true, rebalanceHoldHours: 0 };
+    const cfg = buildSolverConfigFromSettings(settings, makeData({ startMs: null }), NOW_MS);
+    expect(cfg.rebalanceHoldSlots).toBeGreaterThanOrEqual(1);
+    expect(cfg.rebalanceRemainingSlots).toBeGreaterThanOrEqual(1);
+  });
 });

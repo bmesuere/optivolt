@@ -68,7 +68,9 @@ export function buildSolverConfigFromSettings(
   };
 
   if (settings.rebalanceEnabled) {
-    const holdSlots = Math.round(settings.rebalanceHoldHours / (settings.stepSize_m / 60));
+    // Math.ceil ensures the hold is never shorter than requested; Math.max(1, …) prevents 0-slot holds
+    // from a bad/zero rebalanceHoldHours setting (which would immediately complete the cycle).
+    const holdSlots = Math.max(1, Math.ceil(settings.rebalanceHoldHours / (settings.stepSize_m / 60)));
     const startMs_ = data.rebalanceState?.startMs ?? null;
     const slotsElapsed = startMs_ != null
       ? Math.floor((nowMs - startMs_) / (settings.stepSize_m * 60_000))

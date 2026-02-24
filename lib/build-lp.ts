@@ -61,12 +61,14 @@ export function buildLP({
   const maxSoc_Wh = (maxSoc_percent / 100) * batteryCapacity_Wh;
   const initialSoc_Wh = (initialSoc_percent / 100) * batteryCapacity_Wh;
 
-  // Rebalancing MILP: number of slots remaining in the hold window
-  const D = (rebalanceRemainingSlots ?? 0) > 0 && (rebalanceRemainingSlots ?? 0) <= T
-    ? (rebalanceRemainingSlots as number)
-    : 0;
+  // Rebalancing MILP: number of slots remaining in the hold window.
+  // Truncate to integer to guard against fractional values from future callers.
+  // Clamp to [0, T] — D > T is unsatisfiable; D <= 0 means no rebalancing this solve.
+  const D = Math.min(T, Math.max(0, Math.trunc(rebalanceRemainingSlots ?? 0)));
+  // Clamp target SoC to maxSoc_percent so the model is never forced above its own upper bound.
+  const safeTargetSoc_percent = Math.min(rebalanceTargetSoc_percent ?? maxSoc_percent, maxSoc_percent);
   const rebalanceTargetSoc_Wh = D > 0
-    ? ((rebalanceTargetSoc_percent ?? maxSoc_percent) / 100) * batteryCapacity_Wh
+    ? (safeTargetSoc_percent / 100) * batteryCapacity_Wh
     : 0;
   const startBalance = (k: number) => `start_balance_${k}`;
 

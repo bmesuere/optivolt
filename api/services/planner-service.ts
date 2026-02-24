@@ -35,6 +35,11 @@ async function getHighsInstance(): Promise<HighsInstance> {
 
 type DessDiff = ReturnType<typeof computeDessDiff>;
 
+export interface RebalanceWindow {
+  startIdx: number;
+  endIdx: number;
+}
+
 export interface ComputePlanResult {
   cfg: SolverConfig;
   data: Data;
@@ -43,6 +48,27 @@ export interface ComputePlanResult {
   rows: PlanRowWithDess[];
   summary: PlanSummary;
   dessDiff?: DessDiff;
+  rebalanceWindow?: RebalanceWindow;
+}
+
+/**
+ * Find which contiguous slot range the MILP solver selected for rebalancing.
+ * Scans solution columns for the `start_balance_k` binary that equals 1.
+ */
+function extractRebalanceWindow(
+  columns: Record<string, { Primal?: number }>,
+  remainingSlots: number,
+): RebalanceWindow | undefined {
+  if (remainingSlots <= 0) return undefined;
+  for (const [name, col] of Object.entries(columns)) {
+    if (name.startsWith('start_balance_') && Math.round(col.Primal ?? 0) === 1) {
+      const m = /_(\d+)$/.exec(name);
+      if (!m) continue;
+      const k = Number(m[1]);
+      return { startIdx: k, endIdx: k + remainingSlots - 1 };
+    }
+  }
+  return undefined;
 }
 
 export async function computePlan({ updateData = false } = {}): Promise<ComputePlanResult> {
@@ -102,7 +128,12 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const summary = buildPlanSummary(rowsWithDess, cfg, diagnostics, rebalanceCtx);
 
-  return { cfg, data, timing, result, rows: rowsWithDess, summary, dessDiff };
+  const rebalanceWindow = extractRebalanceWindow(
+    result.Columns ?? {},
+    cfg.rebalanceRemainingSlots ?? 0,
+  );
+
+  return { cfg, data, timing, result, rows: rowsWithDess, summary, dessDiff, rebalanceWindow };
 }
 
 export async function writePlanToVictron(rows: PlanRowWithDess[]): Promise<void> {

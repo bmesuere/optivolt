@@ -122,10 +122,33 @@ describe('buildLP — MILP rebalancing', () => {
     expect(lp).toContain(`${targetSoc_Wh}`);
   });
 
-  it('does NOT include rebalancing constraints when D > T', () => {
-    // D = 20 > T = 8 → clamp to 0
+  it('clamps D to T when rebalanceRemainingSlots > T, constraining the entire horizon', () => {
+    // D = 20 > T = 8 → clamp to T=8; only one start position (k=0), whole horizon constrained
     const lp = buildLP({ ...mockData, rebalanceRemainingSlots: 20, rebalanceTargetSoc_percent: 100 });
-    expect(lp).not.toContain('Binaries');
-    expect(lp).not.toContain('c_balance_start');
+    expect(lp).toContain('Binaries');
+    expect(lp).toContain('start_balance_0');
+    // No start_balance_1 — only k=0 is valid when D=T
+    expect(lp).not.toContain('start_balance_1');
+    expect(lp).toContain('c_balance_start: start_balance_0 = 1');
+  });
+
+  it('truncates fractional rebalanceRemainingSlots to integer', () => {
+    // 2.9 should be treated as 2, not 3
+    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: 2.9, rebalanceTargetSoc_percent: 100 });
+    // With D=2, T=8: start positions 0..6 (T-D=6)
+    expect(lp).toContain('start_balance_6');
+    expect(lp).not.toContain('start_balance_7'); // would only exist if D were treated as 1
+  });
+
+  it('clamps rebalanceTargetSoc_percent to maxSoc_percent to prevent infeasible models', () => {
+    // If target exceeds max, model would be infeasible (soc_t >= targetSoc > maxSoc_Wh upper bound).
+    // Clamping ensures the forced target == max bound.
+    const targetAboveMax = 120; // > maxSoc_percent=100
+    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: targetAboveMax });
+    // The actual Wh coefficient in constraints must be based on maxSoc_percent (100%), not 120%
+    const expectedTargetSoc_Wh = (100 / 100) * 10000; // = 10000
+    expect(lp).toContain(`${expectedTargetSoc_Wh} start_balance_`);
+    // Should NOT contain the unclamped 12000 (120% of 10000)
+    expect(lp).not.toContain('12000 start_balance_');
   });
 });
