@@ -1,4 +1,5 @@
-import highsFactoryRaw from 'highs';
+// @ts-ignore — no .d.ts alongside the vendor build artifact; type is asserted via HighsInstance below
+import highsFactory from '../../vendor/highs-build/highs.js';
 import { mapRowsToDess, mapRowsToDessV2, computeDessDiff } from '../../lib/dess-mapper.ts';
 import { buildLP } from '../../lib/build-lp.ts';
 import { parseSolution, type HighsSolution } from '../../lib/parse-solution.ts';
@@ -11,16 +12,11 @@ import { refreshSeriesFromVrmAndPersist } from './vrm-refresh.ts';
 import { setDynamicEssSchedule } from './mqtt-service.ts';
 import type { PlanRowWithDess, Data } from '../types.ts';
 
-// The highs package has malformed .d.ts declarations, so we define the minimal
-// interface we need and cast once at module level.
-interface HighsInstance { solve(lp: string): unknown; }
-type HighsLoader = (opts?: Record<string, unknown>) => Promise<HighsInstance>;
-const highsFactory = highsFactoryRaw as unknown as HighsLoader;
-
 // How many slots we push into Dynamic ESS
 const DESS_SLOTS = 4;
 
 // Lazy, shared HiGHS instance
+type HighsInstance = Awaited<ReturnType<typeof highsFactory>>;
 let highsPromise: Promise<HighsInstance> | undefined;
 
 async function getHighsInstance(): Promise<HighsInstance> {
@@ -96,7 +92,13 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const lpText = buildLP(cfg);
   const highs = await getHighsInstance();
-  const result = highs.solve(lpText) as HighsSolution;
+  let result: ReturnType<typeof highs.solve>;
+  try {
+    result = highs.solve(lpText);
+  } catch (err) {
+    highsPromise = undefined; // force re-initialisation on next call
+    throw err;
+  }
 
   const rows = parseSolution(result, cfg, timing);
 

@@ -115,11 +115,11 @@ function makeRebalancingPlugin(startIdx, endIdx) {
       ctx.fillStyle = 'rgba(56, 189, 248, 0.10)'; // sky-400 tint
       ctx.fillRect(x0, chartArea.top, x1 - x0, chartArea.height);
 
-      // Label at the top of the shaded region
+      // Label at the bottom of the shaded region
       ctx.fillStyle = 'rgba(14, 165, 233, 0.70)'; // sky-500
       ctx.font = '500 11px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Rebalancing', (x0 + x1) / 2, chartArea.top + 13);
+      ctx.fillText('Rebalancing', (x0 + x1) / 2, chartArea.bottom - 8);
       ctx.restore();
     }
   };
