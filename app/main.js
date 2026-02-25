@@ -182,6 +182,7 @@ async function onRun() {
       targets: { table: els.table, tableUnit: els.tableUnit },
       showKwh: !!els.tableKwh?.checked,
       dessDiff: result.dessDiff,
+      rebalanceWindow: result.rebalanceWindow ?? null,
     });
 
     renderAllCharts(rows, cfgForViz, result.rebalanceWindow ?? null);

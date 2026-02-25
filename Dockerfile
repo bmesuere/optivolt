@@ -19,6 +19,7 @@ COPY package.json package-lock.json* ./
 COPY app ./app
 COPY api ./api
 COPY lib ./lib
+COPY vendor/highs-build ./vendor/highs-build
 
 # Install deps, build/mirror shared code into /app, then prune dev deps
 RUN npm ci \

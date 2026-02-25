@@ -111,8 +111,7 @@ export function setupSystemCardCollapsible(els) {
 
   if (!body || !toggle) return;
 
-  const lgQuery = window.matchMedia("(min-width: 1024px)");
-  let isExpanded = lgQuery.matches;
+  let isExpanded = false;
 
   const applyState = () => {
     body.classList.toggle("hidden", !isExpanded);
@@ -122,18 +121,10 @@ export function setupSystemCardCollapsible(els) {
     header?.classList.toggle("mb-0", !isExpanded);
   };
 
-  const syncToViewport = () => {
-    isExpanded = lgQuery.matches;
-    applyState();
-  };
-
-  syncToViewport();
+  applyState();
 
   toggle.addEventListener("click", () => {
-    if (lgQuery.matches) return;
     isExpanded = !isExpanded;
     applyState();
   });
-
-  lgQuery.addEventListener("change", syncToViewport);
 }
