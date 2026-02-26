@@ -14,7 +14,6 @@ import { computePlan } from '../../../api/services/planner-service.ts';
 
 const NOW_STRING = '2024-01-01T00:00:00Z';
 const NOW_MS = new Date(NOW_STRING).getTime();
-const STEP_MS = 15 * 60_000;
 
 // Minimal settings — use 60-min slots for a smaller LP
 const baseSettings = {
