@@ -82,6 +82,13 @@ export interface PredictionValidationWindow {
   end: string;
 }
 
+export interface PvPredictionConfig {
+  latitude: number;
+  longitude: number;
+  historyDays: number;
+  pvSensor: string;
+}
+
 export interface PredictionConfig {
   haUrl: string;
   haToken: string;
@@ -90,4 +97,5 @@ export interface PredictionConfig {
   activeConfig?: PredictionActiveConfig;
   validationWindow?: PredictionValidationWindow;
   includeRecent?: boolean;
+  pvConfig?: PvPredictionConfig;
 }

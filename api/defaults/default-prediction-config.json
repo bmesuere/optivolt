@@ -32,5 +32,11 @@
     "lookbackWeeks": 4,
     "dayFilter": "weekday-weekend",
     "aggregation": "mean"
+  },
+  "pvConfig": {
+    "latitude": 51.05,
+    "longitude": 3.71,
+    "historyDays": 14,
+    "pvSensor": "Solar Generation"
   }
 }

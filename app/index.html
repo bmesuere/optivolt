@@ -625,10 +625,10 @@
     <!-- Sidebar -->
     <aside class="lg:col-span-1 min-w-0 space-y-6">
 
-      <!-- Settings (was Prediction Control) -->
+      <!-- Load Forecast Settings -->
       <section class="card">
         <div class="mb-4">
-          <h2 class="sidebar-label">Settings</h2>
+          <h2 class="sidebar-label">Load Forecast</h2>
         </div>
         <div class="space-y-3">
           <label class="block text-sm">
@@ -669,7 +669,7 @@
           <div class="mt-4">
             <button id="pred-recompute" type="button"
               class="w-full rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-sky-400/50 transition-all">
-              Recompute
+              Recompute Load
             </button>
           </div>
 
@@ -699,6 +699,66 @@
                 <div class="stat-label mb-0.5">Avg Error</div>
                 <div class="stat-value"><span id="summary-error">--</span><span
                     class="text-[10px] opacity-50 ml-1">W</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PV Forecast Settings -->
+      <section class="card">
+        <div class="mb-4">
+          <h2 class="sidebar-label">PV Forecast</h2>
+        </div>
+        <div class="space-y-3">
+          <label class="block text-sm">
+            <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">PV Sensor</span>
+            <select id="pred-pv-sensor" class="form-select" data-predictions-only="true">
+              <option value="" disabled selected>Select a sensor…</option>
+            </select>
+          </label>
+
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block text-sm">
+              <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Latitude</span>
+              <input id="pred-pv-lat" type="number" step="0.01" class="form-input" data-predictions-only="true" placeholder="51.05" />
+            </label>
+            <label class="block text-sm">
+              <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Longitude</span>
+              <input id="pred-pv-lon" type="number" step="0.01" class="form-input" data-predictions-only="true" placeholder="3.71" />
+            </label>
+          </div>
+
+          <label class="block text-sm">
+            <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">History (days)</span>
+            <input id="pred-pv-history" type="number" min="7" max="60" value="14" class="form-input" data-predictions-only="true" />
+          </label>
+
+          <div class="mt-4">
+            <button id="pred-pv-recompute" type="button"
+              class="w-full rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-sky-400/50 transition-all">
+              Recompute PV
+            </button>
+          </div>
+
+          <!-- PV Summary -->
+          <div class="mt-4 summary-panel">
+            <div class="summary-row">
+              <span class="stat-label">Status</span>
+              <span id="pv-summary-status" class="text-sm font-medium text-ink dark:text-slate-100">--</span>
+            </div>
+            <div class="grid grid-cols-3 border-t border-slate-100 dark:border-white/5">
+              <div class="px-3 py-2.5 border-r border-slate-100 dark:border-white/5">
+                <div class="stat-label mb-0.5">Total PV</div>
+                <div class="stat-value"><span id="pv-summary-total">--</span><span class="text-[10px] opacity-50 ml-1">kWh</span></div>
+              </div>
+              <div class="px-3 py-2.5 border-r border-slate-100 dark:border-white/5">
+                <div class="stat-label mb-0.5">Peak</div>
+                <div class="stat-value"><span id="pv-summary-peak">--</span><span class="text-[10px] opacity-50 ml-1">W</span></div>
+              </div>
+              <div class="px-3 py-2.5">
+                <div class="stat-label mb-0.5">Avg Error</div>
+                <div class="stat-value"><span id="pv-summary-error">--</span><span class="text-[10px] opacity-50 ml-1">Wh</span></div>
               </div>
             </div>
           </div>
@@ -781,9 +841,25 @@
 
       <!-- History Comparison Chart -->
       <section class="card">
-        <h2 class="mb-3 sidebar-label">Historical Accuracy</h2>
+        <h2 class="mb-3 sidebar-label">Load Prediction Accuracy</h2>
         <div class="h-80 w-full">
           <canvas id="pred-history-chart" class="h-full w-full"></canvas>
+        </div>
+      </section>
+
+      <!-- PV Forecast Chart -->
+      <section class="card">
+        <h2 class="mb-3 sidebar-label">PV Forecast</h2>
+        <div class="h-80 w-full">
+          <canvas id="pv-forecast-chart" class="h-full w-full"></canvas>
+        </div>
+      </section>
+
+      <!-- PV History Chart -->
+      <section class="card">
+        <h2 class="mb-3 sidebar-label">PV Prediction Accuracy</h2>
+        <div class="h-80 w-full">
+          <canvas id="pv-history-chart" class="h-full w-full"></canvas>
         </div>
       </section>
 

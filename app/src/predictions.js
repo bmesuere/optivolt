@@ -9,10 +9,16 @@ import {
   fetchPredictionConfig,
   savePredictionConfig,
   runValidation,
-  fetchForecast,
+  runPvForecast,
+  runCombinedForecast,
 } from './api/api.js';
 import { debounce } from './utils.js';
 import { buildTimeAxisFromTimestamps, getBaseOptions, renderChart, SOLUTION_COLORS } from './charts.js';
+
+const toRGBA = (rgb, alpha = 1) => {
+  const m = /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/.exec(rgb);
+  return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${alpha})` : rgb;
+};
 
 let validationResults = null;
 let _activeSensor = null;
@@ -58,23 +64,37 @@ function applyConfigToForm(config) {
   setVal('pred-sensors', config.sensors ? JSON.stringify(config.sensors, null, 2) : '');
   setVal('pred-derived', config.derived ? JSON.stringify(config.derived, null, 2) : '');
 
-  // Populate sensor dropdown
+  // Populate sensor dropdown (load)
   const sensorSelect = document.getElementById('pred-active-sensor');
+  const pvSensorSelect = document.getElementById('pred-pv-sensor');
+  const allSensors = [
+    ...(config.sensors || []),
+    ...(config.derived || []),
+  ];
+
   if (sensorSelect) {
     sensorSelect.innerHTML = '<option value="" disabled selected>Select a sensor…</option>';
-
-    const addOption = (s) => {
+    for (const s of allSensors) {
       const opt = document.createElement('option');
       opt.textContent = s.name || s.id;
       opt.value = opt.textContent;
       sensorSelect.appendChild(opt);
-    };
+    }
+  }
 
-    if (config.sensors) config.sensors.forEach(addOption);
-    if (config.derived) config.derived.forEach(addOption);
+  // Populate PV sensor dropdown
+  if (pvSensorSelect) {
+    pvSensorSelect.innerHTML = '<option value="" disabled selected>Select a sensor…</option>';
+    for (const s of allSensors) {
+      const opt = document.createElement('option');
+      opt.textContent = s.name || s.id;
+      opt.value = opt.textContent;
+      pvSensorSelect.appendChild(opt);
+    }
   }
 
   renderActiveConfig(config.activeConfig ?? null);
+  renderPvConfig(config.pvConfig ?? null);
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +118,11 @@ function wireForm() {
   const recomputeBtn = document.getElementById('pred-recompute');
   if (recomputeBtn) {
     recomputeBtn.addEventListener('click', onRecompute);
+  }
+
+  const pvRecomputeBtn = document.getElementById('pred-pv-recompute');
+  if (pvRecomputeBtn) {
+    pvRecomputeBtn.addEventListener('click', onPvRecompute);
   }
 
   const settingsToggle = document.getElementById('pred-settings-toggle');
@@ -138,17 +163,31 @@ function readFormValues() {
     aggregation: getVal('pred-active-agg') || 'mean',
   } : null;
 
+  // PV config
+  const pvSensor = getVal('pred-pv-sensor');
+  const pvLat = getVal('pred-pv-lat');
+  const pvLon = getVal('pred-pv-lon');
+  const pvHistory = getVal('pred-pv-history');
+
+  const pvConfig = {
+    pvSensor: pvSensor || 'Solar Generation',
+    latitude: pvLat ? parseFloat(pvLat) : 0,
+    longitude: pvLon ? parseFloat(pvLon) : 0,
+    historyDays: pvHistory ? parseInt(pvHistory, 10) : 14,
+  };
+
   return {
     haUrl: getVal('pred-ha-url'),
     haToken: getVal('pred-ha-token'),
     ...(sensors !== null ? { sensors } : {}),
     ...(derived !== null ? { derived } : {}),
     ...(activeConfig ? { activeConfig } : {}),
+    pvConfig,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Recompute & Forecast
+// Recompute & Forecast (Load)
 // ---------------------------------------------------------------------------
 
 async function onRecompute() {
@@ -161,31 +200,42 @@ async function onRecompute() {
 
     // 2. Fetch Forecast
     updateSummaryStatus('Running forecast...');
-    const result = await fetchForecast();
+    const result = await runCombinedForecast();
 
-    // 3. Render Chart
-    renderForecastChart(result); // { forecast: [], recent: [] }
-    renderHistoryChart(result.recent);
+    // 3. Render Load charts
+    const loadResult = result.load;
+    if (loadResult) {
+      renderForecastChart(loadResult);
+      renderHistoryChart(loadResult.recent);
 
+      // 4. Update Summary
+      const values = loadResult.forecast?.values || [];
+      const peak = values.length ? Math.max(...values) : 0;
+      const min = values.length ? Math.min(...values) : 0;
+      const totalWh = values.reduce((a, b) => a + b, 0) * 0.25; // 15min slots
+      const totalKwh = totalWh / 1000;
 
-    // 4. Update Summary
-    const values = result.forecast.values || [];
-    const peak = values.length ? Math.max(...values) : 0;
-    const min = values.length ? Math.min(...values) : 0;
-    const totalWh = values.reduce((a, b) => a + b, 0) * 0.25; // 15min slots
-    const totalKwh = totalWh / 1000;
-
-    // Calculate Avg Error (MAE) from recent data
-    let avgErrorW = 0;
-    if (result.recent && result.recent.length > 0) {
-      const validEntries = result.recent.filter(r => r.actual != null && r.predicted != null);
-      if (validEntries.length > 0) {
-        const sumError = validEntries.reduce((acc, r) => acc + Math.abs(r.actual - r.predicted), 0);
-        avgErrorW = sumError / validEntries.length;
+      // Calculate Avg Error (MAE) from recent data
+      let avgErrorW = 0;
+      if (loadResult.recent && loadResult.recent.length > 0) {
+        const validEntries = loadResult.recent.filter(r => r.actual != null && r.predicted != null);
+        if (validEntries.length > 0) {
+          const sumError = validEntries.reduce((acc, r) => acc + Math.abs(r.actual - r.predicted), 0);
+          avgErrorW = sumError / validEntries.length;
+        }
       }
+
+      updateSummaryMetrics(totalKwh, peak, min, avgErrorW);
     }
 
-    updateSummaryMetrics(totalKwh, peak, min, avgErrorW);
+    // 5. Render PV charts
+    const pvResult = result.pv;
+    if (pvResult) {
+      renderPvForecastChart(pvResult);
+      renderPvHistoryChart(pvResult.recent);
+      updatePvSummary(pvResult);
+    }
+
     updateSummaryStatus('Predictions updated.', false);
   } catch (err) {
     console.error(err);
@@ -270,19 +320,15 @@ function renderHistoryChart(recentData) {
   const canvas = document.getElementById('pred-history-chart');
   if (!canvas) return;
 
-  // renderChart handles cleanup via canvas._chart
-
   if (!recentData || recentData.length === 0) return;
 
-  // recentData is array of { date, time, hour, actual, predicted }
-  // sort by time just in case
   const sorted = [...recentData].sort((a, b) => a.time - b.time);
 
   const timestamps = sorted.map(d => d.time);
   const axis = buildTimeAxisFromTimestamps(timestamps);
 
-  const actuals = sorted.map(d => d.actual / 1000); // W -> kW/kWh
-  const predicteds = sorted.map(d => d.predicted / 1000); // W -> kW/kWh
+  const actuals = sorted.map(d => d.actual / 1000);
+  const predicteds = sorted.map(d => d.predicted / 1000);
 
   renderChart(canvas, {
     type: 'line',
@@ -290,27 +336,182 @@ function renderHistoryChart(recentData) {
       labels: axis.labels,
       datasets: [
         {
-          label: 'Prediction',
-          data: predicteds,
-          borderColor: SOLUTION_COLORS.g2l, // Red/Consumption style
-          backgroundColor: SOLUTION_COLORS.g2l,
-          borderWidth: 1.5,
-          pointRadius: 0,
-          tension: 0.3
-        },
-        {
           label: 'Actual',
           data: actuals,
-          borderColor: SOLUTION_COLORS.g2b, // Purple/Grid-to-Battery style (unused in this context)
-          backgroundColor: SOLUTION_COLORS.g2b,
-          borderWidth: 1.5,
+          borderColor: 'transparent',
+          backgroundColor: toRGBA(SOLUTION_COLORS.b2l, 0.25),
+          borderWidth: 0,
           pointRadius: 0,
-          tension: 0.3
-        }
+          tension: 0.3,
+          fill: true,
+        },
+        {
+          label: 'Prediction',
+          data: predicteds,
+          borderColor: SOLUTION_COLORS.g2l,
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: false,
+        },
       ]
     },
     options: getBaseOptions({ ...axis, yTitle: 'kWh' }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// PV Forecast
+// ---------------------------------------------------------------------------
+
+async function onPvRecompute() {
+  updatePvStatus('Saving & Fetching...');
+
+  try {
+    const partial = readFormValues();
+    await savePredictionConfig(partial);
+
+    updatePvStatus('Running PV forecast...');
+    const result = await runPvForecast();
+
+    renderPvForecastChart(result);
+    renderPvHistoryChart(result.recent);
+    updatePvSummary(result);
+    updatePvStatus('PV forecast updated.', false);
+  } catch (err) {
+    console.error(err);
+    updatePvStatus('Error: ' + err.message, true);
+  }
+}
+
+function updatePvStatus(msg, isError = false) {
+  const el = document.getElementById('pv-summary-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = isError
+    ? 'text-sm font-medium text-red-600 dark:text-red-400'
+    : 'text-sm font-medium text-amber-600 dark:text-amber-400';
+}
+
+function updatePvSummary(result) {
+  if (!result || !result.forecast) return;
+
+  const values = result.forecast.values || [];
+  const peak = values.length ? Math.max(...values) : 0;
+  const totalWh = values.reduce((a, b) => a + b, 0) * 0.25;
+  const totalKwh = totalWh / 1000;
+  const avgError = result.metrics?.mae ?? 0;
+
+  const totalEl = document.getElementById('pv-summary-total');
+  const peakEl = document.getElementById('pv-summary-peak');
+  const errorEl = document.getElementById('pv-summary-error');
+
+  if (totalEl) totalEl.textContent = totalKwh.toFixed(1);
+  if (peakEl) peakEl.textContent = Math.round(peak).toLocaleString();
+  if (errorEl) errorEl.textContent = Math.round(avgError).toLocaleString();
+}
+
+const PV_COLOR = 'rgb(247, 171, 62)'; // amber — Solar to Grid
+
+function renderPvForecastChart(result) {
+  const canvas = document.getElementById('pv-forecast-chart');
+  if (!canvas || !result || !result.forecast) return;
+
+  const forecast = result.forecast;
+  const hourMap = new Map();
+  const values = forecast.values || [];
+  const startTs = new Date(forecast.start).getTime();
+  const stepMs = (forecast.step || 15) * 60 * 1000;
+
+  for (let i = 0; i < values.length; i++) {
+    const ts = startTs + i * stepMs;
+    const dt = new Date(ts);
+    dt.setMinutes(0, 0, 0, 0);
+    const hourKey = dt.getTime();
+
+    if (!hourMap.has(hourKey)) hourMap.set(hourKey, 0);
+    const wh = values[i] * (stepMs / 3600000);
+    hourMap.set(hourKey, hourMap.get(hourKey) + wh);
+  }
+
+  const sortedKeys = [...hourMap.keys()].sort((a, b) => a - b);
+  const hourlyKwh = sortedKeys.map(k => hourMap.get(k) / 1000);
+  const axis = buildTimeAxisFromTimestamps(sortedKeys);
+
+  const stripe = (c) => window.pattern?.draw('diagonal', c) || c;
+
+  renderChart(canvas, {
+    type: 'bar',
+    data: {
+      labels: axis.labels,
+      datasets: [{
+        label: 'PV Forecast',
+        data: hourlyKwh,
+        backgroundColor: stripe(PV_COLOR),
+        borderColor: PV_COLOR,
+        borderWidth: 1,
+      }]
+    },
+    options: getBaseOptions({ ...axis, yTitle: 'kWh' })
+  });
+}
+
+function renderPvHistoryChart(recentData) {
+  const canvas = document.getElementById('pv-history-chart');
+  if (!canvas) return;
+
+  if (!recentData || recentData.length === 0) return;
+
+  const sorted = [...recentData].sort((a, b) => a.time - b.time);
+
+  const timestamps = sorted.map(d => d.time);
+  const axis = buildTimeAxisFromTimestamps(timestamps);
+
+  const predicted = sorted.map(d => (d.prediction_Wh ?? 0) / 1000);
+  const actual = sorted.map(d => (d.actual_Wh ?? 0) / 1000);
+
+  renderChart(canvas, {
+    type: 'line',
+    data: {
+      labels: axis.labels,
+      datasets: [
+        {
+          label: 'Actual',
+          data: actual,
+          borderColor: 'transparent',
+          backgroundColor: toRGBA(SOLUTION_COLORS.pv2b, 0.25),
+          borderWidth: 0,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: true,
+        },
+        {
+          label: 'Predicted',
+          data: predicted,
+          borderColor: PV_COLOR,
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: false,
+        },
+      ],
+    },
+    options: getBaseOptions({ ...axis, yTitle: 'kWh' }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// PV Config display
+// ---------------------------------------------------------------------------
+
+function renderPvConfig(pvConfig) {
+  if (!pvConfig) return;
+  setVal('pred-pv-sensor', pvConfig.pvSensor ?? '');
+  setVal('pred-pv-lat', pvConfig.latitude ?? '');
+  setVal('pred-pv-lon', pvConfig.longitude ?? '');
+  setVal('pred-pv-history', pvConfig.historyDays ?? 14);
 }
 
 
