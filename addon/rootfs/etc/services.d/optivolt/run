@@ -25,4 +25,4 @@ if [ -z "${VRM_INSTALLATION_ID}" ] || [ -z "${VRM_TOKEN}" ]; then
 fi
 
 cd "$APP_DIR"
-exec node "$APP_DIR/api/index.js"
+exec node "$APP_DIR/api/index.ts"

@@ -162,9 +162,9 @@ async function onRun() {
         label = `Plan status: ${solverStatus}`;
         colorClass = "text-amber-600 dark:text-amber-400"; // Amber for warning
       } else if (writeToVictron) {
-        label = "Plan updated and sent to Victron.";
+        label = "Plan updated and sent to Victron";
       } else {
-        label = "Plan updated.";
+        label = "Plan updated";
       }
       els.status.textContent = label;
       els.status.className = `text-sm font-medium ${colorClass}`;
@@ -182,9 +182,10 @@ async function onRun() {
       targets: { table: els.table, tableUnit: els.tableUnit },
       showKwh: !!els.tableKwh?.checked,
       dessDiff: result.dessDiff,
+      rebalanceWindow: result.rebalanceWindow ?? null,
     });
 
-    renderAllCharts(rows, cfgForViz);
+    renderAllCharts(rows, cfgForViz, result.rebalanceWindow ?? null);
   } catch (err) {
     console.error(err);
     if (els.status) {
@@ -196,8 +197,8 @@ async function onRun() {
   }
 }
 
-function renderAllCharts(rows, cfg) {
-  drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m);
+function renderAllCharts(rows, cfg, rebalanceWindow = null) {
+  drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, rebalanceWindow);
   drawSocChart(els.soc, rows, cfg.stepSize_m);
   drawPricesStepLines(els.prices, rows, cfg.stepSize_m);
   drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m);

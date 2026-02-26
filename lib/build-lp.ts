@@ -30,6 +30,10 @@ export function buildLP({
 
   // variable parameters
   initialSoc_percent = 20,
+
+  // rebalancing (MILP)
+  rebalanceRemainingSlots,
+  rebalanceTargetSoc_percent,
 }: SolverConfig): string {
   const T = load_W.length;
   if (pv_W.length !== T || importPrice.length !== T || exportPrice.length !== T) {
@@ -56,6 +60,17 @@ export function buildLP({
   const minSoc_Wh = (minSoc_percent / 100) * batteryCapacity_Wh;
   const maxSoc_Wh = (maxSoc_percent / 100) * batteryCapacity_Wh;
   const initialSoc_Wh = (initialSoc_percent / 100) * batteryCapacity_Wh;
+
+  // Rebalancing MILP: number of slots remaining in the hold window.
+  // Truncate to integer to guard against fractional values from future callers.
+  // Clamp to [0, T] — D > T is unsatisfiable; D <= 0 means no rebalancing this solve.
+  const D = Math.min(T, Math.max(0, Math.trunc(rebalanceRemainingSlots ?? 0)));
+  // Clamp target SoC to maxSoc_percent so the model is never forced above its own upper bound.
+  const safeTargetSoc_percent = Math.min(rebalanceTargetSoc_percent ?? maxSoc_percent, maxSoc_percent);
+  const rebalanceTargetSoc_Wh = D > 0
+    ? (safeTargetSoc_percent / 100) * batteryCapacity_Wh
+    : 0;
+  const startBalance = (k: number) => `start_balance_${k}`;
 
   // Variable name helpers
   const gridToLoad = (t: number) => `grid_to_load_${t}`;
@@ -141,6 +156,28 @@ export function buildLP({
     // Soft min SOC constraint
     lines.push(` c_min_soc_${t}: ${socShortfall(t)} + ${soc(t)} >= ${minSoc_Wh}`);
   }
+
+  // MILP rebalancing: force a contiguous window of D slots to hold the battery at target SoC
+  if (D > 0) {
+    // Exactly-one-start constraint: exactly one window starting position is chosen
+    const startVars: string[] = [];
+    for (let k = 0; k <= T - D; k++) {
+      startVars.push(startBalance(k));
+    }
+    lines.push(` c_balance_start: ${startVars.join(' + ')} = 1`);
+
+    // Per-slot SoC forcing: soc_t >= rebalanceTargetSoc_Wh when slot t is in the chosen window
+    for (let t = 0; t < T; t++) {
+      const kLow = Math.max(0, t - D + 1);
+      const kHigh = Math.min(t, T - D);
+      if (kLow > kHigh) continue; // no valid start position covers this slot
+      const terms: string[] = [];
+      for (let k = kLow; k <= kHigh; k++) {
+        terms.push(` - ${toNum(rebalanceTargetSoc_Wh)} ${startBalance(k)}`);
+      }
+      lines.push(` c_rebalance_${t}: ${soc(t)}${terms.join('')} >= 0`);
+    }
+  }
   lines.push("");
 
   // ===============
@@ -167,6 +204,14 @@ export function buildLP({
     lines.push(` ${socShortfall(t)} >= 0`);
   }
   lines.push("");
+
+  if (D > 0) {
+    lines.push("Binaries");
+    for (let k = 0; k <= T - D; k++) {
+      lines.push(` start_balance_${k}`);
+    }
+    lines.push("");
+  }
 
   lines.push("End");
 

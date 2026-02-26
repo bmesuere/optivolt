@@ -11,6 +11,8 @@ export function getElements() {
     sourcePv: $("#source-pv"),
     sourceSoc: $("#source-soc"),
     dessAlgorithm: $("#dess-algorithm"),
+    rebalanceEnabled: $("#rebalance-enabled"),
+    rebalanceHoldHours: $("#rebalance-hold-hours"),
 
     // numeric inputs
     step: $("#step"),
@@ -52,6 +54,8 @@ export function getElements() {
     gridBatteryTp: $("#tipping-point-cent"),
     gridChargeTp: $("#grid-charge-point-cent"),
     batteryExportTp: $("#export-point-cent"),
+    rebalanceStatus: $("#rebalance-status"),
+    rebalanceStatusRow: $("#rebalance-status-row"),
 
     // VRM section
     vrmFetchSettings: $("#vrm-fetch-settings"),
@@ -107,8 +111,7 @@ export function setupSystemCardCollapsible(els) {
 
   if (!body || !toggle) return;
 
-  const lgQuery = window.matchMedia("(min-width: 1024px)");
-  let isExpanded = lgQuery.matches;
+  let isExpanded = false;
 
   const applyState = () => {
     body.classList.toggle("hidden", !isExpanded);
@@ -118,18 +121,10 @@ export function setupSystemCardCollapsible(els) {
     header?.classList.toggle("mb-0", !isExpanded);
   };
 
-  const syncToViewport = () => {
-    isExpanded = lgQuery.matches;
-    applyState();
-  };
-
-  syncToViewport();
+  applyState();
 
   toggle.addEventListener("click", () => {
-    if (lgQuery.matches) return;
     isExpanded = !isExpanded;
     applyState();
   });
-
-  lgQuery.addEventListener("change", syncToViewport);
 }

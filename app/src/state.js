@@ -31,6 +31,8 @@ export function snapshotUI(els) {
 
     // ALGORITHM
     dessAlgorithm: els.dessAlgorithm?.value || "v1",
+    rebalanceEnabled: !!els.rebalanceEnabled?.checked,
+    rebalanceHoldHours: num(els.rebalanceHoldHours?.value),
 
     // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
@@ -70,6 +72,10 @@ export function hydrateUI(els, obj = {}) {
 
   // Algorithm
   if (els.dessAlgorithm && obj.dessAlgorithm) els.dessAlgorithm.value = obj.dessAlgorithm;
+  if (els.rebalanceEnabled && obj.rebalanceEnabled != null) {
+    els.rebalanceEnabled.checked = !!obj.rebalanceEnabled;
+  }
+  setIfDef(els.rebalanceHoldHours, obj.rebalanceHoldHours);
 
   // UI-only
   if (els.tableKwh && obj.tableShowKwh != null) {
@@ -121,6 +127,7 @@ export function updateSummaryUI(els, summary) {
     setText(els.gridBatteryTp, "—");
     setText(els.gridChargeTp, "—");
     setText(els.batteryExportTp, "—");
+    updateRebalanceStatus(els, null);
 
     // reset mini bars
     const loadSplitBar = document.getElementById("load-split-bar");
@@ -170,6 +177,8 @@ export function updateSummaryUI(els, summary) {
     ]
   );
 
+  updateRebalanceStatus(els, summary.rebalanceStatus);
+
   // --- Energy Flow Bar ---
   const g2b = Number(summary.gridToBattery_kWh) || 0;
   const g2l = Number(loadFromGrid_kWh) || 0;
@@ -189,6 +198,22 @@ export function updateSummaryUI(els, summary) {
       { value: b2g, color: SOLUTION_COLORS.b2g, title: `Battery to Grid: ${formatKWh(b2g)}` },   // Export
     ]
   );
+}
+
+function updateRebalanceStatus(els, status) {
+  if (!els.rebalanceStatus || !els.rebalanceStatusRow) return;
+  if (!status || status === 'disabled') {
+    els.rebalanceStatusRow.classList.add('hidden');
+    return;
+  }
+  els.rebalanceStatusRow.classList.remove('hidden');
+  if (status === 'active') {
+    els.rebalanceStatus.textContent = 'Active';
+    els.rebalanceStatus.className = 'text-sm font-medium text-emerald-600 dark:text-emerald-400';
+  } else {
+    els.rebalanceStatus.textContent = 'Scheduled';
+    els.rebalanceStatus.className = 'text-sm font-medium text-sky-600 dark:text-sky-400';
+  }
 }
 
 export function updateTerminalCustomUI(els) {

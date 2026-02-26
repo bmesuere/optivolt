@@ -13,7 +13,7 @@ import { SOLUTION_COLORS } from "./charts.js";
  * @param {HTMLElement}  [opts.targets.tableUnit] - element for the "Units: ..." label
  * @param {boolean}      opts.showKwh             - whether to display kWh instead of W
  */
-export function renderTable({ rows, cfg, targets, showKwh, dessDiff }) {
+export function renderTable({ rows, cfg, targets, showKwh, dessDiff, rebalanceWindow }) {
   const { table, tableUnit } = targets || {};
   if (!table || !Array.isArray(rows) || rows.length === 0) return;
 
@@ -140,7 +140,9 @@ export function renderTable({ rows, cfg, targets, showKwh, dessDiff }) {
       return `<td ${combinedStyle}${cellTitle} class="px-2 py-1 text-right font-mono tabular-nums ${isMidnightRow ? "font-semibold" : ""}">${cellText}</td>`;
     }).join("");
 
-    return `<tr class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 ">${tds}</tr>`;
+    const isRebalancing = rebalanceWindow != null && ri >= rebalanceWindow.startIdx && ri <= rebalanceWindow.endIdx;
+    const rowBg = isRebalancing ? "bg-sky-100 dark:bg-sky-900/50" : "";
+    return `<tr class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 ${rowBg}">${tds}</tr>`;
   }).join("")}
     </tbody>`;
 

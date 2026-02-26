@@ -91,6 +91,40 @@ export function buildTimeAxisFromTimestamps(timestampsMs) {
   };
 }
 
+// ---------------------- Rebalancing Shading Plugin ----------------------
+
+/**
+ * Returns an inline Chart.js plugin that shades a contiguous band of bars
+ * to visualise the rebalancing hold window.
+ */
+function makeRebalancingPlugin(startIdx, endIdx) {
+  return {
+    id: 'rebalancingShading',
+    beforeDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+      const xScale = scales.x;
+      const N = chart.data.labels?.length;
+      if (!N) return;
+      const barW = xScale.width / N;
+      const x0 = Math.max(chartArea.left, xScale.left + startIdx * barW);
+      const x1 = Math.min(chartArea.right, xScale.left + (endIdx + 1) * barW);
+      if (x1 <= x0) return;
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.20)'; // sky-400 tint
+      ctx.fillRect(x0, chartArea.top, x1 - x0, chartArea.height);
+
+      // Label at the bottom of the shaded region
+      ctx.fillStyle = 'rgba(14, 165, 233, 0.70)'; // sky-500
+      ctx.font = '500 11px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Rebalancing', (x0 + x1) / 2, chartArea.bottom - 8);
+      ctx.restore();
+    }
+  };
+}
+
 // ---------------------- Chart Configuration Helpers ----------------------
 
 /**
@@ -198,7 +232,7 @@ const dsBar = (label, data, color, stack) => ({
 // 1) Power flows bar chart (signed kWh, stacked)
 // -----------------------------------------------------------------------------
 
-export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15) {
+export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, rebalanceWindow = null) {
   const timestampsMs = rows.map(r => r.timestampMs);
   const axis = buildTimeAxisFromTimestamps(timestampsMs);
 
@@ -229,10 +263,15 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15) {
     )
   );
 
+  const plugins = rebalanceWindow
+    ? [makeRebalancingPlugin(rebalanceWindow.startIdx, rebalanceWindow.endIdx)]
+    : [];
+
   renderChart(canvas, {
     type: "bar",
     data: { labels: axis.labels, datasets },
-    options: getBaseOptions({ ...axis, yTitle: "kWh", stacked: true })
+    options: getBaseOptions({ ...axis, yTitle: "kWh", stacked: true }),
+    plugins,
   });
 }
 
@@ -256,7 +295,8 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15) {
         borderWidth: 2,
         tension: 0.2,
         pointRadius: 0,
-        hoverBorderColor: dim(SOLUTION_COLORS.soc)
+        hoverBorderColor: dim(SOLUTION_COLORS.soc),
+        clip: false
       }]
     },
     options: getBaseOptions({ ...axis, yTitle: "%" }, {

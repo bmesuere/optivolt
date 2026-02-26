@@ -19,5 +19,7 @@
     "pv": "vrm",
     "soc": "mqtt"
   },
-  "dessAlgorithm": "v1"
+  "dessAlgorithm": "v1",
+  "rebalanceEnabled": false,
+  "rebalanceHoldHours": 3
 }

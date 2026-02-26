@@ -43,7 +43,7 @@ export function buildSolverConfigFromSettings(
     });
   }
 
-  return {
+  const base: SolverConfig = {
     load_W:      extractWindow(data.load,        nowMs, endMs),
     pv_W:        extractWindow(data.pv,          nowMs, endMs),
     importPrice: extractWindow(data.importPrice, nowMs, endMs),
@@ -66,11 +66,29 @@ export function buildSolverConfigFromSettings(
     initialSoc_percent:                   data.soc.value,
     dessAlgorithm:                        settings.dessAlgorithm,
   };
+
+  if (settings.rebalanceEnabled) {
+    // Math.ceil ensures the hold is never shorter than requested; Math.max(1, …) prevents 0-slot holds
+    // from a bad/zero rebalanceHoldHours setting (which would immediately complete the cycle).
+    const holdSlots = Math.max(1, Math.ceil(settings.rebalanceHoldHours / (settings.stepSize_m / 60)));
+    const startMs_ = data.rebalanceState?.startMs ?? null;
+    const slotsElapsed = startMs_ != null
+      ? Math.floor((nowMs - startMs_) / (settings.stepSize_m * 60_000))
+      : 0;
+    const remainingSlots = startMs_ != null
+      ? Math.max(0, holdSlots - slotsElapsed)
+      : holdSlots;
+    base.rebalanceHoldSlots = holdSlots;
+    base.rebalanceRemainingSlots = remainingSlots;
+    base.rebalanceTargetSoc_percent = settings.maxSoc_percent;
+  }
+
+  return base;
 }
 
-export async function getSolverInputs(): Promise<{ cfg: SolverConfig; timing: { startMs: number; stepMin: number }; data: Data }> {
+export async function getSolverInputs(): Promise<{ cfg: SolverConfig; timing: { startMs: number; stepMin: number }; data: Data; settings: Settings }> {
   const [settings, data] = await Promise.all([loadSettings(), loadData()]);
   const startMs = getQuarterStart(new Date(), settings.stepSize_m);
   const cfg = buildSolverConfigFromSettings(settings, data, startMs);
-  return { cfg, timing: { startMs, stepMin: settings.stepSize_m }, data };
+  return { cfg, timing: { startMs, stepMin: settings.stepSize_m }, data, settings };
 }
