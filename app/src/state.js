@@ -209,7 +209,7 @@ function updateRebalanceStatus(els, status) {
   els.rebalanceStatusRow.classList.remove('hidden');
   if (status === 'active') {
     els.rebalanceStatus.textContent = 'Active';
-    els.rebalanceStatus.className = 'text-sm font-medium text-green-600 dark:text-green-400';
+    els.rebalanceStatus.className = 'text-sm font-medium text-emerald-600 dark:text-emerald-400';
   } else {
     els.rebalanceStatus.textContent = 'Scheduled';
     els.rebalanceStatus.className = 'text-sm font-medium text-sky-600 dark:text-sky-400';

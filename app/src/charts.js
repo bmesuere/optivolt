@@ -112,7 +112,7 @@ function makeRebalancingPlugin(startIdx, endIdx) {
       if (x1 <= x0) return;
 
       ctx.save();
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.10)'; // sky-400 tint
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.20)'; // sky-400 tint
       ctx.fillRect(x0, chartArea.top, x1 - x0, chartArea.height);
 
       // Label at the bottom of the shaded region
@@ -295,7 +295,8 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15) {
         borderWidth: 2,
         tension: 0.2,
         pointRadius: 0,
-        hoverBorderColor: dim(SOLUTION_COLORS.soc)
+        hoverBorderColor: dim(SOLUTION_COLORS.soc),
+        clip: false
       }]
     },
     options: getBaseOptions({ ...axis, yTitle: "%" }, {

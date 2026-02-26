@@ -136,7 +136,7 @@ export async function refreshSeriesFromVrmAndPersist(): Promise<void> {
     ? { timestamp: new Date().toISOString(), value: socPercent }
     : baseData.soc;
 
-  const nextData: Data = { load, pv, importPrice, exportPrice, soc };
+  const nextData: Data = { load, pv, importPrice, exportPrice, soc, rebalanceState: baseData.rebalanceState };
   await saveData(nextData);
 
   // Optionally keep stepSize_m in settings in sync

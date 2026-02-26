@@ -141,7 +141,7 @@ export function renderTable({ rows, cfg, targets, showKwh, dessDiff, rebalanceWi
     }).join("");
 
     const isRebalancing = rebalanceWindow != null && ri >= rebalanceWindow.startIdx && ri <= rebalanceWindow.endIdx;
-    const rowBg = isRebalancing ? "bg-sky-50/60 dark:bg-sky-900/20" : "";
+    const rowBg = isRebalancing ? "bg-sky-100 dark:bg-sky-900/50" : "";
     return `<tr class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 ${rowBg}">${tds}</tr>`;
   }).join("")}
     </tbody>`;

@@ -162,9 +162,9 @@ async function onRun() {
         label = `Plan status: ${solverStatus}`;
         colorClass = "text-amber-600 dark:text-amber-400"; // Amber for warning
       } else if (writeToVictron) {
-        label = "Plan updated and sent to Victron.";
+        label = "Plan updated and sent to Victron";
       } else {
-        label = "Plan updated.";
+        label = "Plan updated";
       }
       els.status.textContent = label;
       els.status.className = `text-sm font-medium ${colorClass}`;
