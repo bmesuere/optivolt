@@ -128,7 +128,7 @@ describe('calculateMaxRatioPerHour', () => {
   it('computes ratio for daytime records', () => {
     // Create irradiance records at hour 12 in summer (should have good GHI)
     const records = [
-      { time: Date.UTC(2024, 5, 15, 12), hour: 12, ghi_W_per_m2: 600 },
+      { time: Date.UTC(2024, 5, 15, 12), hour: 12, ghi_W_per_m2: 600, intervalMinutes: 60 },
     ];
 
     const result = calculateMaxRatioPerHour(records, 51.05, 3.71);
@@ -138,11 +138,29 @@ describe('calculateMaxRatioPerHour', () => {
 
   it('skips nighttime records where ghiClear < 20', () => {
     const records = [
-      { time: Date.UTC(2024, 5, 15, 1), hour: 1, ghi_W_per_m2: 0 },
+      { time: Date.UTC(2024, 5, 15, 1), hour: 1, ghi_W_per_m2: 0, intervalMinutes: 60 },
     ];
 
     const result = calculateMaxRatioPerHour(records, 51.05, 3.71);
     expect(result[1]).toBe(0);
+  });
+
+  it('uses intervalMinutes for mid-interval calculation (15-min record uses 7.5 min offset)', () => {
+    // For a 15-min record, mid-interval is 7.5 min after start
+    // For a 60-min record, mid-interval is 30 min after start
+    // Both should produce non-zero ratios for a daytime record
+    const timeMs = Date.UTC(2024, 5, 15, 12);
+    const record15 = { time: timeMs, hour: 12, ghi_W_per_m2: 600, intervalMinutes: 15 };
+    const record60 = { time: timeMs, hour: 12, ghi_W_per_m2: 600, intervalMinutes: 60 };
+
+    const result15 = calculateMaxRatioPerHour([record15], 51.05, 3.71);
+    const result60 = calculateMaxRatioPerHour([record60], 51.05, 3.71);
+
+    // Both should yield positive ratios; they may differ due to different mid-interval times
+    expect(result15[12]).toBeGreaterThan(0);
+    expect(result60[12]).toBeGreaterThan(0);
+    // The ratios should differ since the Bird model is evaluated at different times
+    expect(result15[12]).not.toBeCloseTo(result60[12], 10);
   });
 });
 
@@ -203,7 +221,7 @@ describe('forecastPv', () => {
 
     // A forecast record for hour 12 with moderate GHI
     const forecastIrradiance = [
-      { time: Date.UTC(2024, 5, 20, 12), hour: 12, ghi_W_per_m2: 500 },
+      { time: Date.UTC(2024, 5, 20, 12), hour: 12, ghi_W_per_m2: 500, intervalMinutes: 60 },
     ];
 
     const points = forecastPv(capacity, forecastIrradiance, 51.05, 3.71);
@@ -223,7 +241,7 @@ describe('forecastPv', () => {
 
     const ts = Date.UTC(2024, 5, 20, 12);
     const forecastIrradiance = [
-      { time: ts, hour: 12, ghi_W_per_m2: 500 },
+      { time: ts, hour: 12, ghi_W_per_m2: 500, intervalMinutes: 60 },
     ];
 
     const actuals = new Map([[ts, 800]]);
@@ -240,7 +258,7 @@ describe('forecastPv', () => {
     }));
 
     const forecastIrradiance = [
-      { time: Date.UTC(2024, 5, 20, 12), hour: 12, ghi_W_per_m2: 0 },
+      { time: Date.UTC(2024, 5, 20, 12), hour: 12, ghi_W_per_m2: 0, intervalMinutes: 60 },
     ];
 
     const points = forecastPv(capacity, forecastIrradiance, 51.05, 3.71);
@@ -256,7 +274,7 @@ describe('forecastPv', () => {
     }));
 
     const forecastIrradiance = [
-      { time: Date.UTC(2024, 5, 20, 2), hour: 2, ghi_W_per_m2: 0 },
+      { time: Date.UTC(2024, 5, 20, 2), hour: 2, ghi_W_per_m2: 0, intervalMinutes: 60 },
     ];
 
     const points = forecastPv(capacity, forecastIrradiance, 51.05, 3.71);

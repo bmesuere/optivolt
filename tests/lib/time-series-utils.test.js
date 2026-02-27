@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractWindow, getQuarterStart } from '../../lib/time-series-utils.ts';
+import { extractWindow, getQuarterStart, buildForecastSeries } from '../../lib/time-series-utils.ts';
 
 describe('Time Series Utils', () => {
   describe('getQuarterStart', () => {
@@ -66,5 +66,62 @@ describe('Time Series Utils', () => {
       const result = extractWindow(source, start, end);
       expect(result).toEqual([50, 0, 0]);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildForecastSeries
+// ---------------------------------------------------------------------------
+
+describe('buildForecastSeries', () => {
+  it('repeats hourly values 4× when inputStep=60 (default)', () => {
+    const start = new Date('2024-06-15T10:00:00Z').toISOString();
+    const end = new Date('2024-06-15T12:00:00Z').toISOString();
+    const points = [
+      { time: new Date('2024-06-15T10:00:00Z').getTime(), value: 1000 },
+      { time: new Date('2024-06-15T11:00:00Z').getTime(), value: 2000 },
+    ];
+
+    const series = buildForecastSeries(points, start, end);
+    expect(series.values).toHaveLength(8); // 2 hours × 4 slots
+    expect(series.values.slice(0, 4)).toEqual([1000, 1000, 1000, 1000]);
+    expect(series.values.slice(4, 8)).toEqual([2000, 2000, 2000, 2000]);
+  });
+
+  it('maps 15-min points directly when inputStep=15', () => {
+    const start = new Date('2024-06-15T10:00:00Z').toISOString();
+    const end = new Date('2024-06-15T10:45:00Z').toISOString();
+    const points = [
+      { time: new Date('2024-06-15T10:00:00Z').getTime(), value: 100 },
+      { time: new Date('2024-06-15T10:15:00Z').getTime(), value: 200 },
+      { time: new Date('2024-06-15T10:30:00Z').getTime(), value: 300 },
+    ];
+
+    const series = buildForecastSeries(points, start, end, 15);
+    expect(series.values).toHaveLength(3);
+    expect(series.values).toEqual([100, 200, 300]);
+  });
+
+  it('fills missing 15-min slots with 0 when inputStep=15', () => {
+    const start = new Date('2024-06-15T10:00:00Z').toISOString();
+    const end = new Date('2024-06-15T11:00:00Z').toISOString();
+    // Only provide 2 of the 4 15-min slots
+    const points = [
+      { time: new Date('2024-06-15T10:00:00Z').getTime(), value: 100 },
+      { time: new Date('2024-06-15T10:30:00Z').getTime(), value: 300 },
+    ];
+
+    const series = buildForecastSeries(points, start, end, 15);
+    expect(series.values).toHaveLength(4);
+    expect(series.values).toEqual([100, 0, 300, 0]);
+  });
+
+  it('returns all zeros when no points provided (inputStep=15)', () => {
+    const start = new Date('2024-06-15T10:00:00Z').toISOString();
+    const end = new Date('2024-06-15T11:00:00Z').toISOString();
+
+    const series = buildForecastSeries([], start, end, 15);
+    expect(series.values).toHaveLength(4);
+    expect(series.values.every(v => v === 0)).toBe(true);
   });
 });

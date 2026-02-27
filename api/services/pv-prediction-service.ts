@@ -37,6 +37,7 @@ export async function runPvForecast(config: PredictionConfig): Promise<PvForecas
   }
 
   const { latitude, longitude, historyDays, pvSensor } = pvConfig;
+  const forecastResolution = pvConfig.forecastResolution ?? 60;
 
   if (latitude == null || Number.isNaN(latitude) || longitude == null || Number.isNaN(longitude)) {
     throw new Error('Latitude and longitude must be configured for PV forecasting');
@@ -86,7 +87,7 @@ export async function runPvForecast(config: PredictionConfig): Promise<PvForecas
   const capacity = estimateHourlyCapacity(maxProd, maxRatio);
 
   // 4. Fetch forecast irradiance from Open-Meteo
-  const forecastIrradiance = await fetchForecastIrradiance(latitude, longitude);
+  const forecastIrradiance = await fetchForecastIrradiance(latitude, longitude, undefined, forecastResolution);
 
   // 5. Generate forecast points for future (from forecast API)
   const futurePoints = forecastPv(capacity, forecastIrradiance, latitude, longitude, actualsMap);
@@ -106,7 +107,7 @@ export async function runPvForecast(config: PredictionConfig): Promise<PvForecas
     time: p.time,
     value: p.predicted ?? 0
   }));
-  const forecast = buildForecastSeries(mappedFuturePoints, startIso, endIso);
+  const forecast = buildForecastSeries(mappedFuturePoints, startIso, endIso, forecastResolution);
 
   // 8. Split: future points for forecast chart, archive points for validation chart
   const nowMs = now.getTime();

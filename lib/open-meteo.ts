@@ -35,12 +35,14 @@ interface ForecastUrlParams {
   model?: string;
   pastDays?: number;
   forecastDays?: number;
+  resolution?: 15 | 60;
 }
 
 /**
  * Build URL for the Open-Meteo Forecast API.
  * Uses the ICON D2 model by default (good European coverage).
- * Requests hourly shortwave_radiation in UTC (timezone=GMT).
+ * Requests shortwave_radiation in UTC (timezone=GMT).
+ * When resolution=15, uses minutely_15 data; otherwise uses hourly.
  */
 export function buildForecastUrl({
   latitude,
@@ -48,11 +50,15 @@ export function buildForecastUrl({
   model = 'icon_d2',
   pastDays = 1,
   forecastDays = 2,
+  resolution = 60,
 }: ForecastUrlParams): string {
+  const radiationParam = resolution === 15
+    ? `&minutely_15=shortwave_radiation`
+    : `&hourly=shortwave_radiation`;
   return (
     `https://api.open-meteo.com/v1/forecast`
     + `?latitude=${latitude}&longitude=${longitude}`
-    + `&hourly=shortwave_radiation`
+    + radiationParam
     + `&models=${model}`
     + `&timezone=GMT`
     + `&past_days=${pastDays}`
@@ -99,8 +105,57 @@ export function parseIrradianceResponse(data: OpenMeteoHourlyResponse): Irradian
       time: intervalStartTime,
       hour: intervalStartHour,
       ghi_W_per_m2: Math.max(0, ghi),
+      intervalMinutes: 60,
     });
   }
 
   return records;
+}
+
+// ----------------------------- 15-min Parser ------------------------------
+
+interface OpenMeteoMinutely15Response {
+  minutely_15: {
+    time: string[];
+    shortwave_radiation: (number | null)[];
+  };
+}
+
+/**
+ * Parse an Open-Meteo minutely_15 response into IrradianceRecord[].
+ *
+ * Unlike the hourly response, Open-Meteo labels 15-min data at interval start,
+ * so no backward-averaging shift is needed.
+ *
+ * Null radiation values are treated as 0 (nighttime or missing data).
+ */
+export function parseMinutely15Response(data: OpenMeteoMinutely15Response): IrradianceRecord[] {
+  const records: IrradianceRecord[] = [];
+
+  const { time, shortwave_radiation } = data.minutely_15;
+
+  for (let i = 0; i < time.length; i++) {
+    const date = new Date(time[i] + 'Z');  // Append Z since timezone=GMT
+    const hour = date.getUTCHours();
+    const ghi = shortwave_radiation[i] ?? 0;
+
+    records.push({
+      time: date.getTime(),
+      hour,
+      ghi_W_per_m2: Math.max(0, ghi),
+      intervalMinutes: 15,
+    });
+  }
+
+  return records;
+}
+
+/**
+ * Dispatch to the appropriate parser based on resolution.
+ */
+export function parseForecastResponse(data: unknown, resolution: 15 | 60): IrradianceRecord[] {
+  if (resolution === 15) {
+    return parseMinutely15Response(data as OpenMeteoMinutely15Response);
+  }
+  return parseIrradianceResponse(data as OpenMeteoHourlyResponse);
 }

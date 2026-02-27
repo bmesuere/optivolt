@@ -27,6 +27,7 @@ export interface IrradianceRecord {
   time: number;          // timestamp ms (start of UTC hour interval)
   hour: number;          // 0–23 UTC hour (start of interval)
   ghi_W_per_m2: number;  // shortwave radiation (W/m²)
+  intervalMinutes: number;  // 60 for hourly, 15 for minutely_15
 }
 
 export interface PvProductionRecord {
@@ -230,8 +231,7 @@ export function calculateMaxRatioPerHour(
     // but Open-Meteo originally labels it as the end of the backward-averaged
     // interval. The parser already did (omHour + 23) % 24 so rec.hour is
     // the start hour and rec.time is the start timestamp.
-    // Mid-interval = start + 30 minutes.
-    const midInterval = new Date(rec.time + 30 * 60 * 1000);
+    const midInterval = new Date(rec.time + (rec.intervalMinutes / 2) * 60 * 1000);
     const ghiClear = calculateClearSkyGHI(lat, lon, midInterval);
 
     // Skip low-sun records where the ratio is unreliable
@@ -303,7 +303,7 @@ export function forecastPv(
 
   for (const rec of forecastIrradiance) {
     // Bird clear-sky GHI at mid-interval
-    const midInterval = new Date(rec.time + 30 * 60 * 1000);
+    const midInterval = new Date(rec.time + (rec.intervalMinutes / 2) * 60 * 1000);
     const ghiClear = calculateClearSkyGHI(lat, lon, midInterval);
 
     // Forecast ratio

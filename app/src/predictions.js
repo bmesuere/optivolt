@@ -30,25 +30,24 @@ export async function initPredictionsTab() {
 
 const stripe = (c) => window.pattern?.draw('diagonal', c) || c;
 
-/** Aggregate a 15-min ForecastSeries into { timestamps[], hourlyKwh[] }. */
-function aggregateHourlyKwh(forecast) {
-  const hourMap = new Map();
+/** Aggregate a ForecastSeries into { timestamps[], values[] } with the given stepMinutes. */
+function aggregateForecastKwh(forecast, stepMinutes = 60) {
+  const timeMap = new Map();
   const values = forecast.values || [];
   const startTs = new Date(forecast.start).getTime();
-  const stepMs = (forecast.step || 15) * 60 * 1000;
+  const inputStepMs = (forecast.step || 15) * 60 * 1000;
+  const targetStepMs = stepMinutes * 60 * 1000;
 
   for (let i = 0; i < values.length; i++) {
-    const ts = startTs + i * stepMs;
-    const dt = new Date(ts);
-    dt.setMinutes(0, 0, 0, 0);
-    const hourKey = dt.getTime();
-    if (!hourMap.has(hourKey)) hourMap.set(hourKey, 0);
-    hourMap.set(hourKey, hourMap.get(hourKey) + values[i] * (stepMs / 3600000));
+    const ts = startTs + i * inputStepMs;
+    const bucketTs = Math.floor(ts / targetStepMs) * targetStepMs;
+    if (!timeMap.has(bucketTs)) timeMap.set(bucketTs, 0);
+    timeMap.set(bucketTs, timeMap.get(bucketTs) + values[i] * (inputStepMs / 3600000));
   }
 
-  const timestamps = [...hourMap.keys()].sort((a, b) => a - b);
-  const hourlyKwh = timestamps.map(k => hourMap.get(k) / 1000);
-  return { timestamps, hourlyKwh };
+  const timestamps = [...timeMap.keys()].sort((a, b) => a - b);
+  const aggregatedKwh = timestamps.map(k => timeMap.get(k) / 1000);
+  return { timestamps, values: aggregatedKwh };
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +118,8 @@ function wireForm() {
     ?.addEventListener('click', onForecastAll);
   document.getElementById('pred-pv-forecast')
     ?.addEventListener('click', onPvForecast);
+  document.getElementById('forecast-chart-15m')
+    ?.addEventListener('change', renderCombinedForecastChart);
 
   const settingsToggle = document.getElementById('pred-settings-toggle');
   const settingsBody = document.getElementById('pred-settings-body');
@@ -163,6 +164,7 @@ function readFormValues() {
     latitude: parseFloat(getVal('pred-pv-lat')) || 0,
     longitude: parseFloat(getVal('pred-pv-lon')) || 0,
     historyDays: parseInt(getVal('pred-pv-history'), 10) || 14,
+    forecastResolution: parseInt(getVal('pred-pv-resolution'), 10) || 60,
   };
 
   return {
@@ -286,14 +288,17 @@ function renderCombinedForecastChart() {
   const canvas = document.getElementById('forecast-chart');
   if (!canvas) return;
 
-  const loadAgg = lastLoadForecast ? aggregateHourlyKwh(lastLoadForecast) : { timestamps: [], hourlyKwh: [] };
-  const pvAgg = lastPvForecast ? aggregateHourlyKwh(lastPvForecast) : { timestamps: [], hourlyKwh: [] };
+  const is15m = document.getElementById('forecast-chart-15m')?.checked;
+  const stepMinutes = is15m ? 15 : 60;
+
+  const loadAgg = lastLoadForecast ? aggregateForecastKwh(lastLoadForecast, stepMinutes) : { timestamps: [], values: [] };
+  const pvAgg = lastPvForecast ? aggregateForecastKwh(lastPvForecast, stepMinutes) : { timestamps: [], values: [] };
 
   const allTs = [...new Set([...loadAgg.timestamps, ...pvAgg.timestamps])].sort((a, b) => a - b);
   const axis = buildTimeAxisFromTimestamps(allTs);
 
-  const loadMap = new Map(loadAgg.timestamps.map((t, i) => [t, loadAgg.hourlyKwh[i]]));
-  const pvMap = new Map(pvAgg.timestamps.map((t, i) => [t, pvAgg.hourlyKwh[i]]));
+  const loadMap = new Map(loadAgg.timestamps.map((t, i) => [t, loadAgg.values[i]]));
+  const pvMap = new Map(pvAgg.timestamps.map((t, i) => [t, pvAgg.values[i]]));
 
   renderChart(canvas, {
     type: 'bar',
@@ -440,6 +445,7 @@ function renderPvConfig(pvConfig) {
   setVal('pred-pv-lat', pvConfig.latitude ?? '');
   setVal('pred-pv-lon', pvConfig.longitude ?? '');
   setVal('pred-pv-history', pvConfig.historyDays ?? 14);
+  setVal('pred-pv-resolution', pvConfig.forecastResolution ?? 60);
 }
 
 

@@ -5,7 +5,7 @@
  * Uses the pure URL builders and response parsers from lib/open-meteo.ts.
  */
 
-import { buildArchiveUrl, buildForecastUrl, parseIrradianceResponse } from '../../lib/open-meteo.ts';
+import { buildArchiveUrl, buildForecastUrl, parseIrradianceResponse, parseForecastResponse } from '../../lib/open-meteo.ts';
 import type { IrradianceRecord } from '../../lib/predict-pv.ts';
 
 /**
@@ -35,8 +35,9 @@ export async function fetchForecastIrradiance(
   lat: number,
   lon: number,
   model?: string,
+  resolution: 15 | 60 = 60,
 ): Promise<IrradianceRecord[]> {
-  const url = buildForecastUrl({ latitude: lat, longitude: lon, model, pastDays: 1, forecastDays: 2 });
+  const url = buildForecastUrl({ latitude: lat, longitude: lon, model, pastDays: 1, forecastDays: 2, resolution });
   const response = await fetch(url);
 
   if (!response.ok) {
@@ -44,5 +45,5 @@ export async function fetchForecastIrradiance(
   }
 
   const data = await response.json();
-  return parseIrradianceResponse(data);
+  return parseForecastResponse(data, resolution);
 }

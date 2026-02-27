@@ -87,6 +87,7 @@ export interface PvPredictionConfig {
   longitude: number;
   historyDays: number;
   pvSensor: string;
+  forecastResolution?: 15 | 60;
 }
 
 export interface PredictionConfig {

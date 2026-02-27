@@ -100,37 +100,53 @@ export function getForecastTimeRange(nowMs = Date.now()): { startIso: string; en
 
 /**
  * Build a 15-min forecast series for a specific time range.
- * Data is hourly → each 15-min slot gets the same hourly value.
- * Missing hours → 0.
+ * Missing slots → 0.
  *
- * @param points Array of timestamp/value pairs (timestamp is start of hour).
+ * @param points Array of timestamp/value pairs.
  * @param startIso ISO string for the start of the 15-min series.
  * @param endIso ISO string for the end of the 15-min series.
+ * @param inputStep Minutes per input point: 60 (hourly, default) or 15.
+ *   - 60: each hourly value is repeated for all four 15-min slots in that hour.
+ *   - 15: each 15-min point maps directly to its slot.
  */
 export function buildForecastSeries(
   points: { time: number; value: number }[],
   startIso: string,
   endIso: string,
+  inputStep: number = 60,
 ): ForecastSeries {
   const startTs = new Date(startIso).getTime();
   const endTs = new Date(endIso).getTime();
   const stepMs = 15 * 60 * 1000;
 
-  // Map predictions by time (hour start)
   const predMap = new Map<number, number>();
-  for (const p of points) {
-    if (p.value !== null && p.value !== undefined) {
-      // Ensure key is aligned to start of hour
-      const h = Math.floor(p.time / 3600000) * 3600000;
-      predMap.set(h, p.value);
+  if (inputStep === 15) {
+    // Map by 15-min bucket
+    for (const p of points) {
+      if (p.value !== null && p.value !== undefined) {
+        const bucket = Math.floor(p.time / 900000) * 900000;
+        predMap.set(bucket, p.value);
+      }
+    }
+  } else {
+    // Map by hour start (each hourly value covers all four 15-min slots)
+    for (const p of points) {
+      if (p.value !== null && p.value !== undefined) {
+        const h = Math.floor(p.time / 3600000) * 3600000;
+        predMap.set(h, p.value);
+      }
     }
   }
 
   const values: number[] = [];
   for (let t = startTs; t < endTs; t += stepMs) {
-    // Hourly bucket
-    const hourStart = Math.floor(t / 3600000) * 3600000;
-    const val = predMap.get(hourStart) ?? 0;
+    let val: number;
+    if (inputStep === 15) {
+      val = predMap.get(t) ?? 0;
+    } else {
+      const hourStart = Math.floor(t / 3600000) * 3600000;
+      val = predMap.get(hourStart) ?? 0;
+    }
     values.push(val);
   }
 
