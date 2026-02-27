@@ -143,7 +143,7 @@ export function buildForecastSeries(
 
 /**
  * Compute Mean Absolute Error (MAE) and Root Mean Square Error (RMSE).
- * If there are no valid pairs, both return 0.
+ * If there are no valid pairs, MAE and RMSE return 0, and MAPE returns NaN.
  *
  * @param pairs Array of objects containing actual and predicted values.
  * @param getActual Function to extract the actual value from a pair.

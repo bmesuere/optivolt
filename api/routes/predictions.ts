@@ -152,7 +152,11 @@ async function executeLoadForecast(config: PredictionConfig, logLabel: string): 
 }
 
 async function executePvForecast(config: PredictionConfig, logLabel: string): Promise<unknown> {
-  if (!config.pvConfig || !config.pvConfig.latitude || !config.pvConfig.longitude) {
+  if (
+    !config.pvConfig ||
+    config.pvConfig.latitude == null || Number.isNaN(config.pvConfig.latitude) ||
+    config.pvConfig.longitude == null || Number.isNaN(config.pvConfig.longitude)
+  ) {
     return null;
   }
 

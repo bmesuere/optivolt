@@ -77,7 +77,7 @@ export function calculateClearSkyGHI(lat: number, lon: number, date: Date): numb
   const latRad = lat * Math.PI / 180;
 
   // Day of year (1-indexed)
-  const yearStart = new Date(date.getFullYear(), 0, 0);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 0));
   const diff = date.getTime() - yearStart.getTime();
   const dayOfYear = Math.floor(diff / 86400000);
 

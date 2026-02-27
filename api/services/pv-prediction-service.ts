@@ -38,7 +38,7 @@ export async function runPvForecast(config: PredictionConfig): Promise<PvForecas
 
   const { latitude, longitude, historyDays, pvSensor } = pvConfig;
 
-  if (!latitude || !longitude) {
+  if (latitude == null || Number.isNaN(latitude) || longitude == null || Number.isNaN(longitude)) {
     throw new Error('Latitude and longitude must be configured for PV forecasting');
   }
 
