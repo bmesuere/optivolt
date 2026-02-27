@@ -15,6 +15,9 @@ import { debounce } from './utils.js';
 import { buildTimeAxisFromTimestamps, getBaseOptions, renderChart, toRGBA, SOLUTION_COLORS } from './charts.js';
 import { initValidation } from './predictions-validation.js';
 
+let lastLoadForecast = null;
+let lastPvForecast = null;
+
 export async function initPredictionsTab() {
   await hydrateForm();
   wireForm();
@@ -222,12 +225,14 @@ async function onPvForecast() {
 function updateForecastUI(type, result) {
   const label = type === 'load' ? 'Load' : 'PV';
   if (result) {
-    renderForecastChart(type, result);
     if (type === 'load') {
+      lastLoadForecast = result.forecast ?? null;
       renderLoadAccuracyChart(result.recent);
     } else {
+      lastPvForecast = result.forecast ?? null;
       renderPvAccuracyChart(result.recent);
     }
+    renderCombinedForecastChart();
     updateMetrics(type, result);
     updateStatus(type, `${label} forecast updated`);
   } else {
@@ -277,41 +282,56 @@ function updateMetrics(prefix, resultObject) {
   }
 }
 
-function renderForecastChart(type, result) {
-  const isLoad = type === 'load';
-  const canvas = document.getElementById(`${type}-forecast-chart`);
-  if (!canvas || !result?.forecast) return;
+function renderCombinedForecastChart() {
+  const canvas = document.getElementById('forecast-chart');
+  if (!canvas) return;
 
-  const { timestamps, hourlyKwh } = aggregateHourlyKwh(result.forecast);
-  const axis = buildTimeAxisFromTimestamps(timestamps);
-  const color = isLoad ? SOLUTION_COLORS.g2l : SOLUTION_COLORS.pv2g;
+  const loadAgg = lastLoadForecast ? aggregateHourlyKwh(lastLoadForecast) : { timestamps: [], hourlyKwh: [] };
+  const pvAgg = lastPvForecast ? aggregateHourlyKwh(lastPvForecast) : { timestamps: [], hourlyKwh: [] };
+
+  const allTs = [...new Set([...loadAgg.timestamps, ...pvAgg.timestamps])].sort((a, b) => a - b);
+  const axis = buildTimeAxisFromTimestamps(allTs);
+
+  const loadMap = new Map(loadAgg.timestamps.map((t, i) => [t, loadAgg.hourlyKwh[i]]));
+  const pvMap = new Map(pvAgg.timestamps.map((t, i) => [t, pvAgg.hourlyKwh[i]]));
 
   renderChart(canvas, {
     type: 'bar',
     data: {
       labels: axis.labels,
-      datasets: [{
-        label: isLoad ? 'Load Forecast' : 'PV Forecast',
-        data: hourlyKwh,
-        backgroundColor: stripe(color),
-        borderColor: color,
-        borderWidth: 1,
-        hoverBackgroundColor: stripe(toRGBA(color, 0.6)),
-      }]
+      datasets: [
+        {
+          label: 'Load',
+          data: allTs.map(t => loadMap.get(t) ?? null),
+          backgroundColor: stripe(SOLUTION_COLORS.g2l),
+          borderColor: SOLUTION_COLORS.g2l,
+          borderWidth: 1,
+          hoverBackgroundColor: stripe(toRGBA(SOLUTION_COLORS.g2l, 0.6)),
+        },
+        {
+          label: 'Solar',
+          data: allTs.map(t => pvMap.get(t) ?? null),
+          backgroundColor: stripe(SOLUTION_COLORS.pv2g),
+          borderColor: SOLUTION_COLORS.pv2g,
+          borderWidth: 1,
+          hoverBackgroundColor: stripe(toRGBA(SOLUTION_COLORS.pv2g, 0.6)),
+        },
+      ],
     },
-    options: getBaseOptions({ ...axis, yTitle: 'kWh' })
+    options: getBaseOptions({ ...axis, yTitle: 'kWh' }),
   });
 }
 
 function renderLoadAccuracyChart(recentData) {
-  renderAccuracyChart(
+  renderAccuracyCharts(
     'load-accuracy-chart',
+    'load-accuracy-diff-chart',
     recentData,
     {
       actualLabel: 'Actual',
       predLabel: 'Prediction',
-      actualColor: SOLUTION_COLORS.b2l,
-      predColor: SOLUTION_COLORS.g2l,
+      actualColor: 'rgb(14, 165, 233)',
+      predColor: 'rgb(249, 115, 22)',
       valueActual: d => d.actual,
       valuePred: d => d.predicted,
     }
@@ -325,28 +345,31 @@ function renderLoadAccuracyChart(recentData) {
 
 
 function renderPvAccuracyChart(recentData) {
-  renderAccuracyChart(
+  renderAccuracyCharts(
     'pv-accuracy-chart',
+    'pv-accuracy-diff-chart',
     recentData,
     {
       actualLabel: 'Actual',
       predLabel: 'Predicted',
-      actualColor: SOLUTION_COLORS.pv2b,
-      predColor: SOLUTION_COLORS.pv2g,
+      actualColor: 'rgb(14, 165, 233)',
+      predColor: 'rgb(249, 115, 22)',
       valueActual: d => d.actual ?? 0,
       valuePred: d => d.predicted ?? 0,
     }
   );
 }
 
-function renderAccuracyChart(canvasId, recentData, options) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas || !recentData || recentData.length === 0) return;
+function renderAccuracyCharts(overlayCanvasId, diffCanvasId, recentData, options) {
+  const overlayCanvas = document.getElementById(overlayCanvasId);
+  const diffCanvas = document.getElementById(diffCanvasId);
+  if (!overlayCanvas || !recentData || recentData.length === 0) return;
 
   const sorted = [...recentData].sort((a, b) => a.time - b.time);
   const axis = buildTimeAxisFromTimestamps(sorted.map(d => d.time));
 
-  renderChart(canvas, {
+  // Chart 1: two clean lines, solid legend swatch (backgroundColor = line color, fill: false)
+  renderChart(overlayCanvas, {
     type: 'line',
     data: {
       labels: axis.labels,
@@ -354,19 +377,19 @@ function renderAccuracyChart(canvasId, recentData, options) {
         {
           label: options.actualLabel,
           data: sorted.map(d => options.valueActual(d) / 1000),
-          borderColor: 'transparent',
-          backgroundColor: toRGBA(options.actualColor, 0.25),
-          borderWidth: 0,
+          borderColor: options.actualColor,
+          backgroundColor: options.actualColor,
+          borderWidth: 1.5,
           pointRadius: 0,
           tension: 0.3,
-          fill: true,
+          fill: false,
         },
         {
           label: options.predLabel,
           data: sorted.map(d => options.valuePred(d) / 1000),
           borderColor: options.predColor,
-          backgroundColor: 'transparent',
-          borderWidth: 2,
+          backgroundColor: options.predColor,
+          borderWidth: 1.5,
           pointRadius: 0,
           tension: 0.3,
           fill: false,
@@ -374,6 +397,28 @@ function renderAccuracyChart(canvasId, recentData, options) {
       ],
     },
     options: getBaseOptions({ ...axis, yTitle: 'kWh' }),
+  });
+
+  // Chart 2: predicted − actual difference area, no legend
+  if (!diffCanvas) return;
+  renderChart(diffCanvas, {
+    type: 'line',
+    data: {
+      labels: axis.labels,
+      datasets: [
+        {
+          label: 'Difference (pred − actual)',
+          data: sorted.map(d => (options.valuePred(d) - options.valueActual(d)) / 1000),
+          borderColor: 'rgba(100,116,139,0.6)',
+          backgroundColor: 'transparent',
+          borderWidth: 1,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: { target: 'origin', above: 'rgba(139,201,100,0.45)', below: 'rgba(233,122,131,0.45)' },
+        },
+      ],
+    },
+    options: getBaseOptions({ ...axis, yTitle: 'kWh diff' }, { plugins: { legend: { display: false } } }),
   });
 }
 

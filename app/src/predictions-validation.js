@@ -4,6 +4,7 @@ import { runValidation, savePredictionConfig } from './api/api.js';
 let validationResults = null;
 let _activeSensor = null;
 let accuracyChart = null;
+let diffChart = null;
 
 export function initValidation({ readFormValues, renderLoadConfig, setComparisonStatus }) {
   const runBtn = document.getElementById('pred-run-validation');
@@ -172,6 +173,7 @@ function onShowChart(row) {
   if (chartSection) chartSection.hidden = false;
 
   const canvas = document.getElementById('pred-accuracy-chart');
+  const diffCanvas = document.getElementById('pred-accuracy-diff-chart');
   if (!canvas) return;
 
   const preds = row.validationPredictions ?? [];
@@ -184,7 +186,12 @@ function onShowChart(row) {
     accuracyChart.destroy();
     accuracyChart = null;
   }
+  if (diffChart) {
+    diffChart.destroy();
+    diffChart = null;
+  }
 
+  // Chart 1: two clean lines, solid legend swatch (backgroundColor = line color, fill: false)
   accuracyChart = new Chart(canvas, {
     type: 'line',
     data: {
@@ -194,19 +201,21 @@ function onShowChart(row) {
           label: 'Actual (Wh)',
           data: preds.map(p => p.actual),
           borderColor: 'rgb(14, 165, 233)',
-          backgroundColor: 'rgba(14, 165, 233, 0.1)',
+          backgroundColor: 'rgb(14, 165, 233)',
           borderWidth: 1.5,
           pointRadius: 0,
           tension: 0.3,
+          fill: false,
         },
         {
           label: 'Predicted (Wh)',
           data: preds.map(p => p.predicted),
           borderColor: 'rgb(249, 115, 22)',
-          backgroundColor: 'rgba(249, 115, 22, 0.1)',
+          backgroundColor: 'rgb(249, 115, 22)',
           borderWidth: 1.5,
           pointRadius: 0,
           tension: 0.3,
+          fill: false,
         },
       ],
     },
@@ -217,6 +226,34 @@ function onShowChart(row) {
       scales: { y: { title: { display: true, text: 'Wh' } } },
     },
   });
+
+  // Chart 2: predicted − actual difference area, no legend
+  if (diffCanvas) {
+    diffChart = new Chart(diffCanvas, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Difference (pred − actual)',
+            data: preds.map(p => p.predicted - p.actual),
+            borderColor: 'rgba(100,116,139,0.6)',
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            pointRadius: 0,
+            tension: 0.3,
+            fill: { target: 'origin', above: 'rgba(139,201,100,0.45)', below: 'rgba(233,122,131,0.45)' },
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { title: { display: true, text: 'Wh diff' } } },
+      },
+    });
+  }
 
   const title = document.getElementById('pred-chart-title');
   if (title) {

@@ -828,35 +828,33 @@
     <!-- Main: Results -->
     <section class="lg:col-span-2 space-y-6 min-w-0">
 
-      <!-- Forecast & Recent Accuracy Chart -->
+      <!-- Combined Forecast Chart -->
       <section class="card">
         <h2 class="mb-3 sidebar-label">Forecast</h2>
         <div class="h-80 w-full">
-          <canvas id="load-forecast-chart" class="h-full w-full"></canvas>
+          <canvas id="forecast-chart" class="h-full w-full"></canvas>
         </div>
       </section>
 
-      <!-- History Comparison Chart -->
+      <!-- Load History Comparison Chart -->
       <section class="card">
         <h2 class="mb-3 sidebar-label">Load Prediction Accuracy</h2>
-        <div class="h-80 w-full">
+        <div class="h-56 w-full">
           <canvas id="load-accuracy-chart" class="h-full w-full"></canvas>
         </div>
-      </section>
-
-      <!-- PV Forecast Chart -->
-      <section class="card">
-        <h2 class="mb-3 sidebar-label">PV Forecast</h2>
-        <div class="h-80 w-full">
-          <canvas id="pv-forecast-chart" class="h-full w-full"></canvas>
+        <div class="h-40 w-full mt-4">
+          <canvas id="load-accuracy-diff-chart" class="h-full w-full"></canvas>
         </div>
       </section>
 
       <!-- PV History Chart -->
       <section class="card">
         <h2 class="mb-3 sidebar-label">PV Prediction Accuracy</h2>
-        <div class="h-80 w-full">
+        <div class="h-56 w-full">
           <canvas id="pv-accuracy-chart" class="h-full w-full"></canvas>
+        </div>
+        <div class="h-40 w-full mt-4">
+          <canvas id="pv-accuracy-diff-chart" class="h-full w-full"></canvas>
         </div>
       </section>
 
@@ -865,8 +863,11 @@
         <!-- Results Chart (Specific strategy from table) -->
         <section id="pred-chart-section" class="card" hidden>
           <h2 id="pred-chart-title" class="mb-3 sidebar-label">Detailed Accuracy</h2>
-          <div class="h-72 w-full">
+          <div class="h-56 w-full">
             <canvas id="pred-accuracy-chart" class="h-full w-full"></canvas>
+          </div>
+          <div class="h-40 w-full mt-4">
+            <canvas id="pred-accuracy-diff-chart" class="h-full w-full"></canvas>
           </div>
         </section>
 
