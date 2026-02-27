@@ -19,7 +19,7 @@
  *   - Bird Clear Sky: evaluated at mid-interval (e.g. 13:30 UTC).
  */
 
-import type { ForecastSeries } from './predict-load.ts';
+import { type ForecastSeries, computeErrorMetrics, type PredictionResult, type ValidationMetrics } from './time-series-utils.ts';
 
 // ----------------------------- Types -------------------------------------
 
@@ -42,20 +42,10 @@ export interface HourlyCapacity {
   trueCapacity_Wh: number;  // estimated 100%-clear-sky production
 }
 
-export interface PvForecastPoint {
-  time: number;                  // timestamp ms
-  hour: number;                  // 0–23 UTC hour (interval start)
+export interface PvForecastPoint extends PredictionResult {
   ghiClear_W_per_m2: number;     // Bird model clear-sky baseline
   ghiForecast_W_per_m2: number;  // Open-Meteo forecast/archive value
   forecastRatio: number;         // ghiForecast / ghiClear
-  prediction_Wh: number;        // predicted production (Wh)
-  actual_Wh: number | null;     // measured production (null for future)
-}
-
-export interface PvValidationMetrics {
-  mae: number;
-  rmse: number;
-  n: number;
 }
 
 // ----------------------------- Bird Clear Sky Model -----------------------
@@ -335,57 +325,12 @@ export function forecastPv(
       ghiClear_W_per_m2: ghiClear,
       ghiForecast_W_per_m2: rec.ghi_W_per_m2,
       forecastRatio,
-      prediction_Wh: Math.max(0, prediction),
-      actual_Wh: actual,
+      predicted: Math.max(0, prediction),
+      actual,
     });
   }
 
   return points;
-}
-
-// ----------------------------- Series Builder ----------------------------
-
-/**
- * Convert hourly PvForecastPoints to a 15-minute ForecastSeries (Watts).
- *
- * Each hourly Wh value is spread evenly over 4 quarter-hour slots.
- * Wh → W conversion: the power is constant within the hour, so
- * W = Wh / 1h = Wh (numerically, since the step is 1 hour of energy).
- *
- * The output format matches the load ForecastSeries so the solver can
- * consume it directly as `pv_W`.
- */
-export function buildPvForecastSeries(
-  points: PvForecastPoint[],
-  startIso: string,
-  endIso: string,
-): ForecastSeries {
-  const STEP_MINUTES = 15;
-  const STEP_MS = STEP_MINUTES * 60 * 1000;
-  const startMs = new Date(startIso).getTime();
-  const endMs = new Date(endIso).getTime();
-
-  // Build a lookup: interval-start timestamp → prediction_Wh
-  const hourlyMap = new Map<number, number>();
-  for (const p of points) {
-    hourlyMap.set(p.time, p.prediction_Wh);
-  }
-
-  const values: number[] = [];
-  for (let t = startMs; t < endMs; t += STEP_MS) {
-    // Find which hour this 15-min slot belongs to
-    const hourStart = Math.floor(t / 3600000) * 3600000;
-    const whForHour = hourlyMap.get(hourStart) ?? 0;
-    // Wh for 1 hour → W (power). Since Wh = W × 1h, power in W = Wh / 1.
-    // Each 15-min slot gets the same power value.
-    values.push(whForHour);
-  }
-
-  return {
-    start: startIso,
-    step: STEP_MINUTES,
-    values,
-  };
 }
 
 // ----------------------------- Validation --------------------------------
@@ -393,24 +338,19 @@ export function buildPvForecastSeries(
 /**
  * Compute validation metrics from forecast points that have actuals.
  */
-export function validatePvForecast(points: PvForecastPoint[]): PvValidationMetrics {
-  const withActuals = points.filter(p => p.actual_Wh !== null);
-  const n = withActuals.length;
+export function validatePvForecast(points: PvForecastPoint[]): ValidationMetrics {
+  const withActuals = points.filter(p => p.actual !== null);
 
-  if (n === 0) return { mae: 0, rmse: 0, n: 0 };
-
-  let sumAbsError = 0;
-  let sumSqError = 0;
-
-  for (const p of withActuals) {
-    const error = p.prediction_Wh - p.actual_Wh!;
-    sumAbsError += Math.abs(error);
-    sumSqError += error * error;
-  }
+  const metrics = computeErrorMetrics(
+    withActuals,
+    p => p.actual!,
+    p => p.predicted
+  );
 
   return {
-    mae: sumAbsError / n,
-    rmse: Math.sqrt(sumSqError / n),
-    n,
+    mae: metrics.mae,
+    rmse: metrics.rmse,
+    mape: metrics.mape,
+    n: metrics.n,
   };
 }

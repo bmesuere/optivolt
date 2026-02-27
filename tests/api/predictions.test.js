@@ -3,13 +3,13 @@ import request from 'supertest';
 import app from '../../api/app.ts';
 
 vi.mock('../../api/services/prediction-config-store.ts');
-vi.mock('../../api/services/prediction-service.ts');
+vi.mock('../../api/services/load-prediction-service.ts');
 vi.mock('../../api/services/pv-prediction-service.ts');
 vi.mock('../../api/services/settings-store.ts');
 vi.mock('../../api/services/data-store.ts');
 
 import { loadPredictionConfig, savePredictionConfig } from '../../api/services/prediction-config-store.ts';
-import { runValidation, runForecast } from '../../api/services/prediction-service.ts';
+import { runValidation, runForecast } from '../../api/services/load-prediction-service.ts';
 import { runPvForecast } from '../../api/services/pv-prediction-service.ts';
 import { loadSettings } from '../../api/services/settings-store.ts';
 import { loadData, saveData } from '../../api/services/data-store.ts';

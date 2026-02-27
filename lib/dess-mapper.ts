@@ -186,26 +186,35 @@ export function mapRowsToDess(rows: PlanRow[], cfg: SolverConfig): DessResult {
 }
 
 /**
+ * Generic helper to find extreme prices (min/max) over a segment based on flow conditions.
+ */
+function aggregateSegmentPrice(
+  rows: PlanRow[],
+  segment: Segment | null,
+  condition: (row: PlanRow) => boolean,
+  getPrice: (row: PlanRow) => number,
+  aggregator: 'max' | 'min'
+): number {
+  let bestPrice = aggregator === 'max' ? -Infinity : Infinity;
+  if (!segment) return bestPrice;
+
+  for (let t = segment.start; t <= segment.end; t++) {
+    const row = rows[t];
+    if (condition(row)) {
+      const price = getPrice(row);
+      bestPrice = aggregator === 'max' ? Math.max(bestPrice, price) : Math.min(bestPrice, price);
+    }
+  }
+  return bestPrice;
+}
+
+/**
  * We want to find the tipping point price where battery usage is favored over grid usage.
  * Within the given segment, we look for grid→load flows and keep track of the highest price observed during these flows.
  */
 function findHighestGridUsageCost(rows: PlanRow[], segment: Segment | null, cfg: SolverConfig): number {
-  let highestPrice = -Infinity;
-  if (!segment) return highestPrice;
-
   const maxDischarge = cfg.maxDischargePower_W - FLOW_EPSILON_W;
-
-  for (let t = segment.start; t <= segment.end; t++) {
-    const row = rows[t];
-
-    if (row.g2l > FLOW_EPSILON_W && row.b2l < maxDischarge) {
-      const price = row.ic;
-      if (price > highestPrice) {
-        highestPrice = price;
-      }
-    }
-  }
-  return highestPrice;
+  return aggregateSegmentPrice(rows, segment, r => r.g2l > FLOW_EPSILON_W && r.b2l < maxDischarge, r => r.ic, 'max');
 }
 
 /**
@@ -213,22 +222,7 @@ function findHighestGridUsageCost(rows: PlanRow[], segment: Segment | null, cfg:
  * Within the given segment, we look for grid→battery flows and keep track of the highest price observed during these flows.
  */
 function findHighestGridChargeCost(rows: PlanRow[], segment: Segment | null): number {
-  let highestPrice = -Infinity;
-  if (!segment) return highestPrice;
-
-  // If we charge, we charge. We don't necessarily need to check maxCharge, just that flow > epsilon.
-
-  for (let t = segment.start; t <= segment.end; t++) {
-    const row = rows[t];
-
-    if (row.g2b > FLOW_EPSILON_W) {
-      const price = row.ic;
-      if (price > highestPrice) {
-        highestPrice = price;
-      }
-    }
-  }
-  return highestPrice;
+  return aggregateSegmentPrice(rows, segment, r => r.g2b > FLOW_EPSILON_W, r => r.ic, 'max');
 }
 
 /**
@@ -237,20 +231,7 @@ function findHighestGridChargeCost(rows: PlanRow[], segment: Segment | null): nu
  * (i.e. we were willing to sell at this low price, so we'd definitely sell at higher prices).
  */
 function findLowestGridExportRevenue(rows: PlanRow[], segment: Segment | null): number {
-  let lowestPrice = Infinity;
-  if (!segment) return lowestPrice;
-
-  for (let t = segment.start; t <= segment.end; t++) {
-    const row = rows[t];
-
-    if (row.b2g > FLOW_EPSILON_W) {
-      const price = row.ec;
-      if (price < lowestPrice) {
-        lowestPrice = price;
-      }
-    }
-  }
-  return lowestPrice;
+  return aggregateSegmentPrice(rows, segment, r => r.b2g > FLOW_EPSILON_W, r => r.ec, 'min');
 }
 
 /**
@@ -259,20 +240,7 @@ function findLowestGridExportRevenue(rows: PlanRow[], segment: Segment | null): 
  * (i.e. we were willing to export PV at this low price, so we'd definitely export at higher prices).
  */
 function findLowestPvExportPrice(rows: PlanRow[], segment: Segment | null): number {
-  let lowestPrice = Infinity;
-  if (!segment) return lowestPrice;
-
-  for (let t = segment.start; t <= segment.end; t++) {
-    const row = rows[t];
-
-    if (row.pv2g > FLOW_EPSILON_W) {
-      const price = row.ec;
-      if (price < lowestPrice) {
-        lowestPrice = price;
-      }
-    }
-  }
-  return lowestPrice;
+  return aggregateSegmentPrice(rows, segment, r => r.pv2g > FLOW_EPSILON_W, r => r.ec, 'min');
 }
 
 /**

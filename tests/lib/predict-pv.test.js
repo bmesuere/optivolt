@@ -1,13 +1,21 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   calculateClearSkyGHI,
   calculateMaxProductionPerHour,
   calculateMaxRatioPerHour,
   estimateHourlyCapacity,
   forecastPv,
-  buildPvForecastSeries,
   validatePvForecast,
 } from '../../lib/predict-pv.ts';
+import { buildForecastSeries } from '../../lib/time-series-utils.ts';
+
+vi.mock('../../lib/open-meteo-client.ts');
+vi.mock('../../lib/time-series-utils.ts', async (importOriginal) => {
+  const mod = await importOriginal();
+  return {
+    ...mod,
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Bird Clear Sky Model
@@ -200,7 +208,7 @@ describe('forecastPv', () => {
 
     const points = forecastPv(capacity, forecastIrradiance, 51.05, 3.71);
     expect(points).toHaveLength(1);
-    expect(points[0].prediction_Wh).toBeGreaterThan(0);
+    expect(points[0].predicted).toBeGreaterThan(0);
     expect(points[0].hour).toBe(12);
     expect(points[0].ghiForecast_W_per_m2).toBe(500);
   });
@@ -220,7 +228,7 @@ describe('forecastPv', () => {
 
     const actuals = new Map([[ts, 800]]);
     const points = forecastPv(capacity, forecastIrradiance, 51.05, 3.71, actuals);
-    expect(points[0].actual_Wh).toBe(800);
+    expect(points[0].actual).toBe(800);
   });
 
   it('returns null actual when not in map', () => {
@@ -236,7 +244,7 @@ describe('forecastPv', () => {
     ];
 
     const points = forecastPv(capacity, forecastIrradiance, 51.05, 3.71);
-    expect(points[0].actual_Wh).toBeNull();
+    expect(points[0].actual).toBeNull();
   });
 
   it('clamps prediction to 0 minimum', () => {
@@ -252,7 +260,7 @@ describe('forecastPv', () => {
     ];
 
     const points = forecastPv(capacity, forecastIrradiance, 51.05, 3.71);
-    expect(points[0].prediction_Wh).toBe(0);
+    expect(points[0].predicted).toBe(0);
   });
 });
 
@@ -263,14 +271,15 @@ describe('forecastPv', () => {
 describe('buildPvForecastSeries', () => {
   it('converts hourly points to 15-min slots', () => {
     const points = [
-      { time: Date.UTC(2024, 5, 20, 10), hour: 10, ghiClear_W_per_m2: 0, ghiForecast_W_per_m2: 0, forecastRatio: 0, prediction_Wh: 1000, actual_Wh: null },
-      { time: Date.UTC(2024, 5, 20, 11), hour: 11, ghiClear_W_per_m2: 0, ghiForecast_W_per_m2: 0, forecastRatio: 0, prediction_Wh: 2000, actual_Wh: null },
+      { time: Date.UTC(2024, 5, 20, 10), hour: 10, ghiClear_W_per_m2: 0, ghiForecast_W_per_m2: 0, forecastRatio: 0, predicted: 1000, actual: null },
+      { time: Date.UTC(2024, 5, 20, 11), hour: 11, ghiClear_W_per_m2: 0, ghiForecast_W_per_m2: 0, forecastRatio: 0, predicted: 2000, actual: null },
     ];
 
     const start = new Date(Date.UTC(2024, 5, 20, 10)).toISOString();
     const end = new Date(Date.UTC(2024, 5, 20, 12)).toISOString();
 
-    const series = buildPvForecastSeries(points, start, end);
+    const mapped = points.map(p => ({ time: p.time, value: p.predicted }));
+    const series = buildForecastSeries(mapped, start, end);
     expect(series.step).toBe(15);
     expect(series.values).toHaveLength(8); // 2 hours × 4 slots
 
@@ -287,7 +296,8 @@ describe('buildPvForecastSeries', () => {
     const start = new Date(Date.UTC(2024, 5, 20, 10)).toISOString();
     const end = new Date(Date.UTC(2024, 5, 20, 11)).toISOString();
 
-    const series = buildPvForecastSeries(points, start, end);
+    const mapped = points.map(p => ({ time: p.time, value: p.predicted }));
+    const series = buildForecastSeries(mapped, start, end);
     expect(series.values).toHaveLength(4);
     expect(series.values.every(v => v === 0)).toBe(true);
   });
@@ -307,8 +317,8 @@ describe('validatePvForecast', () => {
 
   it('computes MAE and RMSE correctly', () => {
     const points = [
-      { time: 0, hour: 10, ghiClear_W_per_m2: 0, ghiForecast_W_per_m2: 0, forecastRatio: 0, prediction_Wh: 100, actual_Wh: 80 },
-      { time: 1, hour: 11, ghiClear_W_per_m2: 0, ghiForecast_W_per_m2: 0, forecastRatio: 0, prediction_Wh: 200, actual_Wh: 250 },
+      { time: 0, hour: 10, ghiClear_W_per_m2: 0, ghiForecast_W_per_m2: 0, forecastRatio: 0, predicted: 100, actual: 80 },
+      { time: 1, hour: 11, ghiClear_W_per_m2: 0, ghiForecast_W_per_m2: 0, forecastRatio: 0, predicted: 200, actual: 250 },
     ];
 
     const metrics = validatePvForecast(points);
@@ -321,8 +331,8 @@ describe('validatePvForecast', () => {
 
   it('skips points where actual is null', () => {
     const points = [
-      { time: 0, hour: 10, ghiClear_W_per_m2: 0, ghiForecast_W_per_m2: 0, forecastRatio: 0, prediction_Wh: 100, actual_Wh: 80 },
-      { time: 1, hour: 11, ghiClear_W_per_m2: 0, ghiForecast_W_per_m2: 0, forecastRatio: 0, prediction_Wh: 200, actual_Wh: null },
+      { time: 0, hour: 10, ghiClear_W_per_m2: 0, ghiForecast_W_per_m2: 0, forecastRatio: 0, predicted: 100, actual: 80 },
+      { time: 1, hour: 11, ghiClear_W_per_m2: 0, ghiForecast_W_per_m2: 0, forecastRatio: 0, predicted: 200, actual: null },
     ];
 
     const metrics = validatePvForecast(points);

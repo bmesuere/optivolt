@@ -13,12 +13,11 @@ import {
   calculateMaxRatioPerHour,
   estimateHourlyCapacity,
   forecastPv,
-  buildPvForecastSeries,
   validatePvForecast,
 } from '../../lib/predict-pv.ts';
 import type { PvProductionRecord, PvForecastPoint } from '../../lib/predict-pv.ts';
-import type { ForecastSeries } from '../../lib/predict-load.ts';
 import type { PredictionConfig } from '../types.ts';
+import { getForecastTimeRange, buildForecastSeries, type ForecastSeries } from '../../lib/time-series-utils.ts';
 
 export interface PvForecastRunResult {
   forecast: ForecastSeries;
@@ -99,29 +98,21 @@ export async function runPvForecast(config: PredictionConfig): Promise<PvForecas
 
   // 7. Build 15-min series for the solver (from future points only)
   const now = new Date();
-  const currentHour = now.getHours();
+  const { startIso, endIso } = getForecastTimeRange(now.getTime());
 
-  const seriesEnd = new Date(now);
-  seriesEnd.setMinutes(0, 0, 0);
-  if (currentHour < 13) {
-    seriesEnd.setDate(seriesEnd.getDate() + 1);
-    seriesEnd.setHours(0, 0, 0, 0);
-  } else {
-    seriesEnd.setDate(seriesEnd.getDate() + 2);
-    seriesEnd.setHours(0, 0, 0, 0);
-  }
+  // time range is computed by getForecastTimeRange
 
-  const startMs = Math.floor(now.getTime() / (15 * 60 * 1000)) * (15 * 60 * 1000);
-  const startIso = new Date(startMs).toISOString();
-  const endIso = seriesEnd.toISOString();
-
-  const forecast = buildPvForecastSeries(futurePoints, startIso, endIso);
+  const mappedFuturePoints = futurePoints.map(p => ({
+    time: p.time,
+    value: p.predicted ?? 0
+  }));
+  const forecast = buildForecastSeries(mappedFuturePoints, startIso, endIso);
 
   // 8. Split: future points for forecast chart, archive points for validation chart
   const nowMs = now.getTime();
   const points = futurePoints.filter(p => p.time >= nowMs - 3600000);
   const recentCutoff = nowMs - 7 * 24 * 60 * 60 * 1000;
-  const recent = archivePoints.filter(p => p.time >= recentCutoff && p.time < nowMs && p.actual_Wh !== null);
+  const recent = archivePoints.filter(p => p.time >= recentCutoff && p.time < nowMs && p.actual !== null);
 
   // 9. Validation metrics
   const metrics = validatePvForecast(recent);
