@@ -302,8 +302,10 @@ export function forecastPv(
   const points: PvForecastPoint[] = [];
 
   for (const rec of forecastIrradiance) {
-    // Bird clear-sky GHI at mid-interval
-    const midInterval = new Date(rec.time + (rec.intervalMinutes / 2) * 60 * 1000);
+    // To match the hourly capacity estimation baseline, we evaluate the
+    // Bird clear-sky GHI at the mid-point of the hour (HH:30) for ALL slots.
+    const hourStartMs = Math.floor(rec.time / 3600000) * 3600000;
+    const midInterval = new Date(hourStartMs + 30 * 60 * 1000);
     const ghiClear = calculateClearSkyGHI(lat, lon, midInterval);
 
     // Forecast ratio
