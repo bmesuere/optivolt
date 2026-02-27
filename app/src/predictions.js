@@ -13,12 +13,9 @@ import {
   runCombinedForecast,
 } from './api/api.js';
 import { debounce } from './utils.js';
-import { buildTimeAxisFromTimestamps, getBaseOptions, renderChart, SOLUTION_COLORS } from './charts.js';
+import { buildTimeAxisFromTimestamps, getBaseOptions, renderChart, toRGBA, SOLUTION_COLORS } from './charts.js';
 
-const toRGBA = (rgb, alpha = 1) => {
-  const m = /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/.exec(rgb);
-  return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${alpha})` : rgb;
-};
+const PV_COLOR = 'rgb(247, 171, 62)'; // amber — Solar to Grid
 
 let validationResults = null;
 let _activeSensor = null;
@@ -27,9 +24,34 @@ let accuracyChart = null;
 export async function initPredictionsTab() {
   await hydrateForm();
   wireForm();
+  onForecastAll();
+}
 
-  // Auto-run forecast on load
-  onRecompute();
+// ---------------------------------------------------------------------------
+// Chart helpers
+// ---------------------------------------------------------------------------
+
+const stripe = (c) => window.pattern?.draw('diagonal', c) || c;
+
+/** Aggregate a 15-min ForecastSeries into { timestamps[], hourlyKwh[] }. */
+function aggregateHourlyKwh(forecast) {
+  const hourMap = new Map();
+  const values = forecast.values || [];
+  const startTs = new Date(forecast.start).getTime();
+  const stepMs = (forecast.step || 15) * 60 * 1000;
+
+  for (let i = 0; i < values.length; i++) {
+    const ts = startTs + i * stepMs;
+    const dt = new Date(ts);
+    dt.setMinutes(0, 0, 0, 0);
+    const hourKey = dt.getTime();
+    if (!hourMap.has(hourKey)) hourMap.set(hourKey, 0);
+    hourMap.set(hourKey, hourMap.get(hourKey) + values[i] * (stepMs / 3600000));
+  }
+
+  const timestamps = [...hourMap.keys()].sort((a, b) => a - b);
+  const hourlyKwh = timestamps.map(k => hourMap.get(k) / 1000);
+  return { timestamps, hourlyKwh };
 }
 
 // ---------------------------------------------------------------------------
@@ -60,40 +82,25 @@ function applyConfigToForm(config) {
     }
   }
 
-  /* Removed obsolete fields */
   setVal('pred-sensors', config.sensors ? JSON.stringify(config.sensors, null, 2) : '');
   setVal('pred-derived', config.derived ? JSON.stringify(config.derived, null, 2) : '');
 
-  // Populate sensor dropdown (load)
-  const sensorSelect = document.getElementById('pred-active-sensor');
-  const pvSensorSelect = document.getElementById('pred-pv-sensor');
-  const allSensors = [
-    ...(config.sensors || []),
-    ...(config.derived || []),
-  ];
+  // Populate both sensor dropdowns from the same list
+  const allSensors = [...(config.sensors || []), ...(config.derived || [])];
 
-  if (sensorSelect) {
-    sensorSelect.innerHTML = '<option value="" disabled selected>Select a sensor…</option>';
+  for (const selectId of ['pred-active-sensor', 'pred-pv-sensor']) {
+    const select = document.getElementById(selectId);
+    if (!select) continue;
+    select.innerHTML = '<option value="" disabled selected>Select a sensor…</option>';
     for (const s of allSensors) {
       const opt = document.createElement('option');
       opt.textContent = s.name || s.id;
       opt.value = opt.textContent;
-      sensorSelect.appendChild(opt);
+      select.appendChild(opt);
     }
   }
 
-  // Populate PV sensor dropdown
-  if (pvSensorSelect) {
-    pvSensorSelect.innerHTML = '<option value="" disabled selected>Select a sensor…</option>';
-    for (const s of allSensors) {
-      const opt = document.createElement('option');
-      opt.textContent = s.name || s.id;
-      opt.value = opt.textContent;
-      pvSensorSelect.appendChild(opt);
-    }
-  }
-
-  renderActiveConfig(config.activeConfig ?? null);
+  renderLoadConfig(config.activeConfig ?? null);
   renderPvConfig(config.pvConfig ?? null);
 }
 
@@ -104,26 +111,17 @@ function applyConfigToForm(config) {
 function wireForm() {
   const debouncedSave = debounce(saveFormToServer, 600);
 
-  /* Removed obsolete logic */
   for (const el of document.querySelectorAll('[data-predictions-only="true"]')) {
     el.addEventListener('input', debouncedSave);
     el.addEventListener('change', debouncedSave);
   }
 
-  const runBtn = document.getElementById('pred-run-validation');
-  if (runBtn) {
-    runBtn.addEventListener('click', onRunValidation);
-  }
-
-  const recomputeBtn = document.getElementById('pred-recompute');
-  if (recomputeBtn) {
-    recomputeBtn.addEventListener('click', onRecompute);
-  }
-
-  const pvRecomputeBtn = document.getElementById('pred-pv-recompute');
-  if (pvRecomputeBtn) {
-    pvRecomputeBtn.addEventListener('click', onPvRecompute);
-  }
+  document.getElementById('pred-run-validation')
+    ?.addEventListener('click', onRunValidation);
+  document.getElementById('pred-load-forecast')
+    ?.addEventListener('click', onForecastAll);
+  document.getElementById('pred-pv-forecast')
+    ?.addEventListener('click', onPvForecast);
 
   const settingsToggle = document.getElementById('pred-settings-toggle');
   const settingsBody = document.getElementById('pred-settings-body');
@@ -163,17 +161,11 @@ function readFormValues() {
     aggregation: getVal('pred-active-agg') || 'mean',
   } : null;
 
-  // PV config
-  const pvSensor = getVal('pred-pv-sensor');
-  const pvLat = getVal('pred-pv-lat');
-  const pvLon = getVal('pred-pv-lon');
-  const pvHistory = getVal('pred-pv-history');
-
   const pvConfig = {
-    pvSensor: pvSensor || 'Solar Generation',
-    latitude: pvLat ? parseFloat(pvLat) : 0,
-    longitude: pvLon ? parseFloat(pvLon) : 0,
-    historyDays: pvHistory ? parseInt(pvHistory, 10) : 14,
+    pvSensor: getVal('pred-pv-sensor') || 'Solar Generation',
+    latitude: parseFloat(getVal('pred-pv-lat')) || 0,
+    longitude: parseFloat(getVal('pred-pv-lon')) || 0,
+    historyDays: parseInt(getVal('pred-pv-history'), 10) || 14,
   };
 
   return {
@@ -187,64 +179,74 @@ function readFormValues() {
 }
 
 // ---------------------------------------------------------------------------
-// Recompute & Forecast (Load)
+// Combined forecast (runs on init and "Forecast Load" button)
 // ---------------------------------------------------------------------------
 
-async function onRecompute() {
-  updateSummaryStatus('Saving & Fetching...');
+async function onForecastAll() {
+  updateLoadStatus('Running load forecast…');
+  updatePvStatus('Running PV forecast…');
 
   try {
-    // 1. Save Config
     const partial = readFormValues();
     await savePredictionConfig(partial);
 
-    // 2. Fetch Forecast
-    updateSummaryStatus('Running forecast...');
     const result = await runCombinedForecast();
 
-    // 3. Render Load charts
-    const loadResult = result.load;
-    if (loadResult) {
-      renderForecastChart(loadResult);
-      renderHistoryChart(loadResult.recent);
-
-      // 4. Update Summary
-      const values = loadResult.forecast?.values || [];
-      const peak = values.length ? Math.max(...values) : 0;
-      const min = values.length ? Math.min(...values) : 0;
-      const totalWh = values.reduce((a, b) => a + b, 0) * 0.25; // 15min slots
-      const totalKwh = totalWh / 1000;
-
-      // Calculate Avg Error (MAE) from recent data
-      let avgErrorW = 0;
-      if (loadResult.recent && loadResult.recent.length > 0) {
-        const validEntries = loadResult.recent.filter(r => r.actual != null && r.predicted != null);
-        if (validEntries.length > 0) {
-          const sumError = validEntries.reduce((acc, r) => acc + Math.abs(r.actual - r.predicted), 0);
-          avgErrorW = sumError / validEntries.length;
-        }
-      }
-
-      updateSummaryMetrics(totalKwh, peak, min, avgErrorW);
+    // Load
+    if (result.load) {
+      renderLoadForecastChart(result.load);
+      renderLoadAccuracyChart(result.load.recent);
+      updateLoadMetrics(result.load);
+      updateLoadStatus('Load forecast updated');
+    } else {
+      updateLoadStatus('Load forecast skipped');
     }
 
-    // 5. Render PV charts
-    const pvResult = result.pv;
-    if (pvResult) {
-      renderPvForecastChart(pvResult);
-      renderPvHistoryChart(pvResult.recent);
-      updatePvSummary(pvResult);
+    // PV
+    if (result.pv) {
+      renderPvForecastChart(result.pv);
+      renderPvAccuracyChart(result.pv.recent);
+      updatePvMetrics(result.pv);
+      updatePvStatus('PV forecast updated');
+    } else {
+      updatePvStatus('PV forecast skipped');
     }
-
-    updateSummaryStatus('Predictions updated.', false);
   } catch (err) {
     console.error(err);
-    updateSummaryStatus('Error: ' + err.message, true);
+    updateLoadStatus('Error: ' + err.message, true);
+    updatePvStatus('Error: ' + err.message, true);
   }
 }
 
-function updateSummaryStatus(msg, isError = false) {
-  const el = document.getElementById('summary-status');
+// ---------------------------------------------------------------------------
+// PV-only forecast ("Forecast PV" button)
+// ---------------------------------------------------------------------------
+
+async function onPvForecast() {
+  updatePvStatus('Running PV forecast…');
+
+  try {
+    const partial = readFormValues();
+    await savePredictionConfig(partial);
+
+    const result = await runPvForecast();
+
+    renderPvForecastChart(result);
+    renderPvAccuracyChart(result.recent);
+    updatePvMetrics(result);
+    updatePvStatus('PV forecast updated');
+  } catch (err) {
+    console.error(err);
+    updatePvStatus('Error: ' + err.message, true);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Load: status, metrics, charts
+// ---------------------------------------------------------------------------
+
+function updateLoadStatus(msg, isError = false) {
+  const el = document.getElementById('load-summary-status');
   if (!el) return;
   el.textContent = msg;
   el.className = isError
@@ -252,83 +254,55 @@ function updateSummaryStatus(msg, isError = false) {
     : 'text-sm font-medium text-emerald-600 dark:text-emerald-400';
 }
 
-function updateSummaryMetrics(kwh, peakW, minW, avgErrorW) {
-  const loadEl = document.getElementById('summary-total');
-  const peakEl = document.getElementById('summary-peak');
-  const minEl = document.getElementById('summary-min');
-  const errorEl = document.getElementById('summary-error');
+function updateLoadMetrics(loadResult) {
+  const values = loadResult.forecast?.values || [];
+  const peak = values.length ? Math.max(...values) : 0;
+  const min = values.length ? Math.min(...values) : 0;
+  const totalKwh = values.reduce((a, b) => a + b, 0) * 0.25 / 1000;
 
-  if (loadEl) loadEl.textContent = kwh.toFixed(1);
-  if (peakEl) peakEl.textContent = Math.round(peakW).toLocaleString();
-  if (minEl && minW !== undefined) minEl.textContent = Math.round(minW).toLocaleString();
-  if (errorEl && avgErrorW !== undefined) errorEl.textContent = Math.round(avgErrorW).toLocaleString();
-}
-
-function renderForecastChart({ forecast }) {
-  const canvas = document.getElementById('pred-forecast-chart');
-  if (!canvas) return;
-
-  // Aggregate 15-min slots into hourly kWh buckets for display
-  const hourMap = new Map();
-  const values = forecast.values || [];
-  const startTs = new Date(forecast.start).getTime();
-  const stepMs = (forecast.step || 15) * 60 * 1000;
-
-  for (let i = 0; i < values.length; i++) {
-    const ts = startTs + i * stepMs;
-    const dt = new Date(ts);
-    dt.setMinutes(0, 0, 0, 0);
-    const hourKey = dt.getTime();
-
-    if (!hourMap.has(hourKey)) hourMap.set(hourKey, 0);
-
-    // Watts * hours = Wh. 15min = 0.25 hours.
-    const wh = values[i] * (stepMs / 3600000);
-    hourMap.set(hourKey, hourMap.get(hourKey) + wh);
+  let avgErrorW = 0;
+  const recent = loadResult.recent || [];
+  const valid = recent.filter(r => r.actual != null && r.predicted != null);
+  if (valid.length > 0) {
+    avgErrorW = valid.reduce((acc, r) => acc + Math.abs(r.actual - r.predicted), 0) / valid.length;
   }
 
-  const sortedKeys = [...hourMap.keys()].sort((a, b) => a - b);
-  const hourlyKwh = sortedKeys.map(k => hourMap.get(k) / 1000); // Wh -> kWh
-  const axis = buildTimeAxisFromTimestamps(sortedKeys);
+  setEl('load-summary-total', totalKwh.toFixed(1));
+  setEl('load-summary-peak', Math.round(peak).toLocaleString());
+  setEl('load-summary-min', Math.round(min).toLocaleString());
+  setEl('load-summary-error', Math.round(avgErrorW).toLocaleString());
+}
 
-  const dim = (rgb) => {
-    const m = /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/.exec(rgb);
-    return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, 0.6)` : rgb;
-  };
-  const stripe = (c) => window.pattern?.draw('diagonal', c) || c;
+function renderLoadForecastChart({ forecast }) {
+  const canvas = document.getElementById('load-forecast-chart');
+  if (!canvas) return;
+
+  const { timestamps, hourlyKwh } = aggregateHourlyKwh(forecast);
+  const axis = buildTimeAxisFromTimestamps(timestamps);
 
   renderChart(canvas, {
     type: 'bar',
     data: {
       labels: axis.labels,
-      datasets: [
-        {
-          label: 'Consumption Forecast',
-          data: hourlyKwh,
-          backgroundColor: stripe(SOLUTION_COLORS.g2l),
-          borderColor: SOLUTION_COLORS.g2l,
-          borderWidth: 1,
-          hoverBackgroundColor: stripe(dim(SOLUTION_COLORS.g2l)),
-        }
-      ]
+      datasets: [{
+        label: 'Load Forecast',
+        data: hourlyKwh,
+        backgroundColor: stripe(SOLUTION_COLORS.g2l),
+        borderColor: SOLUTION_COLORS.g2l,
+        borderWidth: 1,
+        hoverBackgroundColor: stripe(toRGBA(SOLUTION_COLORS.g2l, 0.6)),
+      }]
     },
     options: getBaseOptions({ ...axis, yTitle: 'kWh' })
   });
 }
 
-function renderHistoryChart(recentData) {
-  const canvas = document.getElementById('pred-history-chart');
-  if (!canvas) return;
-
-  if (!recentData || recentData.length === 0) return;
+function renderLoadAccuracyChart(recentData) {
+  const canvas = document.getElementById('load-accuracy-chart');
+  if (!canvas || !recentData || recentData.length === 0) return;
 
   const sorted = [...recentData].sort((a, b) => a.time - b.time);
-
-  const timestamps = sorted.map(d => d.time);
-  const axis = buildTimeAxisFromTimestamps(timestamps);
-
-  const actuals = sorted.map(d => d.actual / 1000);
-  const predicteds = sorted.map(d => d.predicted / 1000);
+  const axis = buildTimeAxisFromTimestamps(sorted.map(d => d.time));
 
   renderChart(canvas, {
     type: 'line',
@@ -337,7 +311,7 @@ function renderHistoryChart(recentData) {
       datasets: [
         {
           label: 'Actual',
-          data: actuals,
+          data: sorted.map(d => d.actual / 1000),
           borderColor: 'transparent',
           backgroundColor: toRGBA(SOLUTION_COLORS.b2l, 0.25),
           borderWidth: 0,
@@ -347,7 +321,7 @@ function renderHistoryChart(recentData) {
         },
         {
           label: 'Prediction',
-          data: predicteds,
+          data: sorted.map(d => d.predicted / 1000),
           borderColor: SOLUTION_COLORS.g2l,
           backgroundColor: 'transparent',
           borderWidth: 2,
@@ -362,28 +336,8 @@ function renderHistoryChart(recentData) {
 }
 
 // ---------------------------------------------------------------------------
-// PV Forecast
+// PV: status, metrics, charts
 // ---------------------------------------------------------------------------
-
-async function onPvRecompute() {
-  updatePvStatus('Saving & Fetching...');
-
-  try {
-    const partial = readFormValues();
-    await savePredictionConfig(partial);
-
-    updatePvStatus('Running PV forecast...');
-    const result = await runPvForecast();
-
-    renderPvForecastChart(result);
-    renderPvHistoryChart(result.recent);
-    updatePvSummary(result);
-    updatePvStatus('PV forecast updated.', false);
-  } catch (err) {
-    console.error(err);
-    updatePvStatus('Error: ' + err.message, true);
-  }
-}
 
 function updatePvStatus(msg, isError = false) {
   const el = document.getElementById('pv-summary-status');
@@ -391,55 +345,28 @@ function updatePvStatus(msg, isError = false) {
   el.textContent = msg;
   el.className = isError
     ? 'text-sm font-medium text-red-600 dark:text-red-400'
-    : 'text-sm font-medium text-amber-600 dark:text-amber-400';
+    : 'text-sm font-medium text-emerald-600 dark:text-emerald-400';
 }
 
-function updatePvSummary(result) {
-  if (!result || !result.forecast) return;
+function updatePvMetrics(pvResult) {
+  if (!pvResult || !pvResult.forecast) return;
 
-  const values = result.forecast.values || [];
+  const values = pvResult.forecast.values || [];
   const peak = values.length ? Math.max(...values) : 0;
-  const totalWh = values.reduce((a, b) => a + b, 0) * 0.25;
-  const totalKwh = totalWh / 1000;
-  const avgError = result.metrics?.mae ?? 0;
+  const totalKwh = values.reduce((a, b) => a + b, 0) * 0.25 / 1000;
+  const avgError = pvResult.metrics?.mae ?? 0;
 
-  const totalEl = document.getElementById('pv-summary-total');
-  const peakEl = document.getElementById('pv-summary-peak');
-  const errorEl = document.getElementById('pv-summary-error');
-
-  if (totalEl) totalEl.textContent = totalKwh.toFixed(1);
-  if (peakEl) peakEl.textContent = Math.round(peak).toLocaleString();
-  if (errorEl) errorEl.textContent = Math.round(avgError).toLocaleString();
+  setEl('pv-summary-total', totalKwh.toFixed(1));
+  setEl('pv-summary-peak', Math.round(peak).toLocaleString());
+  setEl('pv-summary-error', Math.round(avgError).toLocaleString());
 }
-
-const PV_COLOR = 'rgb(247, 171, 62)'; // amber — Solar to Grid
 
 function renderPvForecastChart(result) {
   const canvas = document.getElementById('pv-forecast-chart');
-  if (!canvas || !result || !result.forecast) return;
+  if (!canvas || !result?.forecast) return;
 
-  const forecast = result.forecast;
-  const hourMap = new Map();
-  const values = forecast.values || [];
-  const startTs = new Date(forecast.start).getTime();
-  const stepMs = (forecast.step || 15) * 60 * 1000;
-
-  for (let i = 0; i < values.length; i++) {
-    const ts = startTs + i * stepMs;
-    const dt = new Date(ts);
-    dt.setMinutes(0, 0, 0, 0);
-    const hourKey = dt.getTime();
-
-    if (!hourMap.has(hourKey)) hourMap.set(hourKey, 0);
-    const wh = values[i] * (stepMs / 3600000);
-    hourMap.set(hourKey, hourMap.get(hourKey) + wh);
-  }
-
-  const sortedKeys = [...hourMap.keys()].sort((a, b) => a - b);
-  const hourlyKwh = sortedKeys.map(k => hourMap.get(k) / 1000);
-  const axis = buildTimeAxisFromTimestamps(sortedKeys);
-
-  const stripe = (c) => window.pattern?.draw('diagonal', c) || c;
+  const { timestamps, hourlyKwh } = aggregateHourlyKwh(result.forecast);
+  const axis = buildTimeAxisFromTimestamps(timestamps);
 
   renderChart(canvas, {
     type: 'bar',
@@ -457,19 +384,12 @@ function renderPvForecastChart(result) {
   });
 }
 
-function renderPvHistoryChart(recentData) {
-  const canvas = document.getElementById('pv-history-chart');
-  if (!canvas) return;
-
-  if (!recentData || recentData.length === 0) return;
+function renderPvAccuracyChart(recentData) {
+  const canvas = document.getElementById('pv-accuracy-chart');
+  if (!canvas || !recentData || recentData.length === 0) return;
 
   const sorted = [...recentData].sort((a, b) => a.time - b.time);
-
-  const timestamps = sorted.map(d => d.time);
-  const axis = buildTimeAxisFromTimestamps(timestamps);
-
-  const predicted = sorted.map(d => (d.prediction_Wh ?? 0) / 1000);
-  const actual = sorted.map(d => (d.actual_Wh ?? 0) / 1000);
+  const axis = buildTimeAxisFromTimestamps(sorted.map(d => d.time));
 
   renderChart(canvas, {
     type: 'line',
@@ -478,7 +398,7 @@ function renderPvHistoryChart(recentData) {
       datasets: [
         {
           label: 'Actual',
-          data: actual,
+          data: sorted.map(d => (d.actual_Wh ?? 0) / 1000),
           borderColor: 'transparent',
           backgroundColor: toRGBA(SOLUTION_COLORS.pv2b, 0.25),
           borderWidth: 0,
@@ -488,7 +408,7 @@ function renderPvHistoryChart(recentData) {
         },
         {
           label: 'Predicted',
-          data: predicted,
+          data: sorted.map(d => (d.prediction_Wh ?? 0) / 1000),
           borderColor: PV_COLOR,
           backgroundColor: 'transparent',
           borderWidth: 2,
@@ -503,8 +423,16 @@ function renderPvHistoryChart(recentData) {
 }
 
 // ---------------------------------------------------------------------------
-// PV Config display
+// Config display
 // ---------------------------------------------------------------------------
+
+function renderLoadConfig(activeConfig) {
+  if (!activeConfig) return;
+  setVal('pred-active-sensor', activeConfig.sensor ?? '');
+  setVal('pred-active-lookback', activeConfig.lookbackWeeks ?? '');
+  setVal('pred-active-filter', activeConfig.dayFilter ?? '');
+  setVal('pred-active-agg', activeConfig.aggregation ?? '');
+}
 
 function renderPvConfig(pvConfig) {
   if (!pvConfig) return;
@@ -514,9 +442,8 @@ function renderPvConfig(pvConfig) {
   setVal('pred-pv-history', pvConfig.historyDays ?? 14);
 }
 
-
 // ---------------------------------------------------------------------------
-// Run validation
+// Validation
 // ---------------------------------------------------------------------------
 
 async function onRunValidation() {
@@ -531,18 +458,17 @@ async function onRunValidation() {
   try {
     const resultsEl = document.getElementById('pred-results');
 
-    setStatus('Saving config…');
+    setComparisonStatus('Saving config…');
 
     try {
-      // Save latest form values first
       const partial = readFormValues();
       await savePredictionConfig(partial);
     } catch (err) {
-      setStatus(`Save failed: ${err.message}`, true);
+      setComparisonStatus(`Save failed: ${err.message}`, true);
       return;
     }
 
-    setStatus('Fetching HA data and running validation…');
+    setComparisonStatus('Fetching HA data and running validation…');
     if (resultsEl) resultsEl.hidden = true;
     const noResultsEl = document.getElementById('pred-no-results');
     if (noResultsEl) noResultsEl.hidden = true;
@@ -551,9 +477,9 @@ async function onRunValidation() {
       const result = await runValidation();
       validationResults = result;
       renderResults(result);
-      setStatus(`Validation complete. ${result.results.length} combinations evaluated.`);
+      setComparisonStatus(`Validation complete — ${result.results.length} combinations evaluated`);
     } catch (err) {
-      setStatus(`Error: ${err.message}`, true);
+      setComparisonStatus(`Error: ${err.message}`, true);
     }
   } finally {
     if (runBtn) {
@@ -565,7 +491,7 @@ async function onRunValidation() {
 }
 
 // ---------------------------------------------------------------------------
-// Render results
+// Render validation results
 // ---------------------------------------------------------------------------
 
 function renderResults({ sensorNames, results }) {
@@ -577,10 +503,8 @@ function renderResults({ sensorNames, results }) {
   const noResultsEl = document.getElementById('pred-no-results');
   if (noResultsEl) noResultsEl.hidden = true;
 
-  // Sensor tabs
   renderSensorTabs(sensorNames);
 
-  // Default to first sensor
   const firstSensor = sensorNames[0] ?? null;
   if (firstSensor) {
     _activeSensor = firstSensor;
@@ -615,14 +539,10 @@ function renderSensorTabs(sensorNames) {
 function updateTabActive(container, activeName) {
   for (const btn of container.querySelectorAll('button')) {
     const isActive = btn.dataset.sensor === activeName;
-
-    // Active state
     btn.classList.toggle('bg-sky-600', isActive);
     btn.classList.toggle('text-white', isActive);
     btn.classList.toggle('border-sky-600', isActive);
     btn.classList.toggle('hover:bg-sky-700', isActive);
-
-    // Inactive state
     btn.classList.toggle('bg-white', !isActive);
     btn.classList.toggle('dark:bg-slate-800', !isActive);
     btn.classList.toggle('text-slate-700', !isActive);
@@ -676,16 +596,12 @@ async function onUseConfig(row) {
   };
 
   try {
-    // Update inputs first to reflect the choice
-    renderActiveConfig(activeConfig);
-
-    // Then save (which will read from the inputs)
+    renderLoadConfig(activeConfig);
     const partial = readFormValues();
     await savePredictionConfig(partial);
-
-    setStatus(`Active config updated: ${row.sensor} / ${row.lookbackWeeks}w / ${row.dayFilter} / ${row.aggregation}`);
+    setComparisonStatus(`Active config updated: ${row.sensor} / ${row.lookbackWeeks}w / ${row.dayFilter} / ${row.aggregation}`);
   } catch (err) {
-    setStatus(`Failed to save active config: ${err.message}`, true);
+    setComparisonStatus(`Failed to save active config: ${err.message}`, true);
   }
 }
 
@@ -701,8 +617,6 @@ function onShowChart(row) {
     const d = new Date(p.date);
     return `${d.toISOString().slice(5, 10)} ${String(p.hour).padStart(2, '0')}h`;
   });
-  const actualData = preds.map(p => p.actual);
-  const predictedData = preds.map(p => p.predicted);
 
   if (accuracyChart) {
     accuracyChart.destroy();
@@ -716,7 +630,7 @@ function onShowChart(row) {
       datasets: [
         {
           label: 'Actual (Wh)',
-          data: actualData,
+          data: preds.map(p => p.actual),
           borderColor: 'rgb(14, 165, 233)',
           backgroundColor: 'rgba(14, 165, 233, 0.1)',
           borderWidth: 1.5,
@@ -725,7 +639,7 @@ function onShowChart(row) {
         },
         {
           label: 'Predicted (Wh)',
-          data: predictedData,
+          data: preds.map(p => p.predicted),
           borderColor: 'rgb(249, 115, 22)',
           backgroundColor: 'rgba(249, 115, 22, 0.1)',
           borderWidth: 1.5,
@@ -738,9 +652,7 @@ function onShowChart(row) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: { legend: { position: 'top' } },
-      scales: {
-        y: { title: { display: true, text: 'Wh' } },
-      },
+      scales: { y: { title: { display: true, text: 'Wh' } } },
     },
   });
 
@@ -751,29 +663,21 @@ function onShowChart(row) {
 }
 
 // ---------------------------------------------------------------------------
-// Active config display
-// ---------------------------------------------------------------------------
-
-function renderActiveConfig(activeConfig) {
-  if (!activeConfig) return;
-
-  setVal('pred-active-sensor', activeConfig.sensor ?? '');
-  setVal('pred-active-lookback', activeConfig.lookbackWeeks ?? '');
-  setVal('pred-active-filter', activeConfig.dayFilter ?? '');
-  setVal('pred-active-agg', activeConfig.aggregation ?? '');
-}
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function setStatus(msg, isError = false) {
+function setComparisonStatus(msg, isError = false) {
   const el = document.getElementById('pred-status');
   if (!el) return;
   el.textContent = msg;
   el.className = isError
     ? 'text-sm text-red-600 dark:text-red-400'
     : 'text-sm text-ink-soft dark:text-slate-400';
+}
+
+function setEl(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
 }
 
 function setVal(id, value) {
@@ -786,9 +690,6 @@ function getVal(id) {
 }
 
 function parseSilently(str) {
-  try {
-    return JSON.parse(str);
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(str); }
+  catch { return null; }
 }

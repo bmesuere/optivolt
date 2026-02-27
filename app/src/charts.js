@@ -11,7 +11,7 @@ export const SOLUTION_COLORS = {
   soc: "rgb(71, 144, 208)"    // SoC line color = battery-ish blue
 };
 
-const toRGBA = (rgb, alpha = 1) => {
+export const toRGBA = (rgb, alpha = 1) => {
   const m = /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/.exec(rgb);
   return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${alpha})` : rgb;
 };
