@@ -164,7 +164,7 @@ function readFormValues() {
     latitude: parseFloat(getVal('pred-pv-lat')) || 0,
     longitude: parseFloat(getVal('pred-pv-lon')) || 0,
     historyDays: parseInt(getVal('pred-pv-history'), 10) || 14,
-    forecastResolution: parseInt(getVal('pred-pv-resolution'), 10) || 60,
+    pvMode: getVal('pred-pv-mode') || 'hourly',
   };
 
   return {
@@ -445,7 +445,9 @@ function renderPvConfig(pvConfig) {
   setVal('pred-pv-lat', pvConfig.latitude ?? '');
   setVal('pred-pv-lon', pvConfig.longitude ?? '');
   setVal('pred-pv-history', pvConfig.historyDays ?? 14);
-  setVal('pred-pv-resolution', pvConfig.forecastResolution ?? 60);
+  // @deprecated: migrate old forecastResolution to pvMode
+  const pvMode = pvConfig.pvMode ?? (pvConfig.forecastResolution === 15 ? 'hybrid' : 'hourly');
+  setVal('pred-pv-mode', pvMode);
 }
 
 

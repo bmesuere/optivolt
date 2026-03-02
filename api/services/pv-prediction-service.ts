@@ -6,17 +6,22 @@
  */
 
 import { fetchHaStats } from './ha-client.ts';
-import { postprocess } from '../../lib/ha-postprocess.ts';
+import { postprocess, aggregateTo15Min } from '../../lib/ha-postprocess.ts';
 import { fetchArchiveIrradiance, fetchForecastIrradiance } from './open-meteo-client.ts';
+import { expandHourlyTo15Min } from '../../lib/open-meteo.ts';
 import {
   calculateMaxProductionPerHour,
+  calculateMaxProductionPerSlot,
   calculateMaxRatioPerHour,
   estimateHourlyCapacity,
+  estimateSlotCapacity,
   forecastPv,
+  forecastPvSlot,
+  slotOfDay,
   validatePvForecast,
 } from '../../lib/predict-pv.ts';
 import type { PvProductionRecord, PvForecastPoint } from '../../lib/predict-pv.ts';
-import type { PredictionConfig } from '../types.ts';
+import type { PredictionConfig, PvMode } from '../types.ts';
 import { getForecastTimeRange, buildForecastSeries, type ForecastSeries } from '../../lib/time-series-utils.ts';
 
 export interface PvForecastRunResult {
@@ -37,7 +42,14 @@ export async function runPvForecast(config: PredictionConfig): Promise<PvForecas
   }
 
   const { latitude, longitude, historyDays, pvSensor } = pvConfig;
-  const forecastResolution = pvConfig.forecastResolution ?? 60;
+
+  // Resolve pvMode — prefer the new field, fall back to deprecated forecastResolution.
+  // @deprecated fallback: forecastResolution === 15 → 'hybrid', else 'hourly'
+  const pvMode: PvMode = pvConfig.pvMode
+    ?? (pvConfig.forecastResolution === 15 ? 'hybrid' : 'hourly');
+
+  const is15MinMode = pvMode === '15min';
+  const forecastResolution = pvMode === 'hourly' ? 60 : 15;
 
   if (latitude == null || Number.isNaN(latitude) || longitude == null || Number.isNaN(longitude)) {
     throw new Error('Latitude and longitude must be configured for PV forecasting');
@@ -47,7 +59,9 @@ export async function runPvForecast(config: PredictionConfig): Promise<PvForecas
 
   // 1. Fetch historic PV production from HA
   const endTime = new Date();
-  const startTime = new Date(endTime.getTime() - historyDays * 24 * 60 * 60 * 1000);
+  // HA 5-min statistics have ~10 day retention; clamp for 15min mode.
+  const effectiveHistoryDays = is15MinMode ? Math.min(historyDays, 10) : historyDays;
+  const startTime = new Date(endTime.getTime() - effectiveHistoryDays * 24 * 60 * 60 * 1000);
   const startTimeStr = startTime.toISOString();
 
   const rawData = await fetchHaStats({
@@ -55,9 +69,17 @@ export async function runPvForecast(config: PredictionConfig): Promise<PvForecas
     haToken,
     entityIds,
     startTime: startTimeStr,
+    period: is15MinMode ? '5minute' : 'hour',
   });
 
-  const data = postprocess(rawData, sensors, derived);
+  let data = postprocess(rawData, sensors, derived);
+  if (is15MinMode) {
+    data = aggregateTo15Min(data);
+  }
+
+  // The LP expects pv_W (watts = Wh/hour average). Hourly HA data directly gives
+  // Wh/hour. 15-min HA data gives Wh/15min, so we scale ×4 to get Wh/hour = W.
+  const productionScale = is15MinMode ? 4 : 1;
 
   // Filter to the PV sensor and convert to PvProductionRecord[]
   const pvRecords: PvProductionRecord[] = data
@@ -65,43 +87,54 @@ export async function runPvForecast(config: PredictionConfig): Promise<PvForecas
     .map(d => ({
       time: d.time,
       hour: d.hour,
-      production_Wh: d.value,
+      ...(is15MinMode ? { slot: slotOfDay(d.time) } : {}),
+      production_Wh: d.value * productionScale,
     }));
 
-  // Build actual production map for validation (timestamp → Wh)
+  // Build actual production map for validation (timestamp → scaled Wh)
+  // Scale matches pvRecords so error metrics are in consistent units.
   const actualsMap = new Map<number, number>();
   for (const d of data) {
     if (d.sensor === pvSensor) {
-      actualsMap.set(d.time, d.value);
+      actualsMap.set(d.time, d.value * productionScale);
     }
   }
 
-  // 2. Fetch historic irradiance from Open-Meteo Archive
+  // 2. Fetch historic irradiance from Open-Meteo Archive (always hourly)
   const startDate = startTime.toISOString().slice(0, 10);
   const endDate = endTime.toISOString().slice(0, 10);
   const archiveIrradiance = await fetchArchiveIrradiance(latitude, longitude, startDate, endDate);
 
   // 3. Capacity estimation
-  const maxProd = calculateMaxProductionPerHour(pvRecords);
   const maxRatio = calculateMaxRatioPerHour(archiveIrradiance, latitude, longitude);
-  const capacity = estimateHourlyCapacity(maxProd, maxRatio);
 
   // 4. Fetch forecast irradiance from Open-Meteo
   const forecastIrradiance = await fetchForecastIrradiance(latitude, longitude, undefined, forecastResolution);
 
-  // 5. Generate forecast points for future (from forecast API)
-  const futurePoints = forecastPv(capacity, forecastIrradiance, latitude, longitude, actualsMap);
+  // 5. Generate forecast and validation points, branching on mode
+  let futurePoints: PvForecastPoint[];
+  let archivePoints: PvForecastPoint[];
 
-  // 6. Generate historical comparison points from archive irradiance
-  //    This gives us predicted-vs-actual for the full history period, not just
-  //    the ~2 days covered by the forecast API's past_days parameter.
-  const archivePoints = forecastPv(capacity, archiveIrradiance, latitude, longitude, actualsMap);
+  if (is15MinMode) {
+    const maxProd96 = calculateMaxProductionPerSlot(pvRecords);
+    const slotCapacity = estimateSlotCapacity(maxProd96, maxRatio);
 
-  // 7. Build 15-min series for the solver (from future points only)
+    futurePoints = forecastPvSlot(slotCapacity, forecastIrradiance, latitude, longitude, actualsMap);
+
+    // Expand hourly archive to 15-min for slot-level validation
+    const archiveIrradiance15 = expandHourlyTo15Min(archiveIrradiance);
+    archivePoints = forecastPvSlot(slotCapacity, archiveIrradiance15, latitude, longitude, actualsMap);
+  } else {
+    const maxProd = calculateMaxProductionPerHour(pvRecords);
+    const capacity = estimateHourlyCapacity(maxProd, maxRatio);
+
+    futurePoints = forecastPv(capacity, forecastIrradiance, latitude, longitude, actualsMap);
+    archivePoints = forecastPv(capacity, archiveIrradiance, latitude, longitude, actualsMap);
+  }
+
+  // 6. Build 15-min series for the solver (from future points only)
   const now = new Date();
   const { startIso, endIso } = getForecastTimeRange(now.getTime());
-
-  // time range is computed by getForecastTimeRange
 
   const mappedFuturePoints = futurePoints.map(p => ({
     time: p.time,
@@ -109,13 +142,13 @@ export async function runPvForecast(config: PredictionConfig): Promise<PvForecas
   }));
   const forecast = buildForecastSeries(mappedFuturePoints, startIso, endIso, forecastResolution);
 
-  // 8. Split: future points for forecast chart, archive points for validation chart
+  // 7. Split: future points for forecast chart, archive points for validation chart
   const nowMs = now.getTime();
   const points = futurePoints.filter(p => p.time >= nowMs - 3600000);
   const recentCutoff = nowMs - 7 * 24 * 60 * 60 * 1000;
   const recent = archivePoints.filter(p => p.time >= recentCutoff && p.time < nowMs && p.actual !== null);
 
-  // 9. Validation metrics
+  // 8. Validation metrics
   const metrics = validatePvForecast(recent);
 
   return { forecast, points, recent, metrics };

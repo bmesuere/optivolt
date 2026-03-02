@@ -151,6 +151,30 @@ export function parseMinutely15Response(data: OpenMeteoMinutely15Response): Irra
 }
 
 /**
+ * Expand hourly IrradianceRecords into 15-minute records for validation.
+ *
+ * Each hourly record is split into 4 × 15-min records with the same GHI value
+ * but timestamps at +0, +15, +30, +45 minutes within the hour.
+ * This allows forecastPvSlot() to evaluate Bird clear-sky at each 15-min
+ * mid-interval and match against 15-min actuals from HA.
+ */
+export function expandHourlyTo15Min(records: IrradianceRecord[]): IrradianceRecord[] {
+  const expanded: IrradianceRecord[] = [];
+  for (const rec of records) {
+    for (let q = 0; q < 4; q++) {
+      const slotMs = rec.time + q * 15 * 60 * 1000;
+      expanded.push({
+        time: slotMs,
+        hour: new Date(slotMs).getUTCHours(),
+        ghi_W_per_m2: rec.ghi_W_per_m2,
+        intervalMinutes: 15,
+      });
+    }
+  }
+  return expanded;
+}
+
+/**
  * Dispatch to the appropriate parser based on resolution.
  */
 export function parseForecastResponse(data: unknown, resolution: 15 | 60): IrradianceRecord[] {

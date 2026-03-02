@@ -6,6 +6,10 @@ import {
   estimateHourlyCapacity,
   forecastPv,
   validatePvForecast,
+  slotOfDay,
+  calculateMaxProductionPerSlot,
+  estimateSlotCapacity,
+  forecastPvSlot,
 } from '../../lib/predict-pv.ts';
 import { buildForecastSeries } from '../../lib/time-series-utils.ts';
 
@@ -356,5 +360,133 @@ describe('validatePvForecast', () => {
     const metrics = validatePvForecast(points);
     expect(metrics.n).toBe(1);
     expect(metrics.mae).toBe(20);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// slotOfDay
+// ---------------------------------------------------------------------------
+
+describe('slotOfDay', () => {
+  it('returns 0 for midnight UTC', () => {
+    const t = new Date('2024-06-15T00:00:00Z').getTime();
+    expect(slotOfDay(t)).toBe(0);
+  });
+
+  it('returns 1 for 00:15 UTC', () => {
+    const t = new Date('2024-06-15T00:15:00Z').getTime();
+    expect(slotOfDay(t)).toBe(1);
+  });
+
+  it('returns 48 for noon UTC (12:00)', () => {
+    const t = new Date('2024-06-15T12:00:00Z').getTime();
+    expect(slotOfDay(t)).toBe(48);
+  });
+
+  it('returns 95 for 23:45 UTC', () => {
+    const t = new Date('2024-06-15T23:45:00Z').getTime();
+    expect(slotOfDay(t)).toBe(95);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// calculateMaxProductionPerSlot
+// ---------------------------------------------------------------------------
+
+describe('calculateMaxProductionPerSlot', () => {
+  it('returns an array of length 96', () => {
+    expect(calculateMaxProductionPerSlot([])).toHaveLength(96);
+  });
+
+  it('tracks the maximum per slot across multiple records', () => {
+    const t12_00 = new Date('2024-06-15T12:00:00Z').getTime();
+    const records = [
+      { time: t12_00, hour: 12, slot: 48, production_Wh: 300 },
+      { time: t12_00, hour: 12, slot: 48, production_Wh: 500 },
+      { time: t12_00, hour: 12, slot: 48, production_Wh: 400 },
+    ];
+    const result = calculateMaxProductionPerSlot(records);
+    expect(result[48]).toBe(500);
+  });
+
+  it('falls back to hour * 4 when slot is not set', () => {
+    const t12_00 = new Date('2024-06-15T12:00:00Z').getTime();
+    const records = [{ time: t12_00, hour: 12, production_Wh: 200 }];
+    const result = calculateMaxProductionPerSlot(records);
+    expect(result[48]).toBe(200); // 12 * 4 = 48
+  });
+});
+
+// ---------------------------------------------------------------------------
+// estimateSlotCapacity
+// ---------------------------------------------------------------------------
+
+describe('estimateSlotCapacity', () => {
+  it('returns an array of length 96', () => {
+    const maxProd = new Array(96).fill(0);
+    const maxRatio = new Array(24).fill(0);
+    expect(estimateSlotCapacity(maxProd, maxRatio)).toHaveLength(96);
+  });
+
+  it('uses the hourly ratio for all 4 slots in the same hour', () => {
+    const maxProd = new Array(96).fill(100);
+    const maxRatio = new Array(24).fill(0);
+    maxRatio[12] = 0.8; // hour 12
+    const result = estimateSlotCapacity(maxProd, maxRatio);
+    // Slots 48-51 correspond to hour 12
+    for (let s = 48; s < 52; s++) {
+      expect(result[s].trueCapacity_Wh).toBeCloseTo(100 / 0.8);
+    }
+  });
+
+  it('falls back to maxProd when ratio <= 0.1', () => {
+    const maxProd = new Array(96).fill(200);
+    const maxRatio = new Array(24).fill(0.05); // below threshold
+    const result = estimateSlotCapacity(maxProd, maxRatio);
+    expect(result[0].trueCapacity_Wh).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// forecastPvSlot
+// ---------------------------------------------------------------------------
+
+describe('forecastPvSlot', () => {
+  const lat = 51.05;
+  const lon = 3.71;
+
+  it('returns an empty array for empty irradiance input', () => {
+    expect(forecastPvSlot([], [], lat, lon)).toEqual([]);
+  });
+
+  it('returns zero prediction when capacity is all zero', () => {
+    const t = new Date('2024-06-15T12:00:00Z').getTime();
+    const capacity = new Array(96).fill(null).map((_, s) => ({
+      slot: s, maxProduction_Wh: 0, maxRatio: 0, trueCapacity_Wh: 0,
+    }));
+    const irr = [{ time: t, hour: 12, ghi_W_per_m2: 500, intervalMinutes: 15 }];
+    const points = forecastPvSlot(capacity, irr, lat, lon);
+    expect(points[0].predicted).toBe(0);
+  });
+
+  it('looks up actual from actuals map by timestamp', () => {
+    const t = new Date('2024-06-15T12:00:00Z').getTime();
+    const capacity = new Array(96).fill(null).map((_, s) => ({
+      slot: s, maxProduction_Wh: 1000, maxRatio: 1, trueCapacity_Wh: 1000,
+    }));
+    const irr = [{ time: t, hour: 12, ghi_W_per_m2: 400, intervalMinutes: 15 }];
+    const actuals = new Map([[t, 350]]);
+    const points = forecastPvSlot(capacity, irr, lat, lon, actuals);
+    expect(points[0].actual).toBe(350);
+  });
+
+  it('sets actual to null when not in actuals map', () => {
+    const t = new Date('2024-06-15T12:00:00Z').getTime();
+    const capacity = new Array(96).fill(null).map((_, s) => ({
+      slot: s, maxProduction_Wh: 1000, maxRatio: 1, trueCapacity_Wh: 1000,
+    }));
+    const irr = [{ time: t, hour: 12, ghi_W_per_m2: 400, intervalMinutes: 15 }];
+    const points = forecastPvSlot(capacity, irr, lat, lon);
+    expect(points[0].actual).toBeNull();
   });
 });

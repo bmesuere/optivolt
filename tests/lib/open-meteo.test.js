@@ -5,6 +5,7 @@ import {
   parseIrradianceResponse,
   parseMinutely15Response,
   parseForecastResponse,
+  expandHourlyTo15Min,
 } from '../../lib/open-meteo.ts';
 
 // ---------------------------------------------------------------------------
@@ -249,5 +250,62 @@ describe('parseForecastResponse', () => {
     const records = parseForecastResponse(data, 15);
     expect(records[0].intervalMinutes).toBe(15);
     expect(records[0].hour).toBe(13); // no shift
+  });
+});
+
+// ---------------------------------------------------------------------------
+// expandHourlyTo15Min
+// ---------------------------------------------------------------------------
+
+describe('expandHourlyTo15Min', () => {
+  const t13 = new Date('2024-06-15T13:00:00Z').getTime();
+
+  const hourlyRecord = {
+    time: t13,
+    hour: 13,
+    ghi_W_per_m2: 400,
+    intervalMinutes: 60,
+  };
+
+  it('expands one hourly record into 4 records', () => {
+    const result = expandHourlyTo15Min([hourlyRecord]);
+    expect(result).toHaveLength(4);
+  });
+
+  it('sets timestamps at +0, +15, +30, +45 minutes', () => {
+    const result = expandHourlyTo15Min([hourlyRecord]);
+    expect(result[0].time).toBe(t13);
+    expect(result[1].time).toBe(t13 + 15 * 60 * 1000);
+    expect(result[2].time).toBe(t13 + 30 * 60 * 1000);
+    expect(result[3].time).toBe(t13 + 45 * 60 * 1000);
+  });
+
+  it('preserves GHI value across all slots', () => {
+    const result = expandHourlyTo15Min([hourlyRecord]);
+    for (const r of result) {
+      expect(r.ghi_W_per_m2).toBe(400);
+    }
+  });
+
+  it('sets intervalMinutes to 15 on all expanded records', () => {
+    const result = expandHourlyTo15Min([hourlyRecord]);
+    for (const r of result) {
+      expect(r.intervalMinutes).toBe(15);
+    }
+  });
+
+  it('recomputes hour from slot timestamp', () => {
+    // Hour crossing: 13:45 slot is still hour 13, 14:00 slot is hour 14
+    const t13_45 = new Date('2024-06-15T13:45:00Z').getTime();
+    const record = { time: t13_45, hour: 13, ghi_W_per_m2: 300, intervalMinutes: 60 };
+    const result = expandHourlyTo15Min([record]);
+    expect(result[0].hour).toBe(13); // 13:45
+    expect(result[1].hour).toBe(14); // 14:00
+    expect(result[2].hour).toBe(14); // 14:15
+    expect(result[3].hour).toBe(14); // 14:30
+  });
+
+  it('handles empty input', () => {
+    expect(expandHourlyTo15Min([])).toEqual([]);
   });
 });

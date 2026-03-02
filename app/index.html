@@ -742,10 +742,12 @@
             </label>
             <label class="block text-sm">
               <span
-                class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Resolution</span>
-              <select id="pred-pv-resolution" class="form-select" data-predictions-only="true">
-                <option value="60" selected>60 min (hourly)</option>
-                <option value="15">15 min</option>
+                class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Mode</span>
+              <!-- @deprecated: pred-pv-resolution replaced by pred-pv-mode -->
+              <select id="pred-pv-mode" class="form-select" data-predictions-only="true">
+                <option value="hourly" selected>Hourly</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="15min">15-min</option>
               </select>
             </label>
           </div>

@@ -31,9 +31,10 @@ export interface IrradianceRecord {
 }
 
 export interface PvProductionRecord {
-  time: number;          // timestamp ms (start of UTC hour)
+  time: number;          // timestamp ms (start of interval)
   hour: number;          // 0–23 UTC hour
-  production_Wh: number; // energy produced in this hour
+  slot?: number;         // 0–95 slot index (set when using 15-min history)
+  production_Wh: number; // energy produced in this interval
 }
 
 export interface HourlyCapacity {
@@ -41,6 +42,13 @@ export interface HourlyCapacity {
   maxProduction_Wh: number;  // best observed production for this hour
   maxRatio: number;          // best observed GHI_actual / GHI_clear ratio
   trueCapacity_Wh: number;  // estimated 100%-clear-sky production
+}
+
+export interface SlotCapacity {
+  slot: number;              // 0–95 (hour * 4 + quarter, UTC)
+  maxProduction_Wh: number;  // best observed production for this 15-min slot
+  maxRatio: number;          // hourly max ratio (shared across 4 slots in same hour)
+  trueCapacity_Wh: number;   // estimated 100%-clear-sky production
 }
 
 export interface PvForecastPoint extends PredictionResult {
@@ -273,6 +281,118 @@ export function estimateHourlyCapacity(
   }
 
   return capacity;
+}
+
+// ----------------------------- 15-min Slot Capacity -----------------------
+
+/**
+ * Return the slot index (0-95) for a given UTC timestamp.
+ * slot = hour * 4 + floor(minute / 15)
+ */
+export function slotOfDay(timeMs: number): number {
+  const d = new Date(timeMs);
+  return d.getUTCHours() * 4 + Math.floor(d.getUTCMinutes() / 15);
+}
+
+/**
+ * Find the maximum production (Wh) for each 15-min slot (0-95) across all
+ * history records. Records must have a `slot` field (use slotOfDay to set it).
+ */
+export function calculateMaxProductionPerSlot(records: PvProductionRecord[]): number[] {
+  const maxPerSlot = new Array<number>(96).fill(0);
+
+  for (const rec of records) {
+    const slot = rec.slot ?? rec.hour * 4;
+    if (rec.production_Wh > maxPerSlot[slot]) {
+      maxPerSlot[slot] = rec.production_Wh;
+    }
+  }
+
+  return maxPerSlot;
+}
+
+/**
+ * Combine 96-slot max production with 24-hour max ratio into slot capacity.
+ *
+ * maxRatio is still hourly (Open-Meteo archive limitation), so the same
+ * hourly ratio is shared across all 4 slots within an hour.
+ * trueCapacity[s] = maxProd[s] / maxRatio[floor(s/4)] when ratio > 0.1.
+ */
+export function estimateSlotCapacity(
+  maxProd96: number[],
+  maxRatio24: number[],
+): SlotCapacity[] {
+  const capacity: SlotCapacity[] = [];
+
+  for (let s = 0; s < 96; s++) {
+    const h = Math.floor(s / 4);
+    const mp = maxProd96[s] ?? 0;
+    const mr = maxRatio24[h] ?? 0;
+    const trueCapacity = mr > 0.1 ? mp / mr : mp;
+
+    capacity.push({
+      slot: s,
+      maxProduction_Wh: mp,
+      maxRatio: mr,
+      trueCapacity_Wh: trueCapacity,
+    });
+  }
+
+  return capacity;
+}
+
+/**
+ * Generate PV forecast points using the 96-slot capacity model.
+ *
+ * Like forecastPv() but:
+ *  - Capacity is looked up by slot (0-95) via slotOfDay(rec.time).
+ *  - Bird clear-sky GHI is evaluated at the 15-min mid-interval
+ *    (slot_start + 7.5 min) for more accurate sub-hour predictions.
+ *
+ * @param capacity     Per-slot capacity estimates (length 96)
+ * @param forecastIrradiance  Irradiance records (already interval-start aligned)
+ * @param lat          Latitude
+ * @param lon          Longitude
+ * @param actuals      Optional map: timestamp_ms → production_Wh
+ */
+export function forecastPvSlot(
+  capacity: SlotCapacity[],
+  forecastIrradiance: IrradianceRecord[],
+  lat: number,
+  lon: number,
+  actuals?: Map<number, number>,
+): PvForecastPoint[] {
+  const points: PvForecastPoint[] = [];
+
+  for (const rec of forecastIrradiance) {
+    const slot = slotOfDay(rec.time);
+
+    // Bird clear-sky at mid-point of this 15-min slot
+    const slotStartMs = Math.floor(rec.time / 900000) * 900000;
+    const midInterval = new Date(slotStartMs + 7.5 * 60 * 1000);
+    const ghiClear = calculateClearSkyGHI(lat, lon, midInterval);
+
+    let forecastRatio = 0;
+    if (ghiClear > 5) {
+      forecastRatio = rec.ghi_W_per_m2 / ghiClear;
+    }
+
+    const cap = capacity[slot];
+    const prediction = forecastRatio * (cap?.trueCapacity_Wh ?? 0);
+    const actual = actuals?.get(rec.time) ?? null;
+
+    points.push({
+      time: rec.time,
+      hour: rec.hour,
+      ghiClear_W_per_m2: ghiClear,
+      ghiForecast_W_per_m2: rec.ghi_W_per_m2,
+      forecastRatio,
+      predicted: Math.max(0, prediction),
+      actual,
+    });
+  }
+
+  return points;
 }
 
 // ----------------------------- Forecast Generation -----------------------
