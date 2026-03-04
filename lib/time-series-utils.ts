@@ -139,15 +139,14 @@ export function buildForecastSeries(
   }
 
   const values: number[] = [];
-  for (let t = startTs; t < endTs; t += stepMs) {
-    let val: number;
-    if (inputStep === 15) {
-      val = predMap.get(t) ?? 0;
-    } else {
-      const hourStart = Math.floor(t / 3600000) * 3600000;
-      val = predMap.get(hourStart) ?? 0;
+  if (inputStep === 15) {
+    for (let t = startTs; t < endTs; t += stepMs) {
+      values.push(predMap.get(t) ?? 0);
     }
-    values.push(val);
+  } else {
+    for (let t = startTs; t < endTs; t += stepMs) {
+      values.push(predMap.get(Math.floor(t / 3600000) * 3600000) ?? 0);
+    }
   }
 
   return { start: startIso, step: 15, values };

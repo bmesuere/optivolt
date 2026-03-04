@@ -14,7 +14,7 @@ import {
 } from '../../lib/predict-load.ts';
 import type { DayFilter, Aggregation } from '../../lib/predict-load.ts';
 import type { PredictionConfig } from '../types.ts';
-import { getForecastTimeRange, buildForecastSeries, type ForecastSeries, type PredictionResult } from '../../lib/time-series-utils.ts';
+import { getForecastTimeRange, buildForecastSeries, computeErrorMetrics, type ForecastSeries, type PredictionResult } from '../../lib/time-series-utils.ts';
 
 type PredictTarget = Pick<StatRecord, 'date' | 'time' | 'hour' | 'dayOfWeek'> & { value?: number | null };
 
@@ -39,6 +39,7 @@ interface ValidationRunResult {
 interface ForecastRunResult {
   forecast: ForecastSeries;
   recent: PredictionResult[];
+  metrics: { mae: number; rmse: number; mape: number; n: number };
 }
 
 /**
@@ -166,5 +167,7 @@ export async function runForecast(config: PredictionConfig): Promise<ForecastRun
       }));
   }
 
-  return { forecast: forecastSeries, recent };
+  const metrics = computeErrorMetrics(recent, r => r.actual, r => r.predicted);
+
+  return { forecast: forecastSeries, recent, metrics };
 }

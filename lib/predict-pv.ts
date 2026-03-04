@@ -21,6 +21,13 @@
 
 import { type ForecastSeries, computeErrorMetrics, type PredictionResult, type ValidationMetrics } from './time-series-utils.ts';
 
+// ----------------------------- Helpers -----------------------------------
+
+/** Estimate clear-sky capacity: maxProd / maxRatio, with fallback when ratio is too low. */
+function estimateCapacity(maxProduction: number, maxRatio: number): number {
+  return maxRatio > 0.1 ? maxProduction / maxRatio : maxProduction;
+}
+
 // ----------------------------- Types -------------------------------------
 
 export interface IrradianceRecord {
@@ -270,13 +277,12 @@ export function estimateHourlyCapacity(
   for (let h = 0; h < 24; h++) {
     const mp = maxProd[h] ?? 0;
     const mr = maxRatio[h] ?? 0;
-    const trueCapacity = mr > 0.1 ? mp / mr : mp;
 
     capacity.push({
       hour: h,
       maxProduction_Wh: mp,
       maxRatio: mr,
-      trueCapacity_Wh: trueCapacity,
+      trueCapacity_Wh: estimateCapacity(mp, mr),
     });
   }
 
@@ -328,13 +334,12 @@ export function estimateSlotCapacity(
     const h = Math.floor(s / 4);
     const mp = maxProd96[s] ?? 0;
     const mr = maxRatio24[h] ?? 0;
-    const trueCapacity = mr > 0.1 ? mp / mr : mp;
 
     capacity.push({
       slot: s,
       maxProduction_Wh: mp,
       maxRatio: mr,
-      trueCapacity_Wh: trueCapacity,
+      trueCapacity_Wh: estimateCapacity(mp, mr),
     });
   }
 
