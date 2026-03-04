@@ -2,7 +2,8 @@ import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { HttpError, assertCondition, toHttpError } from '../http-errors.ts';
 import { loadPredictionConfig, savePredictionConfig } from '../services/prediction-config-store.ts';
-import { runValidation, runForecast } from '../services/prediction-service.ts';
+import { runValidation, runForecast } from '../services/load-prediction-service.ts';
+import { runPvForecast } from '../services/pv-prediction-service.ts';
 import { loadData, saveData } from '../services/data-store.ts';
 import { loadSettings } from '../services/settings-store.ts';
 import type { PredictionConfig } from '../types.ts';
@@ -43,12 +44,7 @@ router.post('/config', async (req: Request, res: Response, next: NextFunction) =
 router.post('/validate', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const config = await loadPredictionConfig();
-
-    assertCondition(
-      !!process.env.SUPERVISOR_TOKEN || (config.haUrl.length > 0 && config.haToken.length > 0),
-      400,
-      'haUrl and haToken are required when not running as an add-on'
-    );
+    assertHaConnection(config);
     assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
 
     logPredictionCall('validate', { sensors: config.sensors.length });
@@ -70,6 +66,38 @@ router.post('/validate', async (_req: Request, res: Response, next: NextFunction
   }
 });
 
+// ----------------------------- Load forecast ------------------------------
+
+router.post('/load/forecast', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const config = await loadPredictionConfig();
+
+    if (req.query.recent === 'false') {
+      config.includeRecent = false;
+    }
+
+    const result = await executeLoadForecast(config, 'load/forecast');
+    res.json(result);
+  } catch (error) {
+    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Load forecast failed'));
+  }
+});
+
+// ----------------------------- PV forecast --------------------------------
+
+router.post('/pv/forecast', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const config = await loadPredictionConfig();
+
+    const result = await executePvForecast(config, 'pv/forecast');
+    res.json(result);
+  } catch (error) {
+    next(error instanceof HttpError ? error : toHttpError(error, 500, 'PV forecast failed'));
+  }
+});
+
+// ----------------------------- Combined forecast --------------------------
+
 router.post('/forecast', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const config = await loadPredictionConfig();
@@ -78,8 +106,12 @@ router.post('/forecast', async (req: Request, res: Response, next: NextFunction)
       config.includeRecent = false;
     }
 
-    const result = await executeForecast(config, 'forecast');
-    res.json(result);
+    const [loadResult, pvResult] = await Promise.all([
+      executeLoadForecast(config, 'forecast').catch(handleCombinedForecastError('load')),
+      executePvForecast(config, 'forecast').catch(handleCombinedForecastError('pv')),
+    ]);
+
+    res.json({ load: loadResult, pv: pvResult });
   } catch (error) {
     next(error instanceof HttpError ? error : toHttpError(error, 500, 'Forecast failed'));
   }
@@ -90,43 +122,55 @@ router.get('/forecast/now', async (_req: Request, res: Response, next: NextFunct
     const config = await loadPredictionConfig();
     config.includeRecent = false;
 
-    const result = await executeForecast(config, 'forecast/now');
-    res.json(result);
+    const [loadResult, pvResult] = await Promise.all([
+      executeLoadForecast(config, 'forecast/now').catch(handleCombinedForecastError('load', 'forecast/now')),
+      executePvForecast(config, 'forecast/now').catch(handleCombinedForecastError('pv', 'forecast/now')),
+    ]);
+
+    res.json({ load: loadResult, pv: pvResult });
   } catch (error) {
     next(error instanceof HttpError ? error : toHttpError(error, 500, 'Forecast failed'));
   }
 });
 
-async function executeForecast(config: PredictionConfig, logLabel: string): Promise<unknown> {
-  assertCondition(
-    !!process.env.SUPERVISOR_TOKEN || (config.haUrl.length > 0 && config.haToken.length > 0),
-    400,
-    'haUrl and haToken are required when not running as an add-on'
-  );
+// ----------------------------- Helpers ------------------------------------
+
+async function executeLoadForecast(config: PredictionConfig, logLabel: string): Promise<unknown> {
+  assertHaConnection(config);
   assertCondition(config.activeConfig != null, 400, 'activeConfig is required');
   assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
 
-  logPredictionCall(logLabel, { activeConfig: config.activeConfig });
+  logPredictionCall(logLabel + ' (load)', { activeConfig: config.activeConfig });
 
   try {
     const result = await runForecast(config);
-
-    if (result?.forecast?.values) {
-      const settings = await loadSettings();
-      if (settings.dataSources.load === 'api') {
-        const currentData = await loadData();
-        currentData.load = result.forecast;
-        await saveData(currentData);
-      }
-    }
-
+    await maybeSaveForecastData('load', result?.forecast);
     return result;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('auth') || msg.includes('WebSocket') || msg.includes('timed out')) {
-      throw toHttpError(err, 502, `HA connection error: ${msg}`);
-    }
-    throw err;
+    throw mapPredictionError(err, false);
+  }
+}
+
+async function executePvForecast(config: PredictionConfig, logLabel: string): Promise<unknown> {
+  if (
+    !config.pvConfig ||
+    config.pvConfig.latitude == null || Number.isNaN(config.pvConfig.latitude) ||
+    config.pvConfig.longitude == null || Number.isNaN(config.pvConfig.longitude)
+  ) {
+    return null;
+  }
+
+  assertHaConnection(config);
+  assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
+
+  logPredictionCall(logLabel + ' (pv)', { pvConfig: config.pvConfig });
+
+  try {
+    const result = await runPvForecast(config);
+    await maybeSaveForecastData('pv', result?.forecast);
+    return result;
+  } catch (err) {
+    throw mapPredictionError(err, true);
   }
 }
 
@@ -135,6 +179,42 @@ function logPredictionCall(type: string, meta: Record<string, unknown>): void {
     timestamp: new Date().toISOString(),
     ...meta,
   });
+}
+
+function assertHaConnection(config: PredictionConfig): void {
+  assertCondition(
+    !!process.env.SUPERVISOR_TOKEN || (config.haUrl.length > 0 && config.haToken.length > 0),
+    400,
+    'haUrl and haToken are required when not running as an add-on'
+  );
+}
+
+function handleCombinedForecastError(type: string, logLabel: string = 'combined') {
+  return (err: Error) => {
+    console.warn(`[predict] ${type} forecast failed in ${logLabel}:`, err.message);
+    return null;
+  };
+}
+
+async function maybeSaveForecastData(type: 'load' | 'pv', forecast: any) {
+  if (!forecast?.values) return;
+  const settings = await loadSettings();
+  if (settings.dataSources[type] === 'api') {
+    const currentData = await loadData();
+    currentData[type] = forecast;
+    await saveData(currentData);
+  }
+}
+
+function mapPredictionError(err: unknown, isPv: boolean): Error {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (isPv && msg.includes('Open-Meteo')) {
+    return toHttpError(err, 502, `Open-Meteo error: ${msg}`);
+  }
+  if (msg.includes('auth') || msg.includes('WebSocket') || msg.includes('timed out') || msg.includes('connection refused')) {
+    return toHttpError(err, 502, `HA connection error: ${msg}`);
+  }
+  return err instanceof Error ? err : new Error(msg);
 }
 
 export default router;

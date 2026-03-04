@@ -11,10 +11,10 @@ import {
   predict,
   validate,
   generateAllConfigs,
-  buildForecastSeriesRange,
 } from '../../lib/predict-load.ts';
-import type { DayFilter, Aggregation, PredictionResult, ForecastSeries } from '../../lib/predict-load.ts';
+import type { DayFilter, Aggregation } from '../../lib/predict-load.ts';
 import type { PredictionConfig } from '../types.ts';
+import { getForecastTimeRange, buildForecastSeries, type ForecastSeries, type PredictionResult } from '../../lib/time-series-utils.ts';
 
 type PredictTarget = Pick<StatRecord, 'date' | 'time' | 'hour' | 'dayOfWeek'> & { value?: number | null };
 
@@ -115,21 +115,9 @@ export async function runForecast(config: PredictionConfig): Promise<ForecastRun
 
   const data = postprocess(rawData, sensors, derived);
 
-  // Forecast duration:
-  // < 13:00 -> until midnight tonight
-  // >= 13:00 -> until midnight tomorrow
   const now = new Date();
-  const currentHour = now.getHours();
-
-  const end = new Date(now);
-  end.setMinutes(0, 0, 0);
-  if (currentHour < 13) {
-    end.setDate(end.getDate() + 1);
-    end.setHours(0, 0, 0, 0);
-  } else {
-    end.setDate(end.getDate() + 2);
-    end.setHours(0, 0, 0, 0);
-  }
+  const { startIso, endIso } = getForecastTimeRange(now.getTime());
+  const end = new Date(endIso);
 
   const recentStart = now.getTime() - 7 * 24 * 60 * 60 * 1000;
   const recentEnd = now.getTime();
@@ -158,11 +146,10 @@ export async function runForecast(config: PredictionConfig): Promise<ForecastRun
   const allTargets: PredictTarget[] = [...recentTargets, ...futureTargets];
   const predictions = predict(data, activeConfig!, allTargets);
 
-  const startMs = Math.floor(now.getTime() / (15 * 60 * 1000)) * (15 * 60 * 1000);
-  const startIso = new Date(startMs).toISOString();
-  const endIso = end.toISOString();
+  // time range is computed by getForecastTimeRange
 
-  const forecastSeries = buildForecastSeriesRange(predictions, startIso, endIso);
+  const mappedPoints = predictions.map(p => ({ time: p.time, value: p.predicted ?? 0 }));
+  const forecastSeries = buildForecastSeries(mappedPoints, startIso, endIso);
 
   let recent: PredictionResult[] = [];
   if (config.includeRecent !== false) {

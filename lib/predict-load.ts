@@ -5,6 +5,7 @@
  */
 
 import type { StatRecord } from './ha-postprocess.ts';
+import { type ForecastSeries, computeErrorMetrics, type PredictionResult, type ValidationMetrics } from './time-series-utils.ts';
 
 export type DayFilter = 'same' | 'all' | 'weekday-weekend' | 'weekday-sat-sun';
 export type Aggregation = 'mean' | 'median';
@@ -16,27 +17,11 @@ export interface PredictConfig {
   aggregation: Aggregation;
 }
 
-export interface PredictionResult {
-  date: string;
-  time: number;
-  hour: number;
-  actual: number | null;
-  predicted: number | null;
-}
-
-export interface ValidationMetrics {
-  mae: number;
-  rmse: number;
-  mape: number;
-  n: number;
+export interface LoadValidationMetrics extends ValidationMetrics {
   nSkipped: number;
 }
 
-export interface ForecastSeries {
-  start: string;
-  step: number;
-  values: number[];
-}
+
 
 /**
  * Map a day-of-week (0=Sun … 6=Sat) to a bucket string based on the filter strategy.
@@ -126,38 +111,28 @@ export function predict(
 export function validate(
   predictions: PredictionResult[],
   validationWindow: { start: string; end: string },
-): ValidationMetrics {
+): LoadValidationMetrics {
   const windowStart = new Date(validationWindow.start).getTime();
   const windowEnd = new Date(validationWindow.end).getTime();
 
   const inWindow = predictions.filter(p => p.time >= windowStart && p.time < windowEnd);
   const valid = inWindow.filter(p => p.predicted !== null) as Array<PredictionResult & { actual: number; predicted: number }>;
   const n = valid.length;
-  const nSkipped = inWindow.length - n;
+  let nSkipped = inWindow.length - n;
 
   if (n === 0) return { mae: NaN, rmse: NaN, mape: NaN, n: 0, nSkipped };
 
-  let sumAE = 0;
-  let sumSE = 0;
-  let sumAPE = 0;
-  let mapeCount = 0;
-
-  for (const { actual, predicted } of valid) {
-    const error = actual - predicted;
-    sumAE += Math.abs(error);
-    sumSE += error * error;
-
-    if (Math.abs(actual) > 5) {
-      sumAPE += Math.abs(error / actual);
-      mapeCount++;
-    }
-  }
+  const baseMetrics = computeErrorMetrics(
+    valid,
+    p => p.actual,
+    p => p.predicted
+  );
 
   return {
-    mae: sumAE / n,
-    rmse: Math.sqrt(sumSE / n),
-    mape: mapeCount > 0 ? (sumAPE / mapeCount) * 100 : NaN,
-    n,
+    mae: baseMetrics.mae,
+    rmse: baseMetrics.rmse,
+    mape: baseMetrics.mape,
+    n: baseMetrics.n,
     nSkipped,
   };
 }
@@ -182,39 +157,4 @@ export function generateAllConfigs(
     }
   }
   return configs;
-}
-
-/**
- * Build a 15-min forecast series for a specific time range.
- * Data is hourly → each 15-min slot gets the same hourly value.
- * Missing hours → 0.
- */
-export function buildForecastSeriesRange(
-  predictions: PredictionResult[],
-  startIso: string,
-  endIso: string,
-): ForecastSeries {
-  const startTs = new Date(startIso).getTime();
-  const endTs = new Date(endIso).getTime();
-  const stepMs = 15 * 60 * 1000;
-
-  // Map predictions by time (hour start)
-  const predMap = new Map<number, number>();
-  for (const p of predictions) {
-    if (p.predicted !== null) {
-      // Ensure key is aligned to start of hour
-      const h = Math.floor(p.time / 3600000) * 3600000;
-      predMap.set(h, p.predicted);
-    }
-  }
-
-  const values: number[] = [];
-  for (let t = startTs; t < endTs; t += stepMs) {
-    // Hourly bucket
-    const hourStart = Math.floor(t / 3600000) * 3600000;
-    const val = predMap.get(hourStart) ?? 0;
-    values.push(val);
-  }
-
-  return { start: startIso, step: 15, values };
 }

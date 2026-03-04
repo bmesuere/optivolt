@@ -6,8 +6,8 @@ import {
   predict,
   validate,
   generateAllConfigs,
-  buildForecastSeriesRange,
 } from '../../lib/predict-load.ts';
+import { buildForecastSeries } from '../../lib/time-series-utils.ts';
 
 // ---------------------------------------------------------------------------
 // getDayBucket
@@ -273,12 +273,12 @@ describe('buildForecastSeriesRange', () => {
   const endIso = '2026-02-21T00:00:00.000Z';
 
   it('produces 96 slots for 24 hours', () => {
-    const { values } = buildForecastSeriesRange([], startIso, endIso);
+    const { values } = buildForecastSeries([], startIso, endIso);
     expect(values).toHaveLength(96);
   });
 
   it('fills 0 for missing hours', () => {
-    const { values } = buildForecastSeriesRange([], startIso, endIso);
+    const { values } = buildForecastSeries([], startIso, endIso);
     expect(values.every(v => v === 0)).toBe(true);
   });
 
@@ -286,7 +286,8 @@ describe('buildForecastSeriesRange', () => {
     const predictions = [
       { date: '2026-02-20T10:00:00.000Z', time: new Date('2026-02-20T10:00:00.000Z').getTime(), hour: 10, predicted: 400 },
     ];
-    const { values } = buildForecastSeriesRange(predictions, startIso, endIso);
+    const mapped = predictions.map(p => ({ time: p.time, value: p.predicted ?? 0 }));
+    const { values } = buildForecastSeries(mapped, startIso, endIso);
     // Hour 10 → slots 40-43
     expect(values[40]).toBe(400);
     expect(values[41]).toBe(400);
@@ -295,16 +296,17 @@ describe('buildForecastSeriesRange', () => {
   });
 
   it('sets correct start ISO string', () => {
-    const { start, step } = buildForecastSeriesRange([], startIso, endIso);
+    const { start, step } = buildForecastSeries([], startIso, endIso);
     expect(start).toBe(startIso);
     expect(step).toBe(15);
   });
 
   it('ignores null predictions', () => {
     const predictions = [
-      { date: '2026-02-20T05:00:00.000Z', time: new Date('2026-02-20T05:00:00.000Z').getTime(), hour: 5, predicted: null },
+      { date: '2026-02-20T05:00:00.000Z', time: new Date('2026-02-20T05:00:00.000Z').getTime(), predicted: null }
     ];
-    const { values } = buildForecastSeriesRange(predictions, startIso, endIso);
+    const mapped = predictions.map(p => ({ time: p.time, value: p.predicted ?? 0 }));
+    const { values } = buildForecastSeries(mapped, startIso, endIso);
     expect(values[20]).toBe(0);
   });
 });

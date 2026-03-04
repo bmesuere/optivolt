@@ -40,6 +40,39 @@ export function getSensorNames(data: StatRecord[]): string[] {
 /**
  * Normalise raw HA stats result into flat records.
  */
+/**
+ * Aggregate 5-minute StatRecords into 15-minute StatRecords.
+ * Groups 3 consecutive 5-min readings by flooring each timestamp to
+ * the nearest 15-min boundary (UTC). Values (Wh) are summed within
+ * each bucket per sensor. Use after postprocess() when HA was fetched
+ * with period='5minute'.
+ */
+export function aggregateTo15Min(records: StatRecord[]): StatRecord[] {
+  const buckets = new Map<string, StatRecord>();
+
+  for (const rec of records) {
+    const bucketMs = Math.floor(rec.time / (15 * 60 * 1000)) * (15 * 60 * 1000);
+    const key = `${bucketMs}|${rec.sensor}`;
+
+    const existing = buckets.get(key);
+    if (existing) {
+      existing.value += rec.value;
+    } else {
+      const d = new Date(bucketMs);
+      buckets.set(key, {
+        date: d.toISOString(),
+        time: bucketMs,
+        hour: d.getUTCHours(),
+        dayOfWeek: d.getUTCDay(),
+        sensor: rec.sensor,
+        value: rec.value,
+      });
+    }
+  }
+
+  return [...buckets.values()].sort((a, b) => a.time - b.time || a.sensor.localeCompare(b.sensor));
+}
+
 export function postprocess(
   rawData: Record<string, HaReading[]>,
   sensors: HaSensor[],

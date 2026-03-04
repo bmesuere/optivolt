@@ -354,7 +354,7 @@
           </div>
 
           <!-- Run options as toggles -->
-          <div class="mt-4 pt-4 border-t border-slate-100 dark:border-white/5 space-y-3">
+          <div class="mt-4 pt-4 border-t border-slate-100 dark:border-white/5 flex flex-col gap-3">
             <label class="toggle">
               <input id="update-data-before-run" type="checkbox">
               <span class="toggle-knob"></span>
@@ -625,10 +625,10 @@
     <!-- Sidebar -->
     <aside class="lg:col-span-1 min-w-0 space-y-6">
 
-      <!-- Settings (was Prediction Control) -->
+      <!-- Load Forecast Settings -->
       <section class="card">
         <div class="mb-4">
-          <h2 class="sidebar-label">Settings</h2>
+          <h2 class="sidebar-label">Load Forecast</h2>
         </div>
         <div class="space-y-3">
           <label class="block text-sm">
@@ -665,39 +665,38 @@
             </select>
           </label>
 
-          <!-- Recompute -->
           <div class="mt-4">
-            <button id="pred-recompute" type="button"
+            <button id="pred-load-forecast" type="button"
               class="w-full rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-sky-400/50 transition-all">
-              Recompute
+              Forecast Load
             </button>
           </div>
 
-          <!-- Summary -->
+          <!-- Load Summary -->
           <div class="mt-4 summary-panel">
             <div class="summary-row">
               <span class="stat-label">Status</span>
-              <span id="summary-status" class="text-sm font-medium text-ink dark:text-slate-100">--</span>
+              <span id="load-summary-status" class="text-sm font-medium text-ink dark:text-slate-100">--</span>
             </div>
             <div class="grid grid-cols-2 border-t border-slate-100 dark:border-white/5">
               <div class="px-3 py-2.5 border-b border-r border-slate-100 dark:border-white/5">
                 <div class="stat-label mb-0.5">Min Load</div>
-                <div class="stat-value"><span id="summary-min">--</span><span
+                <div class="stat-value"><span id="load-summary-min">--</span><span
                     class="text-[10px] opacity-50 ml-1">W</span></div>
               </div>
               <div class="px-3 py-2.5 border-b border-slate-100 dark:border-white/5">
                 <div class="stat-label mb-0.5">Peak Load</div>
-                <div class="stat-value"><span id="summary-peak">--</span><span
+                <div class="stat-value"><span id="load-summary-peak">--</span><span
                     class="text-[10px] opacity-50 ml-1">W</span></div>
               </div>
               <div class="px-3 py-2.5 border-r border-slate-100 dark:border-white/5">
                 <div class="stat-label mb-0.5">Total Load</div>
-                <div class="stat-value"><span id="summary-total">--</span><span
+                <div class="stat-value"><span id="load-summary-total">--</span><span
                     class="text-[10px] opacity-50 ml-1">kWh</span></div>
               </div>
               <div class="px-3 py-2.5">
                 <div class="stat-label mb-0.5">Avg Error</div>
-                <div class="stat-value"><span id="summary-error">--</span><span
+                <div class="stat-value"><span id="load-summary-error">--</span><span
                     class="text-[10px] opacity-50 ml-1">W</span></div>
               </div>
             </div>
@@ -705,9 +704,92 @@
         </div>
       </section>
 
-      <!-- System Settings (collapsible) -->
+      <!-- PV Forecast Settings -->
       <section class="card">
-        <div class="flex items-center justify-end mb-3 lg:hidden">
+        <div class="mb-4">
+          <h2 class="sidebar-label">PV Forecast</h2>
+        </div>
+        <div class="space-y-3">
+          <label class="block text-sm">
+            <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">PV
+              Sensor</span>
+            <select id="pred-pv-sensor" class="form-select" data-predictions-only="true">
+              <option value="" disabled selected>Select a sensor…</option>
+            </select>
+          </label>
+
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block text-sm">
+              <span
+                class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Latitude</span>
+              <input id="pred-pv-lat" type="number" step="0.01" min="-90" max="90" class="form-input"
+                data-predictions-only="true" placeholder="51.05" />
+            </label>
+            <label class="block text-sm">
+              <span
+                class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Longitude</span>
+              <input id="pred-pv-lon" type="number" step="0.01" min="-180" max="180" class="form-input"
+                data-predictions-only="true" placeholder="3.71" />
+            </label>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block text-sm">
+              <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">History
+                (days)</span>
+              <input id="pred-pv-history" type="number" min="7" max="60" value="14" class="form-input"
+                data-predictions-only="true" />
+            </label>
+            <label class="block text-sm">
+              <span
+                class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Mode</span>
+              <!-- @deprecated: pred-pv-resolution replaced by pred-pv-mode -->
+              <select id="pred-pv-mode" class="form-select" data-predictions-only="true">
+                <option value="hourly" selected>Hourly</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="15min">15-min</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="mt-4">
+            <button id="pred-pv-forecast" type="button"
+              class="w-full rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-sky-400/50 transition-all">
+              Forecast PV
+            </button>
+          </div>
+
+          <!-- PV Summary -->
+          <div class="mt-4 summary-panel">
+            <div class="summary-row">
+              <span class="stat-label">Status</span>
+              <span id="pv-summary-status" class="text-sm font-medium text-ink dark:text-slate-100">--</span>
+            </div>
+            <div class="grid grid-cols-3 border-t border-slate-100 dark:border-white/5">
+              <div class="px-3 py-2.5 border-r border-slate-100 dark:border-white/5">
+                <div class="stat-label mb-0.5">Total PV</div>
+                <div class="stat-value"><span id="pv-summary-total">--</span><span
+                    class="text-[10px] opacity-50 ml-1">kWh</span></div>
+              </div>
+              <div class="px-3 py-2.5 border-r border-slate-100 dark:border-white/5">
+                <div class="stat-label mb-0.5">Peak</div>
+                <div class="stat-value"><span id="pv-summary-peak">--</span><span
+                    class="text-[10px] opacity-50 ml-1">W</span></div>
+              </div>
+              <div class="px-3 py-2.5">
+                <div class="stat-label mb-0.5">Avg Error</div>
+                <div class="stat-value"><span id="pv-summary-error">--</span><span
+                    class="text-[10px] opacity-50 ml-1">Wh</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sensors + HA Settings (collapsible) -->
+      <section class="card">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <h2 class="sidebar-label">Sensors</h2>
           <button id="pred-settings-toggle" type="button"
             class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 lg:hidden">
             <svg id="pred-settings-toggle-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
@@ -718,7 +800,21 @@
         </div>
 
         <div id="pred-settings-body" class="space-y-4 hidden lg:block">
-          <!-- Connection -->
+          <!-- Sensors -->
+          <div class="space-y-3">
+            <label class="block text-sm">Sensors (JSON)
+              <textarea id="pred-sensors" rows="4" class="form-input font-mono text-xs" data-predictions-only="true"
+                placeholder='[{"id":"sensor.xxx","name":"Grid Import","unit":"kWh"}]'></textarea>
+            </label>
+            <label class="block text-sm">Derived (JSON)
+              <textarea id="pred-derived" rows="4" class="form-input font-mono text-xs" data-predictions-only="true"
+                placeholder='[{"name":"Total Load","formula":["+Grid Import","-Grid Export"]}]'></textarea>
+            </label>
+          </div>
+
+          <!-- Connection (hidden in addon mode) -->
+          <hr id="pred-ha-settings-divider" class="border-slate-100 dark:border-white/10" />
+
           <div id="pred-ha-settings-group">
             <h3 class="sidebar-label mb-2">Home Assistant Settings</h3>
             <div class="space-y-3">
@@ -729,23 +825,6 @@
               <label class="block text-sm">Access Token
                 <input id="pred-ha-token" type="password" placeholder="eyJ…" class="form-input"
                   data-predictions-only="true" />
-              </label>
-            </div>
-          </div>
-
-          <hr id="pred-ha-settings-divider" class="border-slate-100 dark:border-white/10" />
-
-          <!-- Sensors -->
-          <div>
-            <h3 class="sidebar-label mb-2">Sensors</h3>
-            <div class="space-y-3">
-              <label class="block text-sm">Sensors (JSON)
-                <textarea id="pred-sensors" rows="4" class="form-input font-mono text-xs" data-predictions-only="true"
-                  placeholder='[{"id":"sensor.xxx","name":"Grid Import","unit":"kWh"}]'></textarea>
-              </label>
-              <label class="block text-sm">Derived (JSON)
-                <textarea id="pred-derived" rows="4" class="form-input font-mono text-xs" data-predictions-only="true"
-                  placeholder='[{"name":"Total Load","formula":["+Grid Import","-Grid Export"]}]'></textarea>
               </label>
             </div>
           </div>
@@ -771,19 +850,42 @@
     <!-- Main: Results -->
     <section class="lg:col-span-2 space-y-6 min-w-0">
 
-      <!-- Forecast & Recent Accuracy Chart -->
+      <!-- Combined Forecast Chart -->
       <section class="card">
-        <h2 class="mb-3 sidebar-label">Forecast</h2>
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <h2 class="sidebar-label">Forecast</h2>
+          <div class="flex items-center gap-3">
+            <label class="toggle">
+              <input id="forecast-chart-15m" type="checkbox">
+              <span class="toggle-knob"></span>
+              <span class="text-sm text-slate-600 dark:text-slate-400">15m bars</span>
+            </label>
+          </div>
+        </div>
         <div class="h-80 w-full">
-          <canvas id="pred-forecast-chart" class="h-full w-full"></canvas>
+          <canvas id="forecast-chart" class="h-full w-full"></canvas>
         </div>
       </section>
 
-      <!-- History Comparison Chart -->
+      <!-- Load History Comparison Chart -->
       <section class="card">
-        <h2 class="mb-3 sidebar-label">Historical Accuracy</h2>
-        <div class="h-80 w-full">
-          <canvas id="pred-history-chart" class="h-full w-full"></canvas>
+        <h2 class="mb-3 sidebar-label">Load Prediction Accuracy</h2>
+        <div class="h-56 w-full">
+          <canvas id="load-accuracy-chart" class="h-full w-full"></canvas>
+        </div>
+        <div class="h-40 w-full mt-4">
+          <canvas id="load-accuracy-diff-chart" class="h-full w-full"></canvas>
+        </div>
+      </section>
+
+      <!-- PV History Chart -->
+      <section class="card">
+        <h2 class="mb-3 sidebar-label">PV Prediction Accuracy</h2>
+        <div class="h-56 w-full">
+          <canvas id="pv-accuracy-chart" class="h-full w-full"></canvas>
+        </div>
+        <div class="h-40 w-full mt-4">
+          <canvas id="pv-accuracy-diff-chart" class="h-full w-full"></canvas>
         </div>
       </section>
 
@@ -792,8 +894,11 @@
         <!-- Results Chart (Specific strategy from table) -->
         <section id="pred-chart-section" class="card" hidden>
           <h2 id="pred-chart-title" class="mb-3 sidebar-label">Detailed Accuracy</h2>
-          <div class="h-72 w-full">
+          <div class="h-56 w-full">
             <canvas id="pred-accuracy-chart" class="h-full w-full"></canvas>
+          </div>
+          <div class="h-40 w-full mt-4">
+            <canvas id="pred-accuracy-diff-chart" class="h-full w-full"></canvas>
           </div>
         </section>
 

@@ -27,5 +27,7 @@ export function refreshVrmSettings() {
 export const fetchPredictionConfig = () => getJson('/predictions/config');
 export const savePredictionConfig = (c) => postJson('/predictions/config', c);
 export const runValidation = () => postJson('/predictions/validate', {});
-export const runForecast = () => postJson('/predictions/forecast', {});
-export const fetchForecast = runForecast;
+export const runLoadForecast = () => postJson('/predictions/load/forecast', {});
+export const runPvForecast = () => postJson('/predictions/pv/forecast', {});
+export const runCombinedForecast = () => postJson('/predictions/forecast', {});
+export const fetchForecast = runCombinedForecast;

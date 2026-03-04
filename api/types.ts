@@ -82,6 +82,19 @@ export interface PredictionValidationWindow {
   end: string;
 }
 
+/** Prediction mode for PV forecasting. Replaces the deprecated forecastResolution field. */
+export type PvMode = 'hourly' | 'hybrid' | '15min';
+
+export interface PvPredictionConfig {
+  latitude: number;
+  longitude: number;
+  historyDays: number;
+  pvSensor: string;
+  pvMode?: PvMode;
+  /** @deprecated Use pvMode instead. 60 → 'hourly', 15 → 'hybrid'. */
+  forecastResolution?: 15 | 60;
+}
+
 export interface PredictionConfig {
   haUrl: string;
   haToken: string;
@@ -90,4 +103,5 @@ export interface PredictionConfig {
   activeConfig?: PredictionActiveConfig;
   validationWindow?: PredictionValidationWindow;
   includeRecent?: boolean;
+  pvConfig?: PvPredictionConfig;
 }

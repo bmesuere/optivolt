@@ -3,10 +3,16 @@ import request from 'supertest';
 import app from '../../api/app.ts';
 
 vi.mock('../../api/services/prediction-config-store.ts');
-vi.mock('../../api/services/prediction-service.ts');
+vi.mock('../../api/services/load-prediction-service.ts');
+vi.mock('../../api/services/pv-prediction-service.ts');
+vi.mock('../../api/services/settings-store.ts');
+vi.mock('../../api/services/data-store.ts');
 
 import { loadPredictionConfig, savePredictionConfig } from '../../api/services/prediction-config-store.ts';
-import { runValidation, runForecast } from '../../api/services/prediction-service.ts';
+import { runValidation, runForecast } from '../../api/services/load-prediction-service.ts';
+import { runPvForecast } from '../../api/services/pv-prediction-service.ts';
+import { loadSettings } from '../../api/services/settings-store.ts';
+import { loadData, saveData } from '../../api/services/data-store.ts';
 
 const mockConfig = {
   haUrl: 'ws://homeassistant.local:8123/api/websocket',
@@ -110,35 +116,75 @@ describe('POST /predictions/validate', () => {
   });
 });
 
-describe('POST /predictions/forecast', () => {
+describe('POST /predictions/forecast (combined)', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     loadPredictionConfig.mockResolvedValue(mockConfig);
     savePredictionConfig.mockResolvedValue();
+    loadSettings.mockResolvedValue({ dataSources: { load: 'vrm', pv: 'vrm' } });
+    loadData.mockResolvedValue({});
+    saveData.mockResolvedValue();
     runForecast.mockResolvedValue({
-      start: '2026-02-20T00:00:00.000Z',
-      step: 15,
-      values: new Array(96).fill(200),
+      forecast: { start: '2026-02-20T00:00:00.000Z', step: 15, values: new Array(96).fill(200) },
+      recent: [],
+    });
+    runPvForecast.mockResolvedValue(null);
+  });
+
+  it('returns combined load + pv result', async () => {
+    const res = await request(app).post('/predictions/forecast').send({});
+    expect(res.status).toBe(200);
+    expect(res.body.load).toBeTruthy();
+    expect(res.body.load.forecast.values).toHaveLength(96);
+    expect(res.body.load.forecast.step).toBe(15);
+    expect(runForecast).toHaveBeenCalled();
+  });
+
+  it('returns load=null when activeConfig missing (graceful fallback)', async () => {
+    loadPredictionConfig.mockResolvedValue({ ...mockConfig, activeConfig: null });
+    const res = await request(app).post('/predictions/forecast').send({});
+    expect(res.status).toBe(200);
+    expect(res.body.load).toBeNull();
+  });
+
+  it('returns load=null on HA connection error (graceful fallback)', async () => {
+    runForecast.mockRejectedValue(new Error('HA WebSocket timed out after 30000ms'));
+    const res = await request(app).post('/predictions/forecast').send({});
+    expect(res.status).toBe(200);
+    expect(res.body.load).toBeNull();
+  });
+});
+
+describe('POST /predictions/load/forecast', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    loadPredictionConfig.mockResolvedValue(mockConfig);
+    savePredictionConfig.mockResolvedValue();
+    loadSettings.mockResolvedValue({ dataSources: { load: 'vrm', pv: 'vrm' } });
+    loadData.mockResolvedValue({});
+    saveData.mockResolvedValue();
+    runForecast.mockResolvedValue({
+      forecast: { start: '2026-02-20T00:00:00.000Z', step: 15, values: new Array(96).fill(200) },
+      recent: [],
     });
   });
 
-  it('returns forecast series', async () => {
-    const res = await request(app).post('/predictions/forecast').send({});
+  it('returns load forecast series', async () => {
+    const res = await request(app).post('/predictions/load/forecast').send({});
     expect(res.status).toBe(200);
-    expect(res.body.values).toHaveLength(96);
-    expect(res.body.step).toBe(15);
+    expect(res.body.forecast.values).toHaveLength(96);
     expect(runForecast).toHaveBeenCalled();
   });
 
   it('returns 400 when activeConfig missing', async () => {
     loadPredictionConfig.mockResolvedValue({ ...mockConfig, activeConfig: null });
-    const res = await request(app).post('/predictions/forecast').send({});
+    const res = await request(app).post('/predictions/load/forecast').send({});
     expect(res.status).toBe(400);
   });
 
   it('returns 502 on HA connection error', async () => {
     runForecast.mockRejectedValue(new Error('HA WebSocket timed out after 30000ms'));
-    const res = await request(app).post('/predictions/forecast').send({});
+    const res = await request(app).post('/predictions/load/forecast').send({});
     expect(res.status).toBe(502);
   });
 });
