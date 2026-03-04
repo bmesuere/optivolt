@@ -57,20 +57,26 @@ export async function runPvForecast(config: PredictionConfig): Promise<PvForecas
 
   const entityIds = sensors.map(s => s.id);
 
-  // 1. Fetch historic PV production from HA
+  // 1. Compute date range (before fetching, so all I/O can be parallelized)
   const endTime = new Date();
   // HA 5-min statistics have ~10 day retention; clamp for 15min mode.
   const effectiveHistoryDays = is15MinMode ? Math.min(historyDays, 10) : historyDays;
   const startTime = new Date(endTime.getTime() - effectiveHistoryDays * 24 * 60 * 60 * 1000);
-  const startTimeStr = startTime.toISOString();
+  const startDate = startTime.toISOString().slice(0, 10);
+  const endDate = endTime.toISOString().slice(0, 10);
 
-  const rawData = await fetchHaStats({
-    haUrl,
-    haToken,
-    entityIds,
-    startTime: startTimeStr,
-    period: is15MinMode ? '5minute' : 'hour',
-  });
+  // 2. Fetch HA history, archive irradiance, and forecast irradiance in parallel
+  const [rawData, archiveIrradiance, forecastIrradiance] = await Promise.all([
+    fetchHaStats({
+      haUrl,
+      haToken,
+      entityIds,
+      startTime: startTime.toISOString(),
+      period: is15MinMode ? '5minute' : 'hour',
+    }),
+    fetchArchiveIrradiance(latitude, longitude, startDate, endDate),
+    fetchForecastIrradiance(latitude, longitude, undefined, forecastResolution),
+  ]);
 
   let data = postprocess(rawData, sensors, derived);
   if (is15MinMode) {
@@ -100,18 +106,9 @@ export async function runPvForecast(config: PredictionConfig): Promise<PvForecas
     }
   }
 
-  // 2. Fetch historic irradiance from Open-Meteo Archive (always hourly)
-  const startDate = startTime.toISOString().slice(0, 10);
-  const endDate = endTime.toISOString().slice(0, 10);
-  const archiveIrradiance = await fetchArchiveIrradiance(latitude, longitude, startDate, endDate);
-
-  // 3. Capacity estimation
   const maxRatio = calculateMaxRatioPerHour(archiveIrradiance, latitude, longitude);
 
-  // 4. Fetch forecast irradiance from Open-Meteo
-  const forecastIrradiance = await fetchForecastIrradiance(latitude, longitude, undefined, forecastResolution);
-
-  // 5. Generate forecast and validation points, branching on mode
+  // 4. Generate forecast and validation points, branching on mode
   let futurePoints: PvForecastPoint[];
   let archivePoints: PvForecastPoint[];
 

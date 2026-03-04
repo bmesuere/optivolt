@@ -265,16 +265,7 @@ function updateMetrics(prefix, resultObject) {
 
   const totalKwh = values.reduce((a, b) => a + b, 0) * 0.25 / 1000;
 
-  let avgErrorW = 0;
-  if (prefix === 'load') {
-    const recent = resultObject.recent || [];
-    const valid = recent.filter(r => r.actual != null && r.predicted != null);
-    if (valid.length > 0) {
-      avgErrorW = valid.reduce((acc, r) => acc + Math.abs(r.actual - r.predicted), 0) / valid.length;
-    }
-  } else if (prefix === 'pv') {
-    avgErrorW = resultObject.metrics?.mae ?? 0;
-  }
+  const avgErrorW = resultObject.metrics?.mae ?? 0;
 
   setEl(`${prefix}-summary-total`, totalKwh.toFixed(1));
   setEl(`${prefix}-summary-peak`, Math.round(peak).toLocaleString());
