@@ -11,13 +11,11 @@ import { refreshVrmSettings } from "./src/api/api.js";
 import { loadInitialConfig, saveConfig } from "./src/config-store.js";
 import { requestRemoteSolve } from "./src/api/api.js";
 import { initPredictionsTab } from "./src/predictions.js";
+import { initSettingsTab } from "./src/settings.js";
 
-// Import new modules
 import {
   getElements,
   wireGlobalInputs,
-  wireVrmSettingInput,
-  setupSystemCardCollapsible,
 } from "./src/ui-binding.js";
 import {
   snapshotUI,
@@ -44,31 +42,28 @@ const persistConfigDebounced = debounce((cfg) => {
 boot();
 
 function setupTabSwitcher() {
-  const tabOptimizer = document.getElementById('tab-optimizer');
-  const tabPredictions = document.getElementById('tab-predictions');
-  const panelOptimizer = document.getElementById('panel-optimizer');
-  const panelPredictions = document.getElementById('panel-predictions');
+  const tabs = {
+    optimizer: { tab: document.getElementById('tab-optimizer'), panel: document.getElementById('panel-optimizer') },
+    predictions: { tab: document.getElementById('tab-predictions'), panel: document.getElementById('panel-predictions') },
+    settings: { tab: document.getElementById('tab-settings'), panel: document.getElementById('panel-settings') },
+  };
 
-  if (!tabOptimizer || !tabPredictions || !panelOptimizer || !panelPredictions) return;
-
-  // Complete class strings — replace wholesale to avoid stale hover/state classes
   const ACTIVE_CLS = 'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium bg-white text-ink shadow-sm dark:bg-slate-700 dark:text-slate-100 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50';
   const INACTIVE_CLS = 'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50';
 
-  function activateTab(isOptimizer) {
-    // Use Tailwind's .hidden class (display:none !important) so it beats utility classes like .grid
-    panelOptimizer.classList.toggle('hidden', !isOptimizer);
-    panelPredictions.classList.toggle('hidden', isOptimizer);
-
-    tabOptimizer.setAttribute('aria-selected', String(isOptimizer));
-    tabPredictions.setAttribute('aria-selected', String(!isOptimizer));
-
-    tabOptimizer.className = isOptimizer ? ACTIVE_CLS : INACTIVE_CLS;
-    tabPredictions.className = isOptimizer ? INACTIVE_CLS : ACTIVE_CLS;
+  function activateTab(name) {
+    for (const [key, { tab, panel }] of Object.entries(tabs)) {
+      if (!tab || !panel) continue;
+      const isActive = key === name;
+      panel.classList.toggle('hidden', !isActive);
+      tab.setAttribute('aria-selected', String(isActive));
+      tab.className = isActive ? ACTIVE_CLS : INACTIVE_CLS;
+    }
   }
 
-  tabOptimizer.addEventListener('click', () => activateTab(true));
-  tabPredictions.addEventListener('click', () => activateTab(false));
+  for (const [name, { tab }] of Object.entries(tabs)) {
+    tab?.addEventListener('click', () => activateTab(name));
+  }
 }
 
 async function boot() {
@@ -76,11 +71,14 @@ async function boot() {
 
   hydrateUI(els, initialConfig);
 
-  setupSystemCardCollapsible(els);
   setupTabSwitcher();
+  initSettingsTab({
+    onSystemSave: () => queuePersistSnapshot(),
+    onVrmRefresh: onRefreshVrmSettings,
+  });
   await initPredictionsTab();
 
-  // Wire inputs with callbacks
+  // Wire optimizer-tab inputs (save + recompute)
   wireGlobalInputs(els, {
     onInput: () => {
       queuePersistSnapshot();
@@ -88,10 +86,6 @@ async function boot() {
     },
     onRun: onRun,
     updateTerminalCustomUI: () => updateTerminalCustomUI(els),
-  });
-
-  wireVrmSettingInput(els, {
-    onRefresh: onRefreshVrmSettings,
   });
 
   if (els.status) {

@@ -56,15 +56,6 @@ export function getElements() {
     batteryExportTp: $("#export-point-cent"),
     rebalanceStatus: $("#rebalance-status"),
     rebalanceStatusRow: $("#rebalance-status-row"),
-
-    // VRM section
-    vrmFetchSettings: $("#vrm-fetch-settings"),
-
-    // System settings card
-    systemSettingsBody: $("#system-settings-body"),
-    systemSettingsToggle: $("#system-settings-toggle"),
-    systemSettingsToggleIcon: $("#system-settings-toggle-icon"),
-    systemSettingsHeader: $("#system-settings-header"),
   };
 }
 
@@ -75,6 +66,7 @@ export function wireGlobalInputs(els, { onInput, onRun, updateTerminalCustomUI }
     if (el === els.updateDataBeforeRun) continue; // Checkbox doesn't trigger auto-save
     if (el === els.pushToVictron) continue; // Checkbox doesn't trigger auto-save
     if (el.dataset.predictionsOnly) continue; // Predictions tab inputs handled separately
+    if (el.dataset.settingsOnly) continue; // Settings tab inputs handled separately
     el.addEventListener("input", onInput);
     el.addEventListener("change", onInput);
   }
@@ -99,32 +91,3 @@ export function wireGlobalInputs(els, { onInput, onRun, updateTerminalCustomUI }
   });
 }
 
-export function wireVrmSettingInput(els, { onRefresh }) {
-  els.vrmFetchSettings?.addEventListener("click", onRefresh);
-}
-
-export function setupSystemCardCollapsible(els) {
-  const body = els.systemSettingsBody;
-  const toggle = els.systemSettingsToggle;
-  const icon = els.systemSettingsToggleIcon;
-  const header = els.systemSettingsHeader;
-
-  if (!body || !toggle) return;
-
-  let isExpanded = false;
-
-  const applyState = () => {
-    body.classList.toggle("hidden", !isExpanded);
-    toggle.setAttribute("aria-expanded", String(isExpanded));
-    icon?.classList.toggle("rotate-180", !isExpanded);
-    header?.classList.toggle("mb-3", isExpanded);
-    header?.classList.toggle("mb-0", !isExpanded);
-  };
-
-  applyState();
-
-  toggle.addEventListener("click", () => {
-    isExpanded = !isExpanded;
-    applyState();
-  });
-}

@@ -11,8 +11,9 @@ import {
   runValidation,
   fetchForecast,
 } from './api/api.js';
-import { debounce } from './utils.js';
+import { debounce, setVal, getVal } from './utils.js';
 import { buildTimeAxisFromTimestamps, getBaseOptions, renderChart, SOLUTION_COLORS } from './charts.js';
+import { hydratePredictionSettings, readPredictionSettingsValues } from './settings.js';
 
 let validationResults = null;
 let _activeSensor = null;
@@ -40,40 +41,10 @@ async function hydrateForm() {
 }
 
 function applyConfigToForm(config) {
-  const haSettingsGroup = document.getElementById('pred-ha-settings-group');
-  const haSettingsDivider = document.getElementById('pred-ha-settings-divider');
-  if (haSettingsGroup) {
-    if (config.isAddon) {
-      haSettingsGroup.hidden = true;
-      if (haSettingsDivider) haSettingsDivider.hidden = true;
-    } else {
-      haSettingsGroup.hidden = false;
-      if (haSettingsDivider) haSettingsDivider.hidden = false;
-      setVal('pred-ha-url', config.haUrl ?? '');
-      setVal('pred-ha-token', config.haToken ?? '');
-    }
-  }
+  // Hydrate Settings-tab fields (HA, sensors, sensor dropdown)
+  hydratePredictionSettings(config);
 
-  /* Removed obsolete fields */
-  setVal('pred-sensors', config.sensors ? JSON.stringify(config.sensors, null, 2) : '');
-  setVal('pred-derived', config.derived ? JSON.stringify(config.derived, null, 2) : '');
-
-  // Populate sensor dropdown
-  const sensorSelect = document.getElementById('pred-active-sensor');
-  if (sensorSelect) {
-    sensorSelect.innerHTML = '<option value="" disabled selected>Select a sensor…</option>';
-
-    const addOption = (s) => {
-      const opt = document.createElement('option');
-      opt.textContent = s.name || s.id;
-      opt.value = opt.textContent;
-      sensorSelect.appendChild(opt);
-    };
-
-    if (config.sensors) config.sensors.forEach(addOption);
-    if (config.derived) config.derived.forEach(addOption);
-  }
-
+  // Prediction-specific controls
   renderActiveConfig(config.activeConfig ?? null);
 }
 
@@ -84,8 +55,8 @@ function applyConfigToForm(config) {
 function wireForm() {
   const debouncedSave = debounce(saveFormToServer, 600);
 
-  /* Removed obsolete logic */
-  for (const el of document.querySelectorAll('[data-predictions-only="true"]')) {
+  // Wire prediction-tab controls only (Settings-tab prediction inputs are wired in settings.js)
+  for (const el of document.querySelectorAll('#panel-predictions [data-predictions-only="true"]')) {
     el.addEventListener('input', debouncedSave);
     el.addEventListener('change', debouncedSave);
   }
@@ -99,20 +70,6 @@ function wireForm() {
   if (recomputeBtn) {
     recomputeBtn.addEventListener('click', onRecompute);
   }
-
-  const settingsToggle = document.getElementById('pred-settings-toggle');
-  const settingsBody = document.getElementById('pred-settings-body');
-  const settingsIcon = document.getElementById('pred-settings-toggle-icon');
-
-  if (settingsToggle && settingsBody) {
-    settingsToggle.addEventListener('click', () => {
-      const isHidden = settingsBody.classList.contains('hidden');
-      settingsBody.classList.toggle('hidden', !isHidden);
-      if (settingsIcon) {
-        settingsIcon.style.transform = isHidden ? 'rotate(180deg)' : '';
-      }
-    });
-  }
 }
 
 async function saveFormToServer() {
@@ -125,9 +82,6 @@ async function saveFormToServer() {
 }
 
 function readFormValues() {
-  const sensors = parseSilently(getVal('pred-sensors'));
-  const derived = parseSilently(getVal('pred-derived'));
-
   const activeSensor = getVal('pred-active-sensor');
   const activeLookback = getVal('pred-active-lookback');
 
@@ -139,10 +93,7 @@ function readFormValues() {
   } : null;
 
   return {
-    haUrl: getVal('pred-ha-url'),
-    haToken: getVal('pred-ha-token'),
-    ...(sensors !== null ? { sensors } : {}),
-    ...(derived !== null ? { derived } : {}),
+    ...readPredictionSettingsValues(),
     ...(activeConfig ? { activeConfig } : {}),
   };
 }
@@ -573,21 +524,4 @@ function setStatus(msg, isError = false) {
   el.className = isError
     ? 'text-sm text-red-600 dark:text-red-400'
     : 'text-sm text-ink-soft dark:text-slate-400';
-}
-
-function setVal(id, value) {
-  const el = document.getElementById(id);
-  if (el) el.value = value;
-}
-
-function getVal(id) {
-  return document.getElementById(id)?.value ?? '';
-}
-
-function parseSilently(str) {
-  try {
-    return JSON.parse(str);
-  } catch {
-    return null;
-  }
 }
