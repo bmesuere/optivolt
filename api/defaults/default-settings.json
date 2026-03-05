@@ -17,10 +17,16 @@
     "prices": "vrm",
     "load": "vrm",
     "pv": "vrm",
-    "soc": "mqtt"
+    "soc": "mqtt",
+    "ev": "none"
   },
   "rebalanceEnabled": false,
   "rebalanceHoldHours": 3,
   "haUrl": "ws://homeassistant.local:8123/api/websocket",
-  "haToken": ""
+  "haToken": "",
+  "evEnabled": false,
+  "evChargePower_W": 11000,
+  "evChargeEfficiency_percent": 90,
+  "evSocSensor": "",
+  "evPlugSensor": ""
 }

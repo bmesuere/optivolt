@@ -11,12 +11,14 @@ export type { HaSensor, HaDerivedSensor };
 
 export type DataSource = 'vrm' | 'api';
 export type SocSource = 'mqtt' | 'api';
+export type EvSource = 'ha' | 'api' | 'none';
 
 export interface DataSources {
   load: DataSource;
   pv: DataSource;
   prices: DataSource;
   soc: SocSource;
+  ev: EvSource;
 }
 
 // ----------------------------- Settings ---------------------------------
@@ -41,6 +43,11 @@ export interface Settings {
   rebalanceHoldHours: number;
   haUrl: string;
   haToken: string;
+  evEnabled: boolean;
+  evChargePower_W: number;
+  evChargeEfficiency_percent: number;
+  evSocSensor: string;
+  evPlugSensor: string;
 }
 
 // ----------------------------- Persisted data ---------------------------
@@ -54,6 +61,13 @@ export interface RebalanceState {
   startMs: number | null;
 }
 
+export interface EvState {
+  soc_percent: number;
+  plugged: boolean;
+  maxPower_W: number;
+  timestamp: string;
+}
+
 export interface Data {
   load: TimeSeries;
   pv: TimeSeries;
@@ -61,6 +75,7 @@ export interface Data {
   exportPrice: TimeSeries;
   soc: SocData;
   rebalanceState?: RebalanceState;
+  evState?: EvState;
 }
 
 // ----------------------------- Plan rows with DESS ----------------------

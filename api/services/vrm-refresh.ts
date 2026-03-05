@@ -3,7 +3,26 @@ import type { VRMForecasts, VRMPrices } from '../../lib/vrm-api.ts';
 import { loadSettings, saveSettings } from './settings-store.ts';
 import { loadData, saveData } from './data-store.ts';
 import { readVictronSocPercent, readVictronSocLimits } from './mqtt-service.ts';
-import type { Data } from '../types.ts';
+import { fetchHaEntityState } from './ha-client.ts';
+import type { Data, EvState, Settings } from '../types.ts';
+
+async function fetchEvStateFromHa(settings: Settings): Promise<EvState> {
+  const { haUrl, haToken, evSocSensor, evPlugSensor } = settings;
+  const timestamp = new Date().toISOString();
+
+  const [socEntity, plugEntity] = await Promise.all([
+    evSocSensor ? fetchHaEntityState({ haUrl, haToken, entityId: evSocSensor }) : Promise.resolve(null),
+    evPlugSensor ? fetchHaEntityState({ haUrl, haToken, entityId: evPlugSensor }) : Promise.resolve(null),
+  ]);
+
+  const rawSoc = socEntity ? Number(socEntity.state) : 0;
+  const soc_percent = Number.isFinite(rawSoc) ? rawSoc : 0;
+  const plugged = plugEntity ? plugEntity.state === 'on' : false;
+  // current_power_w is in watts; max_current (amps) is excluded to avoid unit confusion
+  const maxPower_W = plugEntity ? Number(plugEntity.attributes['current_power_w'] ?? 0) : 0;
+
+  return { soc_percent, plugged, maxPower_W, timestamp };
+}
 
 function createClientFromEnv(): VRMClient {
   const installationId = (process.env.VRM_INSTALLATION_ID ?? '').trim();
@@ -68,13 +87,19 @@ export async function refreshSeriesFromVrmAndPersist(): Promise<void> {
   const shouldFetchForecasts = shouldFetchVrmLoad || shouldFetchVrmPv;
   const shouldFetchPrices = sources.prices === 'vrm';
   const shouldFetchSoc = sources.soc === 'mqtt';
+  const shouldFetchEv = sources.ev === 'ha' && (!!settings.evSocSensor || !!settings.evPlugSensor);
 
-  // Concurrent IO
-  const [forecastsResult, pricesResult, socResult] = await Promise.allSettled([
+  // Concurrent IO — includes loadData() to overlap file read with network calls
+  const [baseDataResult, forecastsResult, pricesResult, socResult, evResult] = await Promise.allSettled([
+    loadData(),
     shouldFetchForecasts ? client.fetchForecasts() : Promise.resolve(null),
     shouldFetchPrices ? client.fetchPrices() : Promise.resolve(null),
     shouldFetchSoc ? readVictronSocPercent({ timeoutMs: 5000 }) : Promise.resolve(null),
+    shouldFetchEv ? fetchEvStateFromHa(settings) : Promise.resolve(null),
   ]);
+
+  if (baseDataResult.status === 'rejected') throw baseDataResult.reason as Error;
+  const baseData = baseDataResult.value;
 
   let forecasts: VRMForecasts | null = null;
   if (shouldFetchForecasts) {
@@ -94,8 +119,11 @@ export async function refreshSeriesFromVrmAndPersist(): Promise<void> {
     else console.error('Failed to read SoC from MQTT:', socResult.reason instanceof Error ? socResult.reason.message : String(socResult.reason));
   }
 
-  // Load previous data for fallback (we overwrite specific keys if VRM usage is active)
-  const baseData = await loadData();
+  let evState: EvState | undefined = baseData.evState;
+  if (shouldFetchEv) {
+    if (evResult.status === 'fulfilled' && evResult.value !== null) evState = evResult.value;
+    else if (evResult.status === 'rejected') console.error('Failed to fetch EV state from HA:', evResult.reason instanceof Error ? evResult.reason.message : String(evResult.reason));
+  }
 
   // Build new data structures (or keep existing)
 
@@ -136,7 +164,7 @@ export async function refreshSeriesFromVrmAndPersist(): Promise<void> {
     ? { timestamp: new Date().toISOString(), value: socPercent }
     : baseData.soc;
 
-  const nextData: Data = { load, pv, importPrice, exportPrice, soc, rebalanceState: baseData.rebalanceState };
+  const nextData: Data = { load, pv, importPrice, exportPrice, soc, rebalanceState: baseData.rebalanceState, evState };
   await saveData(nextData);
 
   // Optionally keep stepSize_m in settings in sync

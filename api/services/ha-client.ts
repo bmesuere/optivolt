@@ -1,12 +1,64 @@
 /**
  * ha-client.ts
  *
- * Home Assistant WebSocket client for fetching long-term statistics.
+ * Home Assistant client utilities:
+ * - WebSocket client for fetching long-term statistics.
+ * - REST client for fetching entity states.
  * Uses the Node.js built-in WebSocket (Node >= 22).
- * Creates a new WebSocket connection per call.
  */
 
 import type { HaReading } from '../../lib/ha-postprocess.ts';
+
+/** Convert a HA WebSocket URL to an HTTP URL for REST API calls. */
+export function wsUrlToHttp(wsUrl: string): string {
+  return wsUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://').replace(/\/api\/websocket$/, '');
+}
+
+export interface HaEntityState {
+  entity_id: string;
+  state: string;
+  attributes: Record<string, unknown>;
+  last_changed: string;
+  last_updated: string;
+}
+
+interface FetchHaEntityStateOptions {
+  haUrl: string;
+  haToken: string;
+  entityId: string;
+  timeoutMs?: number;
+}
+
+/**
+ * Fetch the current state of a single HA entity via the REST API.
+ */
+export async function fetchHaEntityState({
+  haUrl,
+  haToken,
+  entityId,
+  timeoutMs = 10000,
+}: FetchHaEntityStateOptions): Promise<HaEntityState> {
+  const isAddon = !!process.env.SUPERVISOR_TOKEN;
+  const baseUrl = isAddon ? 'http://supervisor/core' : wsUrlToHttp(haUrl);
+  const token: string = isAddon ? process.env.SUPERVISOR_TOKEN! : haToken;
+
+  const url = `${baseUrl}/api/states/${entityId}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`HA REST API error ${res.status} for ${entityId}`);
+    }
+    return (await res.json()) as HaEntityState;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 interface FetchHaStatsOptions {
   haUrl: string;

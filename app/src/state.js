@@ -27,6 +27,7 @@ export function snapshotUI(els) {
       load: els.sourceLoad?.value || "vrm",
       pv: els.sourcePv?.value || "vrm",
       soc: els.sourceSoc?.value || "mqtt",
+      ev: els.sourceEv?.value || "none",
     },
 
     // ALGORITHM
@@ -36,6 +37,13 @@ export function snapshotUI(els) {
     // HOME ASSISTANT
     haUrl: els.haUrl?.value ?? '',
     haToken: els.haToken?.value ?? '',
+
+    // EV CHARGING
+    evEnabled: !!els.evEnabled?.checked,
+    evChargePower_W: num(els.evChargePower?.value),
+    evChargeEfficiency_percent: num(els.evChargeEfficiency?.value),
+    evSocSensor: els.evSocSensor?.value ?? '',
+    evPlugSensor: els.evPlugSensor?.value ?? '',
 
     // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
@@ -72,6 +80,7 @@ export function hydrateUI(els, obj = {}) {
   if (els.sourceLoad && obj.dataSources?.load) els.sourceLoad.value = obj.dataSources.load;
   if (els.sourcePv && obj.dataSources?.pv) els.sourcePv.value = obj.dataSources.pv;
   if (els.sourceSoc && obj.dataSources?.soc) els.sourceSoc.value = obj.dataSources.soc;
+  if (els.sourceEv && obj.dataSources?.ev) els.sourceEv.value = obj.dataSources.ev;
 
   // Algorithm
   if (els.rebalanceEnabled && obj.rebalanceEnabled != null) {
@@ -85,6 +94,15 @@ export function hydrateUI(els, obj = {}) {
   if (els.haSettingsGroup) {
     els.haSettingsGroup.hidden = !!obj.isAddon;
   }
+
+  // EV CHARGING
+  if (els.evEnabled && obj.evEnabled != null) {
+    els.evEnabled.checked = !!obj.evEnabled;
+  }
+  setIfDef(els.evChargePower, obj.evChargePower_W);
+  setIfDef(els.evChargeEfficiency, obj.evChargeEfficiency_percent);
+  setIfDef(els.evSocSensor, obj.evSocSensor);
+  setIfDef(els.evPlugSensor, obj.evPlugSensor);
 
   // UI-only
   if (els.tableKwh && obj.tableShowKwh != null) {

@@ -920,6 +920,43 @@
           </div>
         </section>
 
+        <!-- EV Charging Card -->
+        <section class="card">
+          <div class="mb-4">
+            <h2 class="sidebar-label">EV Charging</h2>
+          </div>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <label class="toggle">
+                <input id="ev-enabled" type="checkbox">
+                <span class="toggle-knob"></span>
+                <span class="text-sm text-slate-600 dark:text-slate-400">Enable EV charging</span>
+              </label>
+            </div>
+            <label class="text-sm">EV data source
+              <select id="source-ev" class="form-select">
+                <option value="none">None</option>
+                <option value="ha">Home Assistant</option>
+                <option value="api">API</option>
+              </select>
+            </label>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="text-sm">Charge power (W)
+                <input id="ev-charge-power" type="number" min="0" step="100" class="form-input" />
+              </label>
+              <label class="text-sm">Efficiency (%)
+                <input id="ev-charge-efficiency" type="number" min="50" max="100" step="1" class="form-input" />
+              </label>
+            </div>
+            <label class="block text-sm">SoC sensor entity ID
+              <input id="ev-soc-sensor" type="text" placeholder="sensor.ev_battery" class="form-input" />
+            </label>
+            <label class="block text-sm">Plug sensor entity ID
+              <input id="ev-plug-sensor" type="text" placeholder="binary_sensor.ev_charger_plugged" class="form-input" />
+            </label>
+          </div>
+        </section>
+
       </div><!-- end right column -->
 
     </div>
