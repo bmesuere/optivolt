@@ -21,7 +21,7 @@ import {
   validatePvForecast,
 } from '../../lib/predict-pv.ts';
 import type { PvProductionRecord, PvForecastPoint } from '../../lib/predict-pv.ts';
-import type { PredictionConfig, PvMode } from '../types.ts';
+import type { PredictionRunConfig, PvMode } from '../types.ts';
 import { getForecastTimeRange, buildForecastSeries, type ForecastSeries } from '../../lib/time-series-utils.ts';
 
 export interface PvForecastRunResult {
@@ -34,7 +34,7 @@ export interface PvForecastRunResult {
 /**
  * Run the full PV forecast pipeline.
  */
-export async function runPvForecast(config: PredictionConfig): Promise<PvForecastRunResult> {
+export async function runPvForecast(config: PredictionRunConfig): Promise<PvForecastRunResult> {
   const { haUrl, haToken, sensors, derived, pvConfig } = config;
 
   if (!pvConfig) {

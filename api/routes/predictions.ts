@@ -6,7 +6,7 @@ import { runValidation, runForecast } from '../services/load-prediction-service.
 import { runPvForecast } from '../services/pv-prediction-service.ts';
 import { loadData, saveData } from '../services/data-store.ts';
 import { loadSettings } from '../services/settings-store.ts';
-import type { PredictionConfig } from '../types.ts';
+import type { PredictionConfig, PredictionRunConfig } from '../types.ts';
 
 const router = express.Router();
 
@@ -31,8 +31,10 @@ router.post('/config', async (req: Request, res: Response, next: NextFunction) =
       'prediction config payload must be an object',
     );
 
+    // haUrl/haToken are now stored in Settings, not prediction config — strip them
+    const { haUrl: _haUrl, haToken: _haToken, ...rest } = incoming;
     const prev = await loadPredictionConfig();
-    const merged = { ...prev, ...incoming };
+    const merged = { ...prev, ...rest };
     await savePredictionConfig(merged);
 
     res.json({ message: 'Prediction config saved.', config: merged });
@@ -43,7 +45,7 @@ router.post('/config', async (req: Request, res: Response, next: NextFunction) =
 
 router.post('/validate', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const config = await loadPredictionConfig();
+    const config = await buildRunConfig();
     assertHaConnection(config);
     assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
 
@@ -70,7 +72,7 @@ router.post('/validate', async (_req: Request, res: Response, next: NextFunction
 
 router.post('/load/forecast', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const config = await loadPredictionConfig();
+    const config = await buildRunConfig();
 
     if (req.query.recent === 'false') {
       config.includeRecent = false;
@@ -87,7 +89,7 @@ router.post('/load/forecast', async (req: Request, res: Response, next: NextFunc
 
 router.post('/pv/forecast', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const config = await loadPredictionConfig();
+    const config = await buildRunConfig();
 
     const result = await executePvForecast(config, 'pv/forecast');
     res.json(result);
@@ -100,7 +102,7 @@ router.post('/pv/forecast', async (req: Request, res: Response, next: NextFuncti
 
 router.post('/forecast', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const config = await loadPredictionConfig();
+    const config = await buildRunConfig();
 
     if (req.query.recent === 'false') {
       config.includeRecent = false;
@@ -119,7 +121,7 @@ router.post('/forecast', async (req: Request, res: Response, next: NextFunction)
 
 router.get('/forecast/now', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const config = await loadPredictionConfig();
+    const config = await buildRunConfig();
     config.includeRecent = false;
 
     const [loadResult, pvResult] = await Promise.all([
@@ -135,7 +137,12 @@ router.get('/forecast/now', async (_req: Request, res: Response, next: NextFunct
 
 // ----------------------------- Helpers ------------------------------------
 
-async function executeLoadForecast(config: PredictionConfig, logLabel: string): Promise<unknown> {
+async function buildRunConfig(): Promise<PredictionRunConfig> {
+  const [config, settings] = await Promise.all([loadPredictionConfig(), loadSettings()]);
+  return { ...config, haUrl: settings.haUrl, haToken: settings.haToken };
+}
+
+async function executeLoadForecast(config: PredictionRunConfig, logLabel: string): Promise<unknown> {
   assertHaConnection(config);
   assertCondition(config.activeConfig != null, 400, 'activeConfig is required');
   assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
@@ -151,7 +158,7 @@ async function executeLoadForecast(config: PredictionConfig, logLabel: string): 
   }
 }
 
-async function executePvForecast(config: PredictionConfig, logLabel: string): Promise<unknown> {
+async function executePvForecast(config: PredictionRunConfig, logLabel: string): Promise<unknown> {
   if (
     !config.pvConfig ||
     config.pvConfig.latitude == null || Number.isNaN(config.pvConfig.latitude) ||
@@ -181,7 +188,7 @@ function logPredictionCall(type: string, meta: Record<string, unknown>): void {
   });
 }
 
-function assertHaConnection(config: PredictionConfig): void {
+function assertHaConnection(config: PredictionRunConfig): void {
   assertCondition(
     !!process.env.SUPERVISOR_TOKEN || (config.haUrl.length > 0 && config.haToken.length > 0),
     400,

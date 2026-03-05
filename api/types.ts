@@ -39,6 +39,8 @@ export interface Settings {
   dataSources: DataSources;
   rebalanceEnabled: boolean;
   rebalanceHoldHours: number;
+  haUrl: string;
+  haToken: string;
 }
 
 // ----------------------------- Persisted data ---------------------------
@@ -95,12 +97,16 @@ export interface PvPredictionConfig {
 }
 
 export interface PredictionConfig {
-  haUrl: string;
-  haToken: string;
   sensors: HaSensor[];
   derived: HaDerivedSensor[];
   activeConfig?: PredictionActiveConfig;
   validationWindow?: PredictionValidationWindow;
   includeRecent?: boolean;
   pvConfig?: PvPredictionConfig;
+}
+
+/** PredictionConfig enriched with HA credentials from Settings, passed to prediction services. */
+export interface PredictionRunConfig extends PredictionConfig {
+  haUrl: string;
+  haToken: string;
 }

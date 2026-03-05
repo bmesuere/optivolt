@@ -59,11 +59,10 @@ export function getElements() {
     // VRM section
     vrmFetchSettings: $("#vrm-fetch-settings"),
 
-    // System settings card
-    systemSettingsBody: $("#system-settings-body"),
-    systemSettingsToggle: $("#system-settings-toggle"),
-    systemSettingsToggleIcon: $("#system-settings-toggle-icon"),
-    systemSettingsHeader: $("#system-settings-header"),
+    // Home Assistant connection (Settings tab)
+    haUrl: $("#pred-ha-url"),
+    haToken: $("#pred-ha-token"),
+    haSettingsGroup: $("#pred-ha-settings-group"),
   };
 }
 
@@ -102,28 +101,3 @@ export function wireVrmSettingInput(els, { onRefresh }) {
   els.vrmFetchSettings?.addEventListener("click", onRefresh);
 }
 
-export function setupSystemCardCollapsible(els) {
-  const body = els.systemSettingsBody;
-  const toggle = els.systemSettingsToggle;
-  const icon = els.systemSettingsToggleIcon;
-  const header = els.systemSettingsHeader;
-
-  if (!body || !toggle) return;
-
-  let isExpanded = false;
-
-  const applyState = () => {
-    body.classList.toggle("hidden", !isExpanded);
-    toggle.setAttribute("aria-expanded", String(isExpanded));
-    icon?.classList.toggle("rotate-180", !isExpanded);
-    header?.classList.toggle("mb-3", isExpanded);
-    header?.classList.toggle("mb-0", !isExpanded);
-  };
-
-  applyState();
-
-  toggle.addEventListener("click", () => {
-    isExpanded = !isExpanded;
-    applyState();
-  });
-}

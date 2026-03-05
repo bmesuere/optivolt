@@ -64,20 +64,6 @@ async function hydrateForm() {
 }
 
 function applyConfigToForm(config) {
-  const haSettingsGroup = document.getElementById('pred-ha-settings-group');
-  const haSettingsDivider = document.getElementById('pred-ha-settings-divider');
-  if (haSettingsGroup) {
-    if (config.isAddon) {
-      haSettingsGroup.hidden = true;
-      if (haSettingsDivider) haSettingsDivider.hidden = true;
-    } else {
-      haSettingsGroup.hidden = false;
-      if (haSettingsDivider) haSettingsDivider.hidden = false;
-      setVal('pred-ha-url', config.haUrl ?? '');
-      setVal('pred-ha-token', config.haToken ?? '');
-    }
-  }
-
   setVal('pred-sensors', config.sensors ? JSON.stringify(config.sensors, null, 2) : '');
   setVal('pred-derived', config.derived ? JSON.stringify(config.derived, null, 2) : '');
 
@@ -168,8 +154,6 @@ function readFormValues() {
   };
 
   return {
-    haUrl: getVal('pred-ha-url'),
-    haToken: getVal('pred-ha-token'),
     ...(sensors !== null ? { sensors } : {}),
     ...(derived !== null ? { derived } : {}),
     ...(activeConfig ? { activeConfig } : {}),

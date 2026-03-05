@@ -33,6 +33,10 @@ export function snapshotUI(els) {
     rebalanceEnabled: !!els.rebalanceEnabled?.checked,
     rebalanceHoldHours: num(els.rebalanceHoldHours?.value),
 
+    // HOME ASSISTANT
+    haUrl: els.haUrl?.value ?? '',
+    haToken: els.haToken?.value ?? '',
+
     // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
     // Note: updateDataBeforeRun / pushToVictron are not part of the persisted settings
@@ -74,6 +78,13 @@ export function hydrateUI(els, obj = {}) {
     els.rebalanceEnabled.checked = !!obj.rebalanceEnabled;
   }
   setIfDef(els.rebalanceHoldHours, obj.rebalanceHoldHours);
+
+  // HOME ASSISTANT
+  setIfDef(els.haUrl, obj.haUrl);
+  setIfDef(els.haToken, obj.haToken);
+  if (els.haSettingsGroup) {
+    els.haSettingsGroup.hidden = !!obj.isAddon;
+  }
 
   // UI-only
   if (els.tableKwh && obj.tableShowKwh != null) {
