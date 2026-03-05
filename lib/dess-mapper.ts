@@ -410,37 +410,3 @@ export function mapRowsToDessV2(rows: PlanRow[], cfg: SolverConfig): DessResult 
   return { perSlot, diagnostics };
 }
 
-
-
-/**
- * Compare v1 and v2 DESS outputs slot-by-slot.
- * Returns { totalSlots, diffCount, diffs[] }.
- */
-export function computeDessDiff(
-  v1PerSlot: DessSlot[],
-  v2PerSlot: DessSlot[],
-): { totalSlots: number; diffCount: number; diffs: Array<{ slot: number; v1: DessSlot | null; v2: DessSlot | null }> } {
-  const totalSlots = Math.max(v1PerSlot.length, v2PerSlot.length);
-  const diffs: Array<{ slot: number; v1: DessSlot | null; v2: DessSlot | null }> = [];
-
-  for (let i = 0; i < totalSlots; i++) {
-    const a = v1PerSlot[i];
-    const b = v2PerSlot[i];
-
-    if (!a || !b) {
-      diffs.push({ slot: i, v1: a ?? null, v2: b ?? null });
-      continue;
-    }
-
-    if (
-      a.strategy !== b.strategy ||
-      a.restrictions !== b.restrictions ||
-      a.feedin !== b.feedin ||
-      a.socTarget_percent !== b.socTarget_percent
-    ) {
-      diffs.push({ slot: i, v1: a, v2: b });
-    }
-  }
-
-  return { totalSlots, diffCount: diffs.length, diffs };
-}

@@ -10,7 +10,6 @@ export function getElements() {
     sourceLoad: $("#source-load"),
     sourcePv: $("#source-pv"),
     sourceSoc: $("#source-soc"),
-    dessAlgorithm: $("#dess-algorithm"),
     rebalanceEnabled: $("#rebalance-enabled"),
     rebalanceHoldHours: $("#rebalance-hold-hours"),
 

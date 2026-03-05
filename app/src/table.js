@@ -13,7 +13,7 @@ import { SOLUTION_COLORS } from "./charts.js";
  * @param {HTMLElement}  [opts.targets.tableUnit] - element for the "Units: ..." label
  * @param {boolean}      opts.showKwh             - whether to display kWh instead of W
  */
-export function renderTable({ rows, cfg, targets, showKwh, dessDiff, rebalanceWindow }) {
+export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
   const { table, tableUnit } = targets || {};
   if (!table || !Array.isArray(rows) || rows.length === 0) return;
 
@@ -23,14 +23,6 @@ export function renderTable({ rows, cfg, targets, showKwh, dessDiff, rebalanceWi
 
   const fmtTime = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
   const fmtDate = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit" });
-
-  // Build a slot→diff lookup for quick per-row checks
-  const diffBySlot = new Map();
-  if (dessDiff?.diffs) {
-    for (const d of dessDiff.diffs) {
-      diffBySlot.set(d.slot, d);
-    }
-  }
 
   const timesDisp = rows.map((row) => {
     const dt = new Date(row.timestampMs);
@@ -94,21 +86,6 @@ export function renderTable({ rows, cfg, targets, showKwh, dessDiff, rebalanceWi
       tip: "Target SoC at end of slot",
     },
   ];
-
-  // Add diff indicator column when v2 diff data is available
-  if (diffBySlot.size > 0) {
-    cols.push({
-      key: "dess_diff",
-      headerHtml: "Δ",
-      fmt: (_, ri) => {
-        const d = diffBySlot.get(ri);
-        if (!d) return "";
-        return { text: "⚠", tip: fmtDiffTooltip(d), style: "color: #d97706" };
-      },
-      tip: "V1 → V2 differences",
-      cellTip: true,
-    });
-  }
 
   const thead = `
     <thead>
@@ -180,25 +157,6 @@ export function renderTable({ rows, cfg, targets, showKwh, dessDiff, rebalanceWi
       3: "Both directions restricted",
     };
     return { text: map[v] ?? String(v), tip: tips[v] ?? String(v) };
-  }
-
-  function fmtDiffTooltip(d) {
-    const sn = { 0: "Target SoC", 1: "Self-consumption", 2: "Pro battery", 3: "Pro grid" };
-    const rn = { 0: "none", 1: "b→g restricted", 2: "g→b restricted", 3: "both restricted" };
-    const parts = [];
-    if (d.v1?.strategy !== d.v2?.strategy) {
-      parts.push(`Strategy: ${sn[d.v1?.strategy] ?? "?"} → ${sn[d.v2?.strategy] ?? "?"}`);
-    }
-    if (d.v1?.restrictions !== d.v2?.restrictions) {
-      parts.push(`Restrictions: ${rn[d.v1?.restrictions] ?? "?"} → ${rn[d.v2?.restrictions] ?? "?"}`);
-    }
-    if (d.v1?.socTarget_percent !== d.v2?.socTarget_percent) {
-      parts.push(`SoC target: ${d.v1?.socTarget_percent ?? "?"}% → ${d.v2?.socTarget_percent ?? "?"}%`);
-    }
-    if (d.v1?.feedin !== d.v2?.feedin) {
-      parts.push(`Feed-in: ${d.v1?.feedin ? "yes" : "no"} → ${d.v2?.feedin ? "yes" : "no"}`);
-    }
-    return parts.length ? parts.join("; ") : "Differs";
   }
 
   function fmtDessFeedin(v) {

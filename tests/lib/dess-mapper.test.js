@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapRowsToDess, mapRowsToDessV2, computeDessDiff, Strategy, Restrictions, FeedIn } from '../../lib/dess-mapper.ts';
+import { mapRowsToDess, mapRowsToDessV2, Strategy, Restrictions, FeedIn } from '../../lib/dess-mapper.ts';
 
 describe('mapRowsToDess', () => {
   const cfg = {
@@ -594,42 +594,3 @@ describe('mapRowsToDessV2', () => {
   });
 });
 
-describe('computeDessDiff', () => {
-  it('reports no diffs when outputs are identical', () => {
-    const slot = { feedin: 1, restrictions: 3, strategy: 1, flags: 0, socTarget_percent: 50 };
-    const result = computeDessDiff([slot], [{ ...slot }]);
-    expect(result.diffCount).toBe(0);
-    expect(result.diffs).toEqual([]);
-    expect(result.totalSlots).toBe(1);
-  });
-
-  it('detects strategy differences', () => {
-    const v1 = [{ feedin: 1, restrictions: 3, strategy: 1, flags: 0, socTarget_percent: 50 }];
-    const v2 = [{ feedin: 1, restrictions: 3, strategy: 2, flags: 0, socTarget_percent: 50 }];
-    const result = computeDessDiff(v1, v2);
-    expect(result.diffCount).toBe(1);
-    expect(result.diffs[0].slot).toBe(0);
-  });
-
-  it('detects restriction differences', () => {
-    const v1 = [{ feedin: 1, restrictions: 3, strategy: 1, flags: 0, socTarget_percent: 50 }];
-    const v2 = [{ feedin: 1, restrictions: 1, strategy: 1, flags: 0, socTarget_percent: 50 }];
-    const result = computeDessDiff(v1, v2);
-    expect(result.diffCount).toBe(1);
-  });
-
-  it('detects socTarget differences', () => {
-    const v1 = [{ feedin: 1, restrictions: 3, strategy: 1, flags: 0, socTarget_percent: 50 }];
-    const v2 = [{ feedin: 1, restrictions: 3, strategy: 1, flags: 0, socTarget_percent: 55 }];
-    const result = computeDessDiff(v1, v2);
-    expect(result.diffCount).toBe(1);
-  });
-
-  it('handles arrays of different lengths', () => {
-    const v1 = [{ feedin: 1, restrictions: 3, strategy: 1, flags: 0, socTarget_percent: 50 }];
-    const v2 = [];
-    const result = computeDessDiff(v1, v2);
-    expect(result.diffCount).toBe(1);
-    expect(result.diffs[0].v2).toBeNull();
-  });
-});
