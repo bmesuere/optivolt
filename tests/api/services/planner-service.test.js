@@ -32,7 +32,6 @@ const baseSettings = {
   terminalSocValuation: 'zero',
   terminalSocCustomPrice_cents_per_kWh: 0,
   dataSources: { load: 'vrm', pv: 'vrm', prices: 'vrm', soc: 'mqtt' },
-  dessAlgorithm: 'v1',
   rebalanceEnabled: false,
   rebalanceHoldHours: 2,
 };

@@ -36,9 +36,6 @@ export interface SolverConfig {
   // Initial state
   initialSoc_percent: number;
 
-  // Algorithm selection
-  dessAlgorithm: 'v1' | 'v2';
-
   // Rebalancing (optional — only present when rebalanceEnabled is true)
   rebalanceHoldSlots?: number;
   rebalanceRemainingSlots?: number;

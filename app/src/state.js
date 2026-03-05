@@ -29,8 +29,6 @@ export function snapshotUI(els) {
       soc: els.sourceSoc?.value || "mqtt",
     },
 
-    // ALGORITHM
-    dessAlgorithm: els.dessAlgorithm?.value || "v1",
     rebalanceEnabled: !!els.rebalanceEnabled?.checked,
     rebalanceHoldHours: num(els.rebalanceHoldHours?.value),
 
@@ -70,8 +68,7 @@ export function hydrateUI(els, obj = {}) {
   if (els.sourcePv && obj.dataSources?.pv) els.sourcePv.value = obj.dataSources.pv;
   if (els.sourceSoc && obj.dataSources?.soc) els.sourceSoc.value = obj.dataSources.soc;
 
-  // Algorithm
-  if (els.dessAlgorithm && obj.dessAlgorithm) els.dessAlgorithm.value = obj.dessAlgorithm;
+  // Rebalancing
   if (els.rebalanceEnabled && obj.rebalanceEnabled != null) {
     els.rebalanceEnabled.checked = !!obj.rebalanceEnabled;
   }

@@ -37,7 +37,6 @@ export interface Settings {
   terminalSocValuation: TerminalSocValuation;
   terminalSocCustomPrice_cents_per_kWh: number;
   dataSources: DataSources;
-  dessAlgorithm: 'v1' | 'v2';
   rebalanceEnabled: boolean;
   rebalanceHoldHours: number;
 }
