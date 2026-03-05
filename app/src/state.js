@@ -40,7 +40,7 @@ export function snapshotUI(els) {
 
     // EV CHARGING
     evEnabled: !!els.evEnabled?.checked,
-    evChargePower_W: num(els.evChargePower?.value),
+    evChargeCurrent_A: num(els.evChargeCurrent?.value),
     evChargeEfficiency_percent: num(els.evChargeEfficiency?.value),
     evSocSensor: els.evSocSensor?.value ?? '',
     evPlugSensor: els.evPlugSensor?.value ?? '',
@@ -99,7 +99,7 @@ export function hydrateUI(els, obj = {}) {
   if (els.evEnabled && obj.evEnabled != null) {
     els.evEnabled.checked = !!obj.evEnabled;
   }
-  setIfDef(els.evChargePower, obj.evChargePower_W);
+  setIfDef(els.evChargeCurrent, obj.evChargeCurrent_A);
   setIfDef(els.evChargeEfficiency, obj.evChargeEfficiency_percent);
   setIfDef(els.evSocSensor, obj.evSocSensor);
   setIfDef(els.evPlugSensor, obj.evPlugSensor);

@@ -66,7 +66,7 @@ export function getElements() {
 
     // EV Charging (Settings tab)
     evEnabled: $("#ev-enabled"),
-    evChargePower: $("#ev-charge-power"),
+    evChargeCurrent: $("#ev-charge-current"),
     evChargeEfficiency: $("#ev-charge-efficiency"),
     evSocSensor: $("#ev-soc-sensor"),
     evPlugSensor: $("#ev-plug-sensor"),

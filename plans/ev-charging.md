@@ -54,7 +54,7 @@ Settings tab added in `821707e`. HA URL/token moved from prediction config to to
 
 ---
 
-## Phase 2: Heuristic EV Charging Schedule
+## Phase 2: Heuristic EV Charging Schedule — DONE
 
 **Goal:** Post-solve, identify slots where energy would be exported to grid. Generate binary on/off EV charging schedule.
 
@@ -111,7 +111,7 @@ rest:
 
 ### Approach:
 New decision variable `ev_charge_t` added to the load side of the energy balance:
-```
+```text
 g2l + pv2l + b2l = load_W[t] + ev_charge_t
 ```
 This naturally shares grid import limits with household load. Optimizer can charge during cheap grid periods too, not just PV surplus.
@@ -147,7 +147,7 @@ The user's employer reimburses EV charging at a fixed rate (often above cost). N
 |-------|-------|------------|
 | ~~0~~ | ~~Settings tab UI refactor~~ | ~~DONE~~ |
 | ~~1~~ | ~~EV data layer + HA fetch~~ | ~~DONE~~ |
-| 2 | Heuristic EV schedule | Phase 1 |
+| ~~2~~ | ~~Heuristic EV schedule~~ | ~~DONE~~ |
 | 3 | HA polling endpoint | Phase 2 |
 | 4 | EV in charts/table/summary | Phase 2 |
 | 5 | LP integration | Phase 1 (replaces Phase 2) |

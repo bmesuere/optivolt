@@ -25,7 +25,7 @@
   "haUrl": "ws://homeassistant.local:8123/api/websocket",
   "haToken": "",
   "evEnabled": false,
-  "evChargePower_W": 11000,
+  "evChargeCurrent_A": 32,
   "evChargeEfficiency_percent": 90,
   "evSocSensor": "",
   "evPlugSensor": ""
