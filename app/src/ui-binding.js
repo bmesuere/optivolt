@@ -55,6 +55,9 @@ export function getElements() {
     batteryExportTp: $("#export-point-cent"),
     rebalanceStatus: $("#rebalance-status"),
     rebalanceStatusRow: $("#rebalance-status-row"),
+    evStatusRow: $("#ev-status-row"),
+    evChargeKwh: $("#ev-charge-kwh"),
+    evChargingSlots: $("#ev-charging-slots"),
 
     // VRM section
     vrmFetchSettings: $("#vrm-fetch-settings"),

@@ -102,13 +102,19 @@ To let Optivolt control your EV charger based on PV surplus:
 
 1. In the **Settings tab**, enable **EV**, set the charge power, and enter your HA entity IDs for the EV SoC sensor and plug binary sensor.
 2. Set the EV data source to `ha` so Optivolt fetches plug/SoC state from HA on each plan run.
-3. Poll the `evSchedule` from the `/calculate` response (or the upcoming `/ev/current` endpoint) to set your charger on/off in HA:
+3. Poll `GET /ev/current` from HA to get the current slot's charging decision. Example `configuration.yaml`:
 ```yaml
-rest_command:
-  optivolt_ev_charge:
-    url: "http://localhost:3070/ev/current"
-    method: GET
+rest:
+  - resource: "http://localhost:3070/ev/current"
+    scan_interval: 300
+    sensor:
+      - name: "OptiVolt EV Should Charge"
+        value_template: "{{ value_json.shouldCharge }}"
+      - name: "OptiVolt EV Charge Power"
+        value_template: "{{ value_json.chargePower_W }}"
+        unit_of_measurement: "W"
 ```
+Use `GET /ev/schedule` to retrieve the full day-ahead EV charging schedule.
 
 Charging is triggered only when PV would otherwise be exported to the grid — battery-to-grid arbitrage flows are intentionally excluded.
 
@@ -178,6 +184,8 @@ The **UI** is static and calls the **Express API** on the same origin. The **API
   }
   ```
 - `POST /vrm/refresh-settings` — Fetches latest Dynamic ESS limits/settings from VRM and persists.
+- `GET /ev/schedule` — Full EV charging schedule from the latest plan.
+- `GET /ev/current` — Current slot's EV charging decision (`shouldCharge`, `chargePower_W`). Returns 404 before any plan is computed or when all slots are in the future.
 - `GET/POST /predictions/*` — Load forecasting features (`/validate`, `/forecast`, `/forecast/now`).
 
 *Note:* Data and settings are server-owned. VRM refreshes write to `DATA_DIR/data.json` and the solver always reads from this persisted snapshot.

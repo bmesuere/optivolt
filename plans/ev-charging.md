@@ -71,7 +71,7 @@ Only PV-to-grid surplus triggers EV charging — battery-to-grid exports are int
 
 ---
 
-## Phase 3: API Endpoint for HA
+## Phase 3: API Endpoint for HA — DONE
 
 **Goal:** Expose EV decisions for HA to poll.
 
@@ -93,7 +93,7 @@ rest:
 
 ---
 
-## Phase 4: UI — Show EV in Plan
+## Phase 4: UI — Show EV in Plan — DONE
 
 **Goal:** Display EV charging in charts, table, and summary.
 

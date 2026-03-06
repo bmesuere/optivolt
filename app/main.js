@@ -137,11 +137,23 @@ async function onRun() {
     const solverStatus =
       typeof result?.solverStatus === "string" ? result.solverStatus : "OK";
 
+    // Merge EV schedule into rows
+    const evSchedule = result.evSchedule ?? [];
+    if (evSchedule.length === rows.length) {
+      rows.forEach((row, i) => { row.ev = evSchedule[i].chargePower_W; });
+    }
+
     // Update SoC and tsStart from result
     updatePlanMeta(els, result.initialSoc_percent, result.tsStart);
 
-    // Update summary if present
-    updateSummaryUI(els, result.summary);
+    // Compute EV summary and update summary panel
+    const stepH = Number(els.step?.value ?? 15) / 60;
+    const evSummary = {
+      evChargeTotal_kWh: evSchedule.reduce((s, slot) => s + slot.chargePower_W * stepH / 1000, 0),
+      evChargingSlots: evSchedule.filter(s => s.shouldCharge).length,
+      evEnabled: evSchedule.some(s => s.shouldCharge),
+    };
+    updateSummaryUI(els, { ...result.summary, ...evSummary });
 
     if (els.status) {
       const nonOptimal =

@@ -155,6 +155,7 @@ export function updateSummaryUI(els, summary) {
     setText(els.gridChargeTp, "—");
     setText(els.batteryExportTp, "—");
     updateRebalanceStatus(els, null);
+    updateEvStatus(els, null);
 
     // reset mini bars
     const loadSplitBar = document.getElementById("load-split-bar");
@@ -205,6 +206,7 @@ export function updateSummaryUI(els, summary) {
   );
 
   updateRebalanceStatus(els, summary.rebalanceStatus);
+  updateEvStatus(els, summary);
 
   // --- Energy Flow Bar ---
   const g2b = Number(summary.gridToBattery_kWh) || 0;
@@ -225,6 +227,17 @@ export function updateSummaryUI(els, summary) {
       { value: b2g, color: SOLUTION_COLORS.b2g, title: `Battery to Grid: ${formatKWh(b2g)}` },   // Export
     ]
   );
+}
+
+function updateEvStatus(els, summary) {
+  if (!els.evStatusRow) return;
+  if (!summary?.evEnabled) {
+    els.evStatusRow.classList.add('hidden');
+    return;
+  }
+  els.evStatusRow.classList.remove('hidden');
+  setText(els.evChargeKwh, formatKWh(summary.evChargeTotal_kWh));
+  setText(els.evChargingSlots, String(summary.evChargingSlots ?? 0));
 }
 
 function updateRebalanceStatus(els, status) {

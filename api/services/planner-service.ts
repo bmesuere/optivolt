@@ -16,6 +16,23 @@ import type { PlanRowWithDess, Data } from '../types.ts';
 // How many slots we push into Dynamic ESS
 const DESS_SLOTS = 4;
 
+let latestEvSchedule: EvSlot[] | null = null;
+
+export function getLatestEvSchedule(): EvSlot[] | null {
+  return latestEvSchedule;
+}
+
+export function getCurrentEvSlot(): EvSlot | null {
+  if (!latestEvSchedule) return null;
+  const now = Date.now();
+  let current: EvSlot | null = null;
+  for (const slot of latestEvSchedule) {
+    if (slot.timestampMs <= now) current = slot;
+    else break;
+  }
+  return current;
+}
+
 // Single-phase mains voltage used to convert EV charge current (A) to power (W)
 const MAINS_VOLTAGE_V = 230;
 
@@ -129,13 +146,13 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
     cfg.rebalanceRemainingSlots ?? 0,
   );
 
-  const evSchedule = buildEvSchedule(rows, {
+  latestEvSchedule = buildEvSchedule(rows, {
     evEnabled: settings.evEnabled,
     plugged: data.evState?.plugged ?? false,
     chargePower_W: settings.evChargeCurrent_A * MAINS_VOLTAGE_V,
   });
 
-  return { cfg, data, timing, result, rows: rowsWithDess, summary, evSchedule, rebalanceWindow };
+  return { cfg, data, timing, result, rows: rowsWithDess, summary, evSchedule: latestEvSchedule, rebalanceWindow };
 }
 
 export async function writePlanToVictron(rows: PlanRowWithDess[]): Promise<void> {
