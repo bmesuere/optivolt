@@ -36,7 +36,7 @@
     "@eslint/markdown": "^7.5.1",
     "@types/express": "^5.0.6",
     "dotenv-cli": "^11.0.0",
-    "eslint": "^10.0.0",
+    "eslint": "^10.0.2",
     "globals": "^17.3.0",
     "jsdom": "^28.0.0",
     "nodemon": "^3.1.11",
