@@ -3,7 +3,7 @@
 
 import type { PlanRow, SolverConfig, DessDiagnostics, DessResult, DessSlot } from './types.ts';
 
-const FLOW_EPSILON_W = 1; // treat flows below this as zero
+export const FLOW_EPSILON_W = 1; // treat flows below this as zero
 const SOC_EPSILON_PERCENT = 0.5; // treat SoC within this of min/max as at boundary
 
 export const Strategy = {

@@ -11,6 +11,7 @@ import { refreshVrmSettings } from "./src/api/api.js";
 import { loadInitialConfig, saveConfig } from "./src/config-store.js";
 import { requestRemoteSolve } from "./src/api/api.js";
 import { initPredictionsTab } from "./src/predictions.js";
+import { initEvTab, refreshEvState } from "./src/ev-tab.js";
 
 // Import new modules
 import {
@@ -49,6 +50,7 @@ function setupTabSwitcher() {
   const tabs = [
     { tab: document.getElementById('tab-optimizer'),   panel: document.getElementById('panel-optimizer') },
     { tab: document.getElementById('tab-predictions'), panel: document.getElementById('panel-predictions') },
+    { tab: document.getElementById('tab-ev'),          panel: document.getElementById('panel-ev') },
     { tab: document.getElementById('tab-settings'),    panel: document.getElementById('panel-settings') },
   ].filter(t => t.tab && t.panel);
 
@@ -72,6 +74,7 @@ async function boot() {
 
   setupTabSwitcher();
   await initPredictionsTab();
+  void initEvTab(els, Number(els.step?.value) || 15);
 
   // Wire inputs with callbacks
   wireGlobalInputs(els, {
@@ -86,6 +89,18 @@ async function boot() {
   wireVrmSettingInput(els, {
     onRefresh: onRefreshVrmSettings,
   });
+
+  // Clear sensor value indicators immediately when the entity ID is edited
+  els.evSocSensor?.addEventListener('input', () => { if (els.evSocValue) els.evSocValue.textContent = '—'; });
+  els.evPlugSensor?.addEventListener('input', () => { if (els.evPlugValue) els.evPlugValue.textContent = '—'; });
+
+  // On blur, save settings immediately then fetch live values from HA
+  const onSensorBlur = async () => {
+    await persistConfig();
+    void refreshEvState(els);
+  };
+  els.evSocSensor?.addEventListener('blur', onSensorBlur);
+  els.evPlugSensor?.addEventListener('blur', onSensorBlur);
 
   if (els.status) {
     els.status.textContent =
@@ -137,11 +152,23 @@ async function onRun() {
     const solverStatus =
       typeof result?.solverStatus === "string" ? result.solverStatus : "OK";
 
+    // Merge EV schedule into rows
+    const evSchedule = result.evSchedule ?? [];
+    if (evSchedule.length === rows.length) {
+      rows.forEach((row, i) => { row.ev = evSchedule[i].chargePower_W; });
+    }
+
     // Update SoC and tsStart from result
     updatePlanMeta(els, result.initialSoc_percent, result.tsStart);
 
-    // Update summary if present
-    updateSummaryUI(els, result.summary);
+    // Compute EV summary and update summary panel
+    const stepH = Number(els.step?.value ?? 15) / 60;
+    const evSummary = {
+      evChargeTotal_kWh: evSchedule.reduce((s, slot) => s + slot.chargePower_W * stepH / 1000, 0),
+      evChargingSlots: evSchedule.filter(s => s.shouldCharge).length,
+      evEnabled: evSchedule.some(s => s.shouldCharge),
+    };
+    updateSummaryUI(els, { ...result.summary, ...evSummary });
 
     if (els.status) {
       const nonOptimal =

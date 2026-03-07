@@ -11,6 +11,7 @@ Plan and control a home energy system with forecasts, dynamic tariffs, and a day
 - Built-in load forecasting based on Home Assistant historical sensor data
 - Server-side VRM integration for forecasts/prices and system limits
 - Optional Dynamic ESS schedule pushes over MQTT (first 4 slots)
+- Heuristic EV charging schedule: routes PV surplus to EV instead of exporting to grid
 - Static, build-free web UI served by the same Express process
 - Persistent settings + time-series data under a configurable data directory
 
@@ -95,7 +96,29 @@ rest_command:
     method: GET
 ```
 
-### 4. Push Custom Pricing / Sensor Data (Optional)
+### 4. EV Charging Control (Optional)
+
+To let Optivolt control your EV charger based on PV surplus:
+
+1. In the **Settings tab**, enable **EV**, set the charge power, and enter your HA entity IDs for the EV SoC sensor and plug binary sensor.
+2. Set the EV data source to `ha` so Optivolt fetches plug/SoC state from HA on each plan run.
+3. Poll `GET /ev/current` from HA to get the current slot's charging decision. Example `configuration.yaml`:
+```yaml
+rest:
+  - resource: "http://localhost:3070/ev/current"
+    scan_interval: 300
+    sensor:
+      - name: "OptiVolt EV Should Charge"
+        value_template: "{{ value_json.shouldCharge }}"
+      - name: "OptiVolt EV Charge Power"
+        value_template: "{{ value_json.chargePower_W }}"
+        unit_of_measurement: "W"
+```
+Use `GET /ev/schedule` to retrieve the full day-ahead EV charging schedule.
+
+Charging is triggered only when PV would otherwise be exported to the grid — battery-to-grid arbitrage flows are intentionally excluded.
+
+### 5. Push Custom Pricing / Sensor Data (Optional)
 If you don't use VRM for pricing and instead manually push data (by setting data sources to "API" in the UI), you can use the `/data` endpoint.
 ```yaml
 rest_command:
@@ -142,7 +165,13 @@ config.yaml          # Home Assistant add-on manifest
 
 The **UI** is static and calls the **Express API** on the same origin. The **API** exposes:
 
-- `POST /calculate` — Builds & solves the LP with **HiGHS** and returns per-slot flows, SoC, and DESS mappings. Fast execution.
+- `POST /calculate` — Builds & solves the LP with **HiGHS** and returns per-slot flows, SoC, DESS mappings, and EV charging schedule. Fast execution. The response includes an `evSchedule` array:
+  ```json
+  "evSchedule": [
+    { "timestampMs": 1704067200000, "chargePower_W": 11000, "shouldCharge": true },
+    { "timestampMs": 1704068100000, "chargePower_W": 0, "shouldCharge": false }
+  ]
+  ```
 - `GET/POST /settings` — Reads/writes persisted system + algorithm settings (defaulting to `api/defaults/default-settings.json`).
 - `POST /data` — Endpoint to inject custom time-series data. The payload maps arrays of 15m values:
   ```json
@@ -155,6 +184,8 @@ The **UI** is static and calls the **Express API** on the same origin. The **API
   }
   ```
 - `POST /vrm/refresh-settings` — Fetches latest Dynamic ESS limits/settings from VRM and persists.
+- `GET /ev/schedule` — Full EV charging schedule from the latest plan.
+- `GET /ev/current` — Current slot's EV charging decision (`shouldCharge`, `chargePower_W`). Returns 404 before any plan is computed or when all slots are in the future.
 - `GET/POST /predictions/*` — Load forecasting features (`/validate`, `/forecast`, `/forecast/now`).
 
 *Note:* Data and settings are server-owned. VRM refreshes write to `DATA_DIR/data.json` and the solver always reads from this persisted snapshot.

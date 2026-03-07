@@ -50,6 +50,7 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
     { key: "g2b", headerHtml: "g2b", fmt: x => fmtEnergy(x), tip: "Grid → Battery" },
     { key: "b2g", headerHtml: "b2g", fmt: x => fmtEnergy(x), tip: "Battery → Grid" },
 
+    { key: "ev", headerHtml: "EV<br>charge", fmt: x => fmtEnergy(x), tip: "EV Charge Power" },
     { key: "imp", headerHtml: "Grid<br>import", fmt: x => fmtEnergy(x), tip: "Grid Import" },
     { key: "exp", headerHtml: "Grid<br>export", fmt: x => fmtEnergy(x), tip: "Grid Export" },
 

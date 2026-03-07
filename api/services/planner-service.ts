@@ -4,7 +4,8 @@ import { mapRowsToDessV2 } from '../../lib/dess-mapper.ts';
 import { buildLP } from '../../lib/build-lp.ts';
 import { parseSolution, type HighsSolution } from '../../lib/parse-solution.ts';
 import { buildPlanSummary } from '../../lib/plan-summary.ts';
-import type { SolverConfig, PlanSummary } from '../../lib/types.ts';
+import { buildEvSchedule } from '../../lib/ev-schedule.ts';
+import type { SolverConfig, PlanSummary, EvSlot } from '../../lib/types.ts';
 import { getSolverInputs, buildSolverConfigFromSettings } from './config-builder.ts';
 import { saveSettings } from './settings-store.ts';
 import { saveData } from './data-store.ts';
@@ -14,6 +15,26 @@ import type { PlanRowWithDess, Data } from '../types.ts';
 
 // How many slots we push into Dynamic ESS
 const DESS_SLOTS = 4;
+
+let latestEvSchedule: EvSlot[] | null = null;
+
+export function getLatestEvSchedule(): EvSlot[] | null {
+  return latestEvSchedule;
+}
+
+export function getCurrentEvSlot(): EvSlot | null {
+  if (!latestEvSchedule) return null;
+  const now = Date.now();
+  let current: EvSlot | null = null;
+  for (const slot of latestEvSchedule) {
+    if (slot.timestampMs <= now) current = slot;
+    else break;
+  }
+  return current;
+}
+
+// Single-phase mains voltage used to convert EV charge current (A) to power (W)
+const MAINS_VOLTAGE_V = 230;
 
 // Lazy, shared HiGHS instance
 type HighsInstance = Awaited<ReturnType<typeof highsFactory>>;
@@ -41,6 +62,7 @@ export interface ComputePlanResult {
   result: HighsSolution;
   rows: PlanRowWithDess[];
   summary: PlanSummary;
+  evSchedule: EvSlot[];
   rebalanceWindow?: RebalanceWindow;
 }
 
@@ -124,7 +146,13 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
     cfg.rebalanceRemainingSlots ?? 0,
   );
 
-  return { cfg, data, timing, result, rows: rowsWithDess, summary, rebalanceWindow };
+  latestEvSchedule = buildEvSchedule(rows, {
+    evEnabled: settings.evEnabled,
+    plugged: data.evState?.plugged ?? false,
+    chargePower_W: settings.evChargeCurrent_A * MAINS_VOLTAGE_V,
+  });
+
+  return { cfg, data, timing, result, rows: rowsWithDess, summary, evSchedule: latestEvSchedule, rebalanceWindow };
 }
 
 export async function writePlanToVictron(rows: PlanRowWithDess[]): Promise<void> {

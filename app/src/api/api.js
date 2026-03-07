@@ -23,6 +23,13 @@ export function refreshVrmSettings() {
   return postJson("/vrm/refresh-settings", {});
 }
 
+// --- Data ---
+export const fetchData = () => getJson('/data');
+
+// --- EV ---
+export const fetchEvSchedule = () => getJson('/ev/schedule');
+export const fetchEvRefresh = () => postJson('/ev/refresh', {});
+
 // --- Predictions ---
 export const fetchPredictionConfig = () => getJson('/predictions/config');
 export const savePredictionConfig = (c) => postJson('/predictions/config', c);

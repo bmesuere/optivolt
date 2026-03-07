@@ -8,6 +8,7 @@ export const SOLUTION_COLORS = {
   b2l: "rgb(71, 144, 208)",   // Battery to Consumption (blue)
   g2l: "rgb(233, 122, 131)",  // Grid to Consumption (red)
   g2b: "rgb(225, 142, 233)",  // Grid to Battery (purple)
+  ev: "rgb(4, 120, 87)",      // EV Charging (emerald-700)
   soc: "rgb(71, 144, 208)"    // SoC line color = battery-ish blue
 };
 
@@ -251,7 +252,8 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, rebalance
     // Negative Stack
     { key: "b2l", color: SOLUTION_COLORS.b2l, label: "Battery to Consumption", sign: -1 },
     { key: "g2l", color: SOLUTION_COLORS.g2l, label: "Grid to Consumption", sign: -1 },
-    { key: "g2b", color: SOLUTION_COLORS.g2b, label: "Grid to Battery", sign: -1 }
+    { key: "g2b", color: SOLUTION_COLORS.g2b, label: "Grid to Battery", sign: -1 },
+    { key: "ev", color: SOLUTION_COLORS.ev, label: "EV Charging", sign: -1 },
   ];
 
   const datasets = flowSpecs.map(spec =>

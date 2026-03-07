@@ -27,6 +27,7 @@ export function snapshotUI(els) {
       load: els.sourceLoad?.value || "vrm",
       pv: els.sourcePv?.value || "vrm",
       soc: els.sourceSoc?.value || "mqtt",
+      ev: els.sourceEv?.value || "none",
     },
 
     // ALGORITHM
@@ -36,6 +37,13 @@ export function snapshotUI(els) {
     // HOME ASSISTANT
     haUrl: els.haUrl?.value ?? '',
     haToken: els.haToken?.value ?? '',
+
+    // EV CHARGING
+    evEnabled: !!els.evEnabled?.checked,
+    evChargeCurrent_A: num(els.evChargeCurrent?.value),
+    evBatteryCapacity_kWh: num(els.evBatteryCapacity?.value),
+    evSocSensor: els.evSocSensor?.value ?? '',
+    evPlugSensor: els.evPlugSensor?.value ?? '',
 
     // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
@@ -72,6 +80,7 @@ export function hydrateUI(els, obj = {}) {
   if (els.sourceLoad && obj.dataSources?.load) els.sourceLoad.value = obj.dataSources.load;
   if (els.sourcePv && obj.dataSources?.pv) els.sourcePv.value = obj.dataSources.pv;
   if (els.sourceSoc && obj.dataSources?.soc) els.sourceSoc.value = obj.dataSources.soc;
+  if (els.sourceEv && obj.dataSources?.ev) els.sourceEv.value = obj.dataSources.ev;
 
   // Algorithm
   if (els.rebalanceEnabled && obj.rebalanceEnabled != null) {
@@ -85,6 +94,15 @@ export function hydrateUI(els, obj = {}) {
   if (els.haSettingsGroup) {
     els.haSettingsGroup.hidden = !!obj.isAddon;
   }
+
+  // EV CHARGING
+  if (els.evEnabled && obj.evEnabled != null) {
+    els.evEnabled.checked = !!obj.evEnabled;
+  }
+  setIfDef(els.evChargeCurrent, obj.evChargeCurrent_A);
+  setIfDef(els.evBatteryCapacity, obj.evBatteryCapacity_kWh);
+  setIfDef(els.evSocSensor, obj.evSocSensor);
+  setIfDef(els.evPlugSensor, obj.evPlugSensor);
 
   // UI-only
   if (els.tableKwh && obj.tableShowKwh != null) {
@@ -137,6 +155,7 @@ export function updateSummaryUI(els, summary) {
     setText(els.gridChargeTp, "—");
     setText(els.batteryExportTp, "—");
     updateRebalanceStatus(els, null);
+    updateEvStatus(els, null);
 
     // reset mini bars
     const loadSplitBar = document.getElementById("load-split-bar");
@@ -187,6 +206,7 @@ export function updateSummaryUI(els, summary) {
   );
 
   updateRebalanceStatus(els, summary.rebalanceStatus);
+  updateEvStatus(els, summary);
 
   // --- Energy Flow Bar ---
   const g2b = Number(summary.gridToBattery_kWh) || 0;
@@ -207,6 +227,19 @@ export function updateSummaryUI(els, summary) {
       { value: b2g, color: SOLUTION_COLORS.b2g, title: `Battery to Grid: ${formatKWh(b2g)}` },   // Export
     ]
   );
+}
+
+function updateEvStatus(els, summary) {
+  if (!els.evStatusRow) return;
+  if (!summary?.evEnabled) {
+    els.evStatusRow.classList.add('hidden');
+    els.avgImportCell?.classList.add('col-span-2');
+    return;
+  }
+  els.evStatusRow.classList.remove('hidden');
+  els.avgImportCell?.classList.remove('col-span-2');
+  setText(els.evChargeKwh, formatKWh(summary.evChargeTotal_kWh));
+  setText(els.evChargingSlots, String(summary.evChargingSlots ?? 0));
 }
 
 function updateRebalanceStatus(els, status) {

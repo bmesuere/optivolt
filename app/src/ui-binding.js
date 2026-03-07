@@ -55,6 +55,9 @@ export function getElements() {
     batteryExportTp: $("#export-point-cent"),
     rebalanceStatus: $("#rebalance-status"),
     rebalanceStatusRow: $("#rebalance-status-row"),
+    evStatusRow: $("#ev-status-row"),
+    evChargeKwh: $("#ev-charge-kwh"),
+    evChargingSlots: $("#ev-charging-slots"),
 
     // VRM section
     vrmFetchSettings: $("#vrm-fetch-settings"),
@@ -63,6 +66,25 @@ export function getElements() {
     haUrl: $("#pred-ha-url"),
     haToken: $("#pred-ha-token"),
     haSettingsGroup: $("#pred-ha-settings-group"),
+
+    // EV Charging (Settings tab)
+    evEnabled: $("#ev-enabled"),
+    evChargeCurrent: $("#ev-charge-current"),
+    evBatteryCapacity: $("#ev-battery-capacity"),
+    evSocSensor: $("#ev-soc-sensor"),
+    evPlugSensor: $("#ev-plug-sensor"),
+    evSocValue: $("#ev-soc-value"),
+    evPlugValue: $("#ev-plug-value"),
+    avgImportCell: $("#avg-import-cell"),
+    sourceEv: $("#source-ev"),
+
+    // EV tab
+    evTabSoc: $("#ev-tab-soc"),
+    evTabPlugged: $("#ev-tab-plugged"),
+    evTabTimestamp: $("#ev-tab-timestamp"),
+    evChart: $("#ev-chart"),
+    evScheduleTbody: $("#ev-schedule-tbody"),
+    evReload: $("#ev-reload"),
   };
 }
 

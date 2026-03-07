@@ -106,6 +106,15 @@ export interface DessResult {
 }
 
 /**
+ * A single EV charging schedule slot produced by buildEvSchedule.
+ */
+export interface EvSlot {
+  timestampMs: number;
+  chargePower_W: number;
+  shouldCharge: boolean;
+}
+
+/**
  * High-level plan summary computed from solved rows.
  */
 export interface PlanSummary {

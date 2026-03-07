@@ -33,6 +33,14 @@ export function validateData(d: Data): Data {
   if (Number.isNaN(new Date(d.soc.timestamp).getTime())) {
     throw new Error(`Invalid soc: 'timestamp' is not a valid timestamp (${d.soc.timestamp})`);
   }
+  if (d.evState !== undefined) {
+    if (!Number.isFinite(d.evState.soc_percent)) {
+      throw new Error('Invalid evState: soc_percent must be a finite number');
+    }
+    if (Number.isNaN(new Date(d.evState.timestamp).getTime())) {
+      throw new Error(`Invalid evState: 'timestamp' is not a valid timestamp (${d.evState.timestamp})`);
+    }
+  }
   return d;
 }
 

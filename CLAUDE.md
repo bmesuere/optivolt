@@ -25,9 +25,9 @@ The system has three layers, all plain ESM (no build step, no TypeScript):
 - **`vrm-api.js`** / **`victron-mqtt.js`** — VRM REST client and MQTT client for writing schedules to Victron.
 
 ### `api/` — Express server
-- **`app.js`** — Express app setup. Mounts routes at `/calculate`, `/settings`, `/vrm`, and serves the static UI from `app/`.
+- **`app.js`** — Express app setup. Mounts routes at `/calculate`, `/settings`, `/vrm`, `/ev`, and serves the static UI from `app/`.
 - **`index.js`** — Server entry point (listens on `HOST`/`PORT`).
-- **Routes** (`api/routes/`): `calculate.js`, `settings.js`, `vrm.js`.
+- **Routes** (`api/routes/`): `calculate.js`, `settings.js`, `vrm.js`, `ev.js`.
 - **Services** (`api/services/`):
   - `planner-service.js` — Orchestrates the full pipeline: refresh VRM data → load settings/data → build LP → solve with HiGHS → parse → map to DESS → optionally write via MQTT.
   - `settings-store.js` / `data-store.js` — JSON file persistence under `DATA_DIR` (defaults to `data/`).
