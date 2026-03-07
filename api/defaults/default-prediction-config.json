@@ -1,6 +1,4 @@
 {
-  "haUrl": "ws://homeassistant.local:8123/api/websocket",
-  "haToken": "",
   "sensors": [
     { "id": "sensor.battery_charged", "name": "Battery Charge", "unit": "kWh" },
     { "id": "sensor.battery_discharged", "name": "Battery Discharge", "unit": "kWh" },

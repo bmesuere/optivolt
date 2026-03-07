@@ -1,6 +1,6 @@
 // @ts-ignore — no .d.ts alongside the vendor build artifact; type is asserted via HighsInstance below
 import highsFactory from '../../vendor/highs-build/highs.js';
-import { mapRowsToDess, mapRowsToDessV2, computeDessDiff } from '../../lib/dess-mapper.ts';
+import { mapRowsToDessV2 } from '../../lib/dess-mapper.ts';
 import { buildLP } from '../../lib/build-lp.ts';
 import { parseSolution, type HighsSolution } from '../../lib/parse-solution.ts';
 import { buildPlanSummary } from '../../lib/plan-summary.ts';
@@ -29,8 +29,6 @@ async function getHighsInstance(): Promise<HighsInstance> {
   return highsPromise;
 }
 
-type DessDiff = ReturnType<typeof computeDessDiff>;
-
 export interface RebalanceWindow {
   startIdx: number;
   endIdx: number;
@@ -43,7 +41,6 @@ export interface ComputePlanResult {
   result: HighsSolution;
   rows: PlanRowWithDess[];
   summary: PlanSummary;
-  dessDiff?: DessDiff;
   rebalanceWindow?: RebalanceWindow;
 }
 
@@ -102,17 +99,9 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const rows = parseSolution(result, cfg, timing);
 
-  const useV2 = cfg.dessAlgorithm === 'v2';
-  const activeMapper = useV2 ? mapRowsToDessV2 : mapRowsToDess;
-  const { perSlot, diagnostics } = activeMapper(rows, cfg);
+  const { perSlot, diagnostics } = mapRowsToDessV2(rows, cfg);
 
   const rowsWithDess: PlanRowWithDess[] = rows.map((row, i) => ({ ...row, dess: perSlot[i] }));
-
-  let dessDiff: DessDiff | undefined;
-  if (useV2) {
-    const v1Result = mapRowsToDess(rowsWithDess, cfg);
-    dessDiff = computeDessDiff(v1Result.perSlot, perSlot);
-  }
 
   // Post-solve bookkeeping: if rebalancing is enabled but hasn't started, check actual SoC
   if (settings.rebalanceEnabled && (data.rebalanceState?.startMs == null)) {
@@ -135,7 +124,7 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
     cfg.rebalanceRemainingSlots ?? 0,
   );
 
-  return { cfg, data, timing, result, rows: rowsWithDess, summary, dessDiff, rebalanceWindow };
+  return { cfg, data, timing, result, rows: rowsWithDess, summary, rebalanceWindow };
 }
 
 export async function writePlanToVictron(rows: PlanRowWithDess[]): Promise<void> {

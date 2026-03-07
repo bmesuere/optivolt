@@ -13,7 +13,7 @@ import {
   generateAllConfigs,
 } from '../../lib/predict-load.ts';
 import type { DayFilter, Aggregation } from '../../lib/predict-load.ts';
-import type { PredictionConfig } from '../types.ts';
+import type { PredictionRunConfig } from '../types.ts';
 import { getForecastTimeRange, buildForecastSeries, computeErrorMetrics, type ForecastSeries, type PredictionResult } from '../../lib/time-series-utils.ts';
 
 type PredictTarget = Pick<StatRecord, 'date' | 'time' | 'hour' | 'dayOfWeek'> & { value?: number | null };
@@ -45,7 +45,7 @@ interface ForecastRunResult {
 /**
  * Run full validation across all config combinations.
  */
-export async function runValidation(config: PredictionConfig): Promise<ValidationRunResult> {
+export async function runValidation(config: PredictionRunConfig): Promise<ValidationRunResult> {
   const { haUrl, haToken, sensors, derived, validationWindow } = config;
   const entityIds = sensors.map(s => s.id);
 
@@ -98,7 +98,7 @@ export async function runValidation(config: PredictionConfig): Promise<Validatio
  * Run forecast for tomorrow using the active config.
  * Caller must ensure config.activeConfig is set.
  */
-export async function runForecast(config: PredictionConfig): Promise<ForecastRunResult> {
+export async function runForecast(config: PredictionRunConfig): Promise<ForecastRunResult> {
   const { haUrl, haToken, sensors, derived, activeConfig } = config;
   const entityIds = sensors.map(s => s.id);
 

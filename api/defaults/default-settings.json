@@ -19,7 +19,8 @@
     "pv": "vrm",
     "soc": "mqtt"
   },
-  "dessAlgorithm": "v1",
   "rebalanceEnabled": false,
-  "rebalanceHoldHours": 3
+  "rebalanceHoldHours": 3,
+  "haUrl": "ws://homeassistant.local:8123/api/websocket",
+  "haToken": ""
 }

@@ -8,7 +8,7 @@ const router = express.Router();
 router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const settings = await loadSettings();
-    res.json(settings);
+    res.json({ ...settings, isAddon: !!process.env.SUPERVISOR_TOKEN });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to read settings'));
   }

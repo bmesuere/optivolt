@@ -37,9 +37,10 @@ export interface Settings {
   terminalSocValuation: TerminalSocValuation;
   terminalSocCustomPrice_cents_per_kWh: number;
   dataSources: DataSources;
-  dessAlgorithm: 'v1' | 'v2';
   rebalanceEnabled: boolean;
   rebalanceHoldHours: number;
+  haUrl: string;
+  haToken: string;
 }
 
 // ----------------------------- Persisted data ---------------------------
@@ -96,12 +97,16 @@ export interface PvPredictionConfig {
 }
 
 export interface PredictionConfig {
-  haUrl: string;
-  haToken: string;
   sensors: HaSensor[];
   derived: HaDerivedSensor[];
   activeConfig?: PredictionActiveConfig;
   validationWindow?: PredictionValidationWindow;
   includeRecent?: boolean;
   pvConfig?: PvPredictionConfig;
+}
+
+/** PredictionConfig enriched with HA credentials from Settings, passed to prediction services. */
+export interface PredictionRunConfig extends PredictionConfig {
+  haUrl: string;
+  haToken: string;
 }

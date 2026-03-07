@@ -15,13 +15,17 @@ import { loadSettings } from '../../api/services/settings-store.ts';
 import { loadData, saveData } from '../../api/services/data-store.ts';
 
 const mockConfig = {
-  haUrl: 'ws://homeassistant.local:8123/api/websocket',
-  haToken: 'test-token',
   historyStart: '2025-11-01T00:00:00Z',
   sensors: [{ id: 'sensor.grid', name: 'Grid Import', unit: 'kWh' }],
   derived: [],
   validationWindow: { start: '2026-01-18T00:00:00Z', end: '2026-01-25T00:00:00Z' },
   activeConfig: { sensor: 'Grid Import', lookbackWeeks: 4, dayFilter: 'weekday-weekend', aggregation: 'mean' },
+};
+
+const mockSettings = {
+  haUrl: 'ws://homeassistant.local:8123/api/websocket',
+  haToken: 'test-token',
+  dataSources: { load: 'vrm', pv: 'vrm' },
 };
 
 describe('GET /predictions/config', () => {
@@ -34,7 +38,7 @@ describe('GET /predictions/config', () => {
   it('returns the config', async () => {
     const res = await request(app).get('/predictions/config');
     expect(res.status).toBe(200);
-    expect(res.body.haUrl).toBe(mockConfig.haUrl);
+    expect(res.body.sensors).toHaveLength(1);
     expect(loadPredictionConfig).toHaveBeenCalled();
   });
 });
@@ -49,10 +53,10 @@ describe('POST /predictions/config', () => {
   it('merges and saves config', async () => {
     const res = await request(app)
       .post('/predictions/config')
-      .send({ haUrl: 'ws://new-url:8123/api/websocket' });
+      .send({ activeConfig: { sensor: 'Total Load', lookbackWeeks: 4, dayFilter: 'same', aggregation: 'mean' } });
 
     expect(res.status).toBe(200);
-    expect(res.body.config.haUrl).toBe('ws://new-url:8123/api/websocket');
+    expect(res.body.config.activeConfig.sensor).toBe('Total Load');
     expect(savePredictionConfig).toHaveBeenCalled();
   });
 
@@ -69,6 +73,7 @@ describe('POST /predictions/validate', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     loadPredictionConfig.mockResolvedValue(mockConfig);
+    loadSettings.mockResolvedValue(mockSettings);
     savePredictionConfig.mockResolvedValue();
     runValidation.mockResolvedValue({
       sensorNames: ['Grid Import'],
@@ -98,13 +103,13 @@ describe('POST /predictions/validate', () => {
   });
 
   it('returns 400 when haUrl missing', async () => {
-    loadPredictionConfig.mockResolvedValue({ ...mockConfig, haUrl: '' });
+    loadSettings.mockResolvedValue({ ...mockSettings, haUrl: '' });
     const res = await request(app).post('/predictions/validate').send({});
     expect(res.status).toBe(400);
   });
 
   it('returns 400 when haToken missing', async () => {
-    loadPredictionConfig.mockResolvedValue({ ...mockConfig, haToken: '' });
+    loadSettings.mockResolvedValue({ ...mockSettings, haToken: '' });
     const res = await request(app).post('/predictions/validate').send({});
     expect(res.status).toBe(400);
   });
@@ -121,7 +126,7 @@ describe('POST /predictions/forecast (combined)', () => {
     vi.resetAllMocks();
     loadPredictionConfig.mockResolvedValue(mockConfig);
     savePredictionConfig.mockResolvedValue();
-    loadSettings.mockResolvedValue({ dataSources: { load: 'vrm', pv: 'vrm' } });
+    loadSettings.mockResolvedValue(mockSettings);
     loadData.mockResolvedValue({});
     saveData.mockResolvedValue();
     runForecast.mockResolvedValue({
@@ -160,7 +165,7 @@ describe('POST /predictions/load/forecast', () => {
     vi.resetAllMocks();
     loadPredictionConfig.mockResolvedValue(mockConfig);
     savePredictionConfig.mockResolvedValue();
-    loadSettings.mockResolvedValue({ dataSources: { load: 'vrm', pv: 'vrm' } });
+    loadSettings.mockResolvedValue(mockSettings);
     loadData.mockResolvedValue({});
     saveData.mockResolvedValue();
     runForecast.mockResolvedValue({

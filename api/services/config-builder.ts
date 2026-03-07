@@ -64,7 +64,6 @@ export function buildSolverConfigFromSettings(
     terminalSocValuation:                 settings.terminalSocValuation,
     terminalSocCustomPrice_cents_per_kWh: settings.terminalSocCustomPrice_cents_per_kWh,
     initialSoc_percent:                   data.soc.value,
-    dessAlgorithm:                        settings.dessAlgorithm,
   };
 
   if (settings.rebalanceEnabled) {

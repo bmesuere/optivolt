@@ -30,9 +30,12 @@ export function snapshotUI(els) {
     },
 
     // ALGORITHM
-    dessAlgorithm: els.dessAlgorithm?.value || "v1",
     rebalanceEnabled: !!els.rebalanceEnabled?.checked,
     rebalanceHoldHours: num(els.rebalanceHoldHours?.value),
+
+    // HOME ASSISTANT
+    haUrl: els.haUrl?.value ?? '',
+    haToken: els.haToken?.value ?? '',
 
     // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
@@ -71,11 +74,17 @@ export function hydrateUI(els, obj = {}) {
   if (els.sourceSoc && obj.dataSources?.soc) els.sourceSoc.value = obj.dataSources.soc;
 
   // Algorithm
-  if (els.dessAlgorithm && obj.dessAlgorithm) els.dessAlgorithm.value = obj.dessAlgorithm;
   if (els.rebalanceEnabled && obj.rebalanceEnabled != null) {
     els.rebalanceEnabled.checked = !!obj.rebalanceEnabled;
   }
   setIfDef(els.rebalanceHoldHours, obj.rebalanceHoldHours);
+
+  // HOME ASSISTANT
+  setIfDef(els.haUrl, obj.haUrl);
+  setIfDef(els.haToken, obj.haToken);
+  if (els.haSettingsGroup) {
+    els.haSettingsGroup.hidden = !!obj.isAddon;
+  }
 
   // UI-only
   if (els.tableKwh && obj.tableShowKwh != null) {
