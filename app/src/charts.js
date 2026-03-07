@@ -8,7 +8,7 @@ export const SOLUTION_COLORS = {
   b2l: "rgb(71, 144, 208)",   // Battery to Consumption (blue)
   g2l: "rgb(233, 122, 131)",  // Grid to Consumption (red)
   g2b: "rgb(225, 142, 233)",  // Grid to Battery (purple)
-  ev: "rgb(96, 165, 250)",    // EV Charging (sky-blue)
+  ev: "rgb(4, 120, 87)",      // EV Charging (emerald-700)
   soc: "rgb(71, 144, 208)"    // SoC line color = battery-ish blue
 };
 

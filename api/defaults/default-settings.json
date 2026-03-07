@@ -26,7 +26,7 @@
   "haToken": "",
   "evEnabled": false,
   "evChargeCurrent_A": 8,
-  "evChargeEfficiency_percent": 90,
+  "evBatteryCapacity_kWh": 60,
   "evSocSensor": "",
   "evPlugSensor": ""
 }

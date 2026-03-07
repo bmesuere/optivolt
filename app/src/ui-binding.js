@@ -70,10 +70,21 @@ export function getElements() {
     // EV Charging (Settings tab)
     evEnabled: $("#ev-enabled"),
     evChargeCurrent: $("#ev-charge-current"),
-    evChargeEfficiency: $("#ev-charge-efficiency"),
+    evBatteryCapacity: $("#ev-battery-capacity"),
     evSocSensor: $("#ev-soc-sensor"),
     evPlugSensor: $("#ev-plug-sensor"),
+    evSocValue: $("#ev-soc-value"),
+    evPlugValue: $("#ev-plug-value"),
+    avgImportCell: $("#avg-import-cell"),
     sourceEv: $("#source-ev"),
+
+    // EV tab
+    evTabSoc: $("#ev-tab-soc"),
+    evTabPlugged: $("#ev-tab-plugged"),
+    evTabTimestamp: $("#ev-tab-timestamp"),
+    evChart: $("#ev-chart"),
+    evScheduleTbody: $("#ev-schedule-tbody"),
+    evReload: $("#ev-reload"),
   };
 }
 

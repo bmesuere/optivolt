@@ -30,8 +30,8 @@ Settings tab added in `821707e`. HA URL/token moved from prediction config to to
 
 ### Settings additions (`api/types.ts` → `Settings`):
 - `evEnabled: boolean`
-- `evChargePower_W: number` — fixed user-configurable charge power
-- `evChargeEfficiency_percent: number`
+- `evChargeCurrent_A: number` — fixed user-configurable charge current (× 230 V = W)
+- `evBatteryCapacity_kWh: number` — EV battery capacity (used in Phase 6 SoC tracking)
 - HA entity IDs for EV (SoC sensor, plug binary_sensor — stored in settings)
 
 ### Data additions (`api/types.ts` → `Data`):
@@ -78,6 +78,7 @@ Only PV-to-grid surplus triggers EV charging — battery-to-grid exports are int
 ### Routes (`api/routes/ev.ts`):
 - `GET /ev/schedule` — Full EV schedule from latest plan
 - `GET /ev/current` — Current slot: `{ shouldCharge, chargePower_W }`
+- `POST /ev/refresh` — Fetches fresh EV state from HA (SoC + plug status), persists to `data.json`, returns `evState`
 
 Cache latest EV schedule in planner service after each plan run.
 
@@ -95,13 +96,34 @@ rest:
 
 ## Phase 4: UI — Show EV in Plan — DONE
 
-**Goal:** Display EV charging in charts, table, and summary.
+**Goal:** Display EV charging in charts, table, summary, and dedicated tab.
+
+### Optimizer tab:
+- EV bar series (emerald-700) in power flows chart — negative stack alongside other flows
+- EV column in plan table
+- EV totals (kWh, charging slot count) in plan summary, placed inline next to avg import price
+
+### Settings tab (EV section):
+- Enable toggle, charge current (A), battery capacity (kWh) — replaces efficiency which was not useful
+- SoC sensor + plug sensor entity ID inputs with live value indicators:
+  - Indicator clears to `—` immediately on edit
+  - On blur: saves settings, then calls `POST /ev/refresh` to show live HA value (or error message if entity not found)
+
+### EV tab (new):
+- **Status card**: Battery SoC (%), plugged/unplugged status (green/slate), last updated timestamp; reload button fetches fresh from HA via `POST /ev/refresh`
+- **Charging schedule chart**: Bar chart of `chargePower_W` per slot, same emerald-700 color as flows chart
+- **Schedule table**: Time (HH:MM), power (W), charging (Yes/No) per slot
+- Boot loads stored `evState` + latest schedule in parallel; reload fetches both concurrently
 
 ### Key files:
-- `app/src/charts.js` — EV bar series in power flows chart
+- `app/src/charts.js` — EV color `rgb(4, 120, 87)` (emerald-700); EV bar series in flows chart
 - `app/src/table.js` — EV column
 - `lib/plan-summary.ts` — EV totals (kWh, charging slot count)
-- `app/src/state.js` — EV summary display
+- `app/src/state.js` — EV summary display; `avgImportCell` col-span toggle
+- `app/src/ev-tab.js` — New module: status card, sensor value update, schedule table + chart
+- `app/src/ui-binding.js` — Element refs for all new EV UI elements
+- `app/src/api/api.js` — `fetchData()`, `fetchEvSchedule()`, `fetchEvRefresh()`
+- `app/main.js` — EV tab in tab switcher; sensor blur wiring; `initEvTab()` on boot
 
 ---
 
@@ -148,12 +170,10 @@ The user's employer reimburses EV charging at a fixed rate (often above cost). N
 | ~~0~~ | ~~Settings tab UI refactor~~ | ~~DONE~~ |
 | ~~1~~ | ~~EV data layer + HA fetch~~ | ~~DONE~~ |
 | ~~2~~ | ~~Heuristic EV schedule~~ | ~~DONE~~ |
-| 3 | HA polling endpoint | Phase 2 |
-| 4 | EV in charts/table/summary | Phase 2 |
+| ~~3~~ | ~~HA polling endpoint + EV refresh~~ | ~~DONE~~ |
+| ~~4~~ | ~~EV in charts/table/summary + EV tab~~ | ~~DONE~~ |
 | 5 | LP integration | Phase 1 (replaces Phase 2) |
 | 6 | Departure targets | Phase 5 |
-
-Phases 3 and 4 can run in parallel.
 
 ---
 

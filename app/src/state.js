@@ -41,7 +41,7 @@ export function snapshotUI(els) {
     // EV CHARGING
     evEnabled: !!els.evEnabled?.checked,
     evChargeCurrent_A: num(els.evChargeCurrent?.value),
-    evChargeEfficiency_percent: num(els.evChargeEfficiency?.value),
+    evBatteryCapacity_kWh: num(els.evBatteryCapacity?.value),
     evSocSensor: els.evSocSensor?.value ?? '',
     evPlugSensor: els.evPlugSensor?.value ?? '',
 
@@ -100,7 +100,7 @@ export function hydrateUI(els, obj = {}) {
     els.evEnabled.checked = !!obj.evEnabled;
   }
   setIfDef(els.evChargeCurrent, obj.evChargeCurrent_A);
-  setIfDef(els.evChargeEfficiency, obj.evChargeEfficiency_percent);
+  setIfDef(els.evBatteryCapacity, obj.evBatteryCapacity_kWh);
   setIfDef(els.evSocSensor, obj.evSocSensor);
   setIfDef(els.evPlugSensor, obj.evPlugSensor);
 
@@ -233,9 +233,11 @@ function updateEvStatus(els, summary) {
   if (!els.evStatusRow) return;
   if (!summary?.evEnabled) {
     els.evStatusRow.classList.add('hidden');
+    els.avgImportCell?.classList.add('col-span-2');
     return;
   }
   els.evStatusRow.classList.remove('hidden');
+  els.avgImportCell?.classList.remove('col-span-2');
   setText(els.evChargeKwh, formatKWh(summary.evChargeTotal_kWh));
   setText(els.evChargingSlots, String(summary.evChargingSlots ?? 0));
 }

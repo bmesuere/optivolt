@@ -45,7 +45,7 @@ export interface Settings {
   haToken: string;
   evEnabled: boolean;
   evChargeCurrent_A: number;
-  evChargeEfficiency_percent: number;
+  evBatteryCapacity_kWh: number;
   evSocSensor: string;
   evPlugSensor: string;
 }

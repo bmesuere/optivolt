@@ -6,7 +6,7 @@ import { readVictronSocPercent, readVictronSocLimits } from './mqtt-service.ts';
 import { fetchHaEntityState } from './ha-client.ts';
 import type { Data, EvState, Settings } from '../types.ts';
 
-async function fetchEvStateFromHa(settings: Settings): Promise<EvState> {
+export async function fetchEvStateFromHa(settings: Settings): Promise<EvState> {
   const { haUrl, haToken, evSocSensor, evPlugSensor } = settings;
   const timestamp = new Date().toISOString();
 
