@@ -87,6 +87,37 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
     },
   ];
 
+  const SUMMABLE_KEYS = new Set(["load", "pv", "g2l", "b2l", "pv2l", "pv2b", "pv2g", "g2b", "b2g", "imp", "exp"]);
+
+  const totals = {};
+  for (const key of SUMMABLE_KEYS) {
+    totals[key] = rows.reduce((sum, r) => sum + (Number(r[key]) || 0), 0);
+  }
+
+  const totalsRow = cols.map((c, ci) => {
+    const baseCls = "px-2 py-1.5 border-b border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900";
+    // Time column: Σ badge
+    if (ci === 0) {
+      return `<th class="${baseCls}" scope="row"><span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-200/80 dark:bg-slate-700/60 text-[9px] font-bold text-slate-400 dark:text-slate-500" title="Column totals (kWh)">Σ</span></th>`;
+    }
+    if (!SUMMABLE_KEYS.has(c.key)) {
+      return `<th class="${baseCls}"></th>`;
+    }
+    // Totals are always in kWh — summing W across slots is not meaningful energy
+    const total = totals[c.key];
+    const displayVal = dec2Thin(W2kWh(total));
+    const color = SOLUTION_COLORS[c.key];
+    if (color) {
+      // Flow column: always show a colored chip regardless of whether total is 0
+      // Use color as background only — text inherits from theme for guaranteed contrast
+      const alpha = total > 0 ? 0.55 : 0.22;
+      const bg = rgbToRgba(color, alpha);
+      return `<th class="${baseCls} text-right" scope="col"><span class="inline-block font-mono tabular-nums text-[11px] font-semibold px-1.5 py-0.5 rounded" style="background:${bg}">${displayVal}</span></th>`;
+    }
+    // Neutral summable (load, pv, imp, exp): plain value, no background
+    return `<th class="${baseCls} text-right font-mono tabular-nums text-[11px] font-semibold text-slate-500 dark:text-slate-400" scope="col">${displayVal}</th>`;
+  }).join("");
+
   const thead = `
     <thead>
       <tr class="align-bottom">
@@ -94,6 +125,7 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
     `<th class="px-2 py-2 border-b text-[10px] font-semibold uppercase tracking-wider text-right align-bottom border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500" ${c.tip ? `title="${escapeHtml(c.tip)}"` : ""}>${c.headerHtml}</th>`
   ).join("")}
       </tr>
+      <tr class="border-t border-slate-100 dark:border-slate-800/60">${totalsRow}</tr>
     </thead>`;
 
   const tbody = `
