@@ -88,7 +88,6 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
   ];
 
   const SUMMABLE_KEYS = new Set(["load", "pv", "g2l", "b2l", "pv2l", "pv2b", "pv2g", "g2b", "b2g", "imp", "exp"]);
-  const NEUTRAL_TOTAL_BG = "rgba(100, 116, 139, 0.12)";
 
   const totals = {};
   for (const key of SUMMABLE_KEYS) {
@@ -99,23 +98,24 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
     const baseCls = "px-2 py-1.5 border-b border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900";
     // Time column: Σ badge
     if (ci === 0) {
-      return `<td class="${baseCls}"><span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-200/80 dark:bg-slate-700/60 text-[9px] font-bold text-slate-400 dark:text-slate-500" title="Column totals">Σ</span></td>`;
+      return `<th class="${baseCls}" scope="row"><span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-200/80 dark:bg-slate-700/60 text-[9px] font-bold text-slate-400 dark:text-slate-500" title="Column totals (kWh)">Σ</span></th>`;
     }
     if (!SUMMABLE_KEYS.has(c.key)) {
-      return `<td class="${baseCls}"></td>`;
+      return `<th class="${baseCls}"></th>`;
     }
+    // Totals are always in kWh — summing W across slots is not meaningful energy
     const total = totals[c.key];
-    const displayVal = fmtEnergy(total, { dash: false });
+    const displayVal = dec2Thin(W2kWh(total));
     const color = SOLUTION_COLORS[c.key];
     if (color) {
       // Flow column: always show a colored chip regardless of whether total is 0
       // Use color as background only — text inherits from theme for guaranteed contrast
       const alpha = total > 0 ? 0.55 : 0.22;
       const bg = rgbToRgba(color, alpha);
-      return `<td class="${baseCls} text-right"><span class="inline-block font-mono tabular-nums text-[11px] font-semibold px-1.5 py-0.5 rounded" style="background:${bg}">${displayVal}</span></td>`;
+      return `<th class="${baseCls} text-right" scope="col"><span class="inline-block font-mono tabular-nums text-[11px] font-semibold px-1.5 py-0.5 rounded" style="background:${bg}">${displayVal}</span></th>`;
     }
     // Neutral summable (load, pv, imp, exp): plain value, no background
-    return `<td class="${baseCls} text-right font-mono tabular-nums text-[11px] font-semibold text-slate-500 dark:text-slate-400">${displayVal}</td>`;
+    return `<th class="${baseCls} text-right font-mono tabular-nums text-[11px] font-semibold text-slate-500 dark:text-slate-400" scope="col">${displayVal}</th>`;
   }).join("");
 
   const thead = `
