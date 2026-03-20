@@ -9,7 +9,7 @@ import { renderTable } from "./src/table.js";
 import { debounce } from "./src/utils.js";
 import { refreshVrmSettings } from "./src/api/api.js";
 import { loadInitialConfig, saveConfig } from "./src/config-store.js";
-import { requestRemoteSolve } from "./src/api/api.js";
+import { requestRemoteSolve, fetchHaEntityState } from "./src/api/api.js";
 import { initPredictionsTab } from "./src/predictions.js";
 
 // Import new modules
@@ -86,6 +86,8 @@ async function boot() {
   wireVrmSettingInput(els, {
     onRefresh: onRefreshVrmSettings,
   });
+
+  wireEvSensorInputs(els);
 
   if (els.status) {
     els.status.textContent =
@@ -207,4 +209,55 @@ async function persistConfig(cfg = snapshotUI(els)) {
 
 function queuePersistSnapshot() {
   persistConfigDebounced(snapshotUI(els));
+}
+
+const SENSOR_IND_BASE = "mt-1 block text-xs";
+const SENSOR_IND_NEUTRAL = `${SENSOR_IND_BASE} text-slate-500 dark:text-slate-400`;
+const SENSOR_IND_SUCCESS = `${SENSOR_IND_BASE} text-emerald-600 dark:text-emerald-400`;
+const SENSOR_IND_ERROR = `${SENSOR_IND_BASE} text-red-600 dark:text-red-400`;
+
+function wireEvSensorInputs(els) {
+  const sensors = [
+    { input: els.evSocSensor, indicator: els.evSocValue },
+    { input: els.evPlugSensor, indicator: els.evPlugValue },
+  ];
+
+  for (const { input, indicator } of sensors) {
+    if (!input || !indicator) continue;
+
+    let seq = 0; // stale-fetch guard: each blur gets a unique id
+
+    input.addEventListener("input", () => {
+      indicator.textContent = "";
+      indicator.className = SENSOR_IND_NEUTRAL;
+    });
+
+    input.addEventListener("blur", async () => {
+      const entityId = input.value.trim();
+      if (!entityId) {
+        indicator.textContent = "";
+        return;
+      }
+
+      const id = ++seq;
+
+      // Cancel any pending debounced save and flush immediately so the server
+      // has the latest HA credentials before we validate the entity.
+      persistConfigDebounced.cancel();
+      await persistConfig();
+
+      if (id !== seq) return; // another blur fired while we were saving
+
+      try {
+        const state = await fetchHaEntityState(entityId);
+        if (id !== seq) return; // stale response
+        indicator.textContent = `Current value: ${state.state}`;
+        indicator.className = SENSOR_IND_SUCCESS;
+      } catch (err) {
+        if (id !== seq) return; // stale response
+        indicator.textContent = `Error: ${err.message}`;
+        indicator.className = SENSOR_IND_ERROR;
+      }
+    });
+  }
 }

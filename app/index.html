@@ -923,6 +923,41 @@
           </div>
         </section>
 
+        <!-- EV Charging Card -->
+        <section class="card">
+          <div class="mb-4">
+            <h2 class="sidebar-label">EV Charging</h2>
+          </div>
+          <div class="space-y-3">
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input id="ev-enabled" type="checkbox" class="form-checkbox" />
+              Enable EV charging
+            </label>
+            <label class="block text-sm">Min charge current (A)
+              <input id="ev-min-charge-current" type="number" min="6" max="32" step="1"
+                class="form-input" />
+            </label>
+            <label class="block text-sm">Max charge current (A)
+              <input id="ev-max-charge-current" type="number" min="6" max="32" step="1"
+                class="form-input" />
+            </label>
+            <label class="block text-sm">EV battery capacity (kWh)
+              <input id="ev-battery-capacity" type="number" min="1" step="0.1"
+                class="form-input" />
+            </label>
+            <label class="block text-sm">SoC sensor entity ID
+              <input id="ev-soc-sensor" type="text" placeholder="sensor.ev_battery_level"
+                class="form-input font-mono text-xs" />
+              <span id="ev-soc-value" class="mt-1 block text-xs text-slate-500 dark:text-slate-400"></span>
+            </label>
+            <label class="block text-sm">Plug sensor entity ID
+              <input id="ev-plug-sensor" type="text" placeholder="binary_sensor.ev_charger_plug"
+                class="form-input font-mono text-xs" />
+              <span id="ev-plug-value" class="mt-1 block text-xs text-slate-500 dark:text-slate-400"></span>
+            </label>
+          </div>
+        </section>
+
       </div><!-- end right column -->
 
     </div>

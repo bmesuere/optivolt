@@ -63,6 +63,16 @@ export function getElements() {
     haUrl: $("#pred-ha-url"),
     haToken: $("#pred-ha-token"),
     haSettingsGroup: $("#pred-ha-settings-group"),
+
+    // EV Charging (Settings tab)
+    evEnabled: $("#ev-enabled"),
+    evMinChargeCurrent: $("#ev-min-charge-current"),
+    evMaxChargeCurrent: $("#ev-max-charge-current"),
+    evBatteryCapacity: $("#ev-battery-capacity"),
+    evSocSensor: $("#ev-soc-sensor"),
+    evPlugSensor: $("#ev-plug-sensor"),
+    evSocValue: $("#ev-soc-value"),
+    evPlugValue: $("#ev-plug-value"),
   };
 }
 

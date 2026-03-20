@@ -37,6 +37,14 @@ export function snapshotUI(els) {
     haUrl: els.haUrl?.value ?? '',
     haToken: els.haToken?.value ?? '',
 
+    // EV CHARGING
+    evEnabled: !!els.evEnabled?.checked,
+    evMinChargeCurrent_A: num(els.evMinChargeCurrent?.value),
+    evMaxChargeCurrent_A: num(els.evMaxChargeCurrent?.value),
+    evBatteryCapacity_kWh: num(els.evBatteryCapacity?.value),
+    evSocSensor: els.evSocSensor?.value ?? '',
+    evPlugSensor: els.evPlugSensor?.value ?? '',
+
     // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
     // Note: updateDataBeforeRun / pushToVictron are not part of the persisted settings
@@ -85,6 +93,16 @@ export function hydrateUI(els, obj = {}) {
   if (els.haSettingsGroup) {
     els.haSettingsGroup.hidden = !!obj.isAddon;
   }
+
+  // EV CHARGING
+  if (els.evEnabled && obj.evEnabled != null) {
+    els.evEnabled.checked = !!obj.evEnabled;
+  }
+  setIfDef(els.evMinChargeCurrent, obj.evMinChargeCurrent_A);
+  setIfDef(els.evMaxChargeCurrent, obj.evMaxChargeCurrent_A);
+  setIfDef(els.evBatteryCapacity, obj.evBatteryCapacity_kWh);
+  setIfDef(els.evSocSensor, obj.evSocSensor);
+  setIfDef(els.evPlugSensor, obj.evPlugSensor);
 
   // UI-only
   if (els.tableKwh && obj.tableShowKwh != null) {

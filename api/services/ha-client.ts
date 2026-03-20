@@ -1,12 +1,65 @@
 /**
  * ha-client.ts
  *
- * Home Assistant WebSocket client for fetching long-term statistics.
- * Uses the Node.js built-in WebSocket (Node >= 22).
+ * Home Assistant client: WebSocket for long-term statistics, REST for entity state.
+ * Uses the Node.js built-in WebSocket (Node >= 22) and built-in fetch.
  * Creates a new WebSocket connection per call.
  */
 
 import type { HaReading } from '../../lib/ha-postprocess.ts';
+
+// ----------------------------- REST: entity state -----------------------------
+
+export interface HaEntityState {
+  entity_id: string;
+  state: string;
+  attributes: Record<string, unknown>;
+  last_changed: string;
+  last_updated: string;
+}
+
+interface FetchHaEntityStateOptions {
+  haUrl: string;
+  haToken: string;
+  entityId: string;
+}
+
+/**
+ * Convert a WebSocket URL (ws:// or wss://) to an HTTP base URL (http:// or https://).
+ * Strips the /api/websocket suffix if present.
+ */
+export function wsUrlToHttp(wsUrl: string): string {
+  const url = new URL(wsUrl);
+  url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+  // Remove the websocket path suffix
+  url.pathname = url.pathname.replace(/\/api\/websocket$/, '');
+  return url.toString().replace(/\/$/, '');
+}
+
+/**
+ * Fetch a single entity state from the HA REST API.
+ * In add-on mode, uses the supervisor proxy instead.
+ */
+export async function fetchHaEntityState({
+  haUrl,
+  haToken,
+  entityId,
+}: FetchHaEntityStateOptions): Promise<HaEntityState> {
+  const isAddon = !!process.env.SUPERVISOR_TOKEN;
+  const baseUrl = isAddon ? 'http://supervisor/core' : wsUrlToHttp(haUrl);
+  const token: string = isAddon ? process.env.SUPERVISOR_TOKEN! : haToken;
+
+  const url = `${baseUrl}/api/states/${encodeURIComponent(entityId)}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    throw new Error(`HA returned ${res.status} for entity "${entityId}"`);
+  }
+
+  return res.json() as Promise<HaEntityState>;
+}
 
 interface FetchHaStatsOptions {
   haUrl: string;

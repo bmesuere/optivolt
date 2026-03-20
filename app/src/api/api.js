@@ -23,6 +23,11 @@ export function refreshVrmSettings() {
   return postJson("/vrm/refresh-settings", {});
 }
 
+// --- Home Assistant ---
+export function fetchHaEntityState(entityId) {
+  return getJson(`/ha/entity/${encodeURIComponent(entityId)}`);
+}
+
 // --- Predictions ---
 export const fetchPredictionConfig = () => getJson('/predictions/config');
 export const savePredictionConfig = (c) => postJson('/predictions/config', c);
