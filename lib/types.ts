@@ -4,6 +4,16 @@
 
 export type TerminalSocValuation = 'zero' | 'min' | 'avg' | 'max' | 'custom';
 
+export interface EvConfig {
+  evMinChargePower_W: number;
+  evMaxChargePower_W: number;
+  evBatteryCapacity_Wh: number;
+  evInitialSoc_percent: number;
+  evTargetSoc_percent: number;
+  /** Number of available charging slots before departure. Constraint emitted if <= T. */
+  evDepartureSlot: number;
+}
+
 /**
  * Fully resolved solver configuration, as produced by config-builder.
  * All scalar fields are validated and present; arrays are aligned time series.
@@ -40,6 +50,9 @@ export interface SolverConfig {
   rebalanceHoldSlots?: number;
   rebalanceRemainingSlots?: number;
   rebalanceTargetSoc_percent?: number;
+
+  // EV charging (optional — only present when evEnabled is true and EV is plugged in)
+  ev?: EvConfig;
 }
 
 /**
@@ -73,6 +86,11 @@ export interface PlanRow {
   exp: number;   // total export W (pv2g + b2g)
   soc: number;   // battery SoC Wh
   soc_percent: number;  // battery SoC %
+  g2ev: number;         // grid → EV W
+  pv2ev: number;        // PV → EV W
+  b2ev: number;         // battery → EV W
+  ev_charge: number;    // total EV charge power W
+  ev_soc_percent: number;  // EV SoC %
 }
 
 /**
@@ -123,4 +141,8 @@ export interface PlanSummary {
   batteryExportTippingPoint_cents_per_kWh: number | null;
   pvExportTippingPoint_cents_per_kWh: number | null;
   rebalanceStatus: 'disabled' | 'scheduled' | 'active';
+  evChargeTotal_kWh: number;
+  evChargeFromGrid_kWh: number;
+  evChargeFromPv_kWh: number;
+  evChargeFromBattery_kWh: number;
 }

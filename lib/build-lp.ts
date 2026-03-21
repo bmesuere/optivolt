@@ -34,6 +34,7 @@ export function buildLP({
   // rebalancing (MILP)
   rebalanceRemainingSlots,
   rebalanceTargetSoc_percent,
+  ev,
 }: SolverConfig): string {
   const T = load_W.length;
   if (pv_W.length !== T || importPrice.length !== T || exportPrice.length !== T) {
@@ -71,6 +72,22 @@ export function buildLP({
     ? (safeTargetSoc_percent / 100) * batteryCapacity_Wh
     : 0;
   const startBalance = (k: number) => `start_balance_${k}`;
+
+  // EV variable name helpers
+  const gridToEv    = (t: number) => `grid_to_ev_${t}`;
+  const pvToEv      = (t: number) => `pv_to_ev_${t}`;
+  const batteryToEv = (t: number) => `battery_to_ev_${t}`;
+  const evOn        = (t: number) => `ev_on_${t}`;
+  const evSocVar    = (t: number) => `ev_soc_${t}`;
+
+  // EV derived constants (only used when ev is defined)
+  const evActive     = ev != null;
+  const evCapacityWh = ev?.evBatteryCapacity_Wh ?? 0;
+  const evInitialWh  = (ev?.evInitialSoc_percent ?? 0) / 100 * evCapacityWh;
+  const evTargetWh   = (ev?.evTargetSoc_percent  ?? 0) / 100 * evCapacityWh;
+  const evMinPow_W   = ev?.evMinChargePower_W ?? 0;
+  const evMaxPow_W   = ev?.evMaxChargePower_W ?? 0;
+  const evDepSlot    = ev?.evDepartureSlot ?? (T + 1);
 
   // Variable name helpers
   const gridToLoad = (t: number) => `grid_to_load_${t}`;
@@ -110,6 +127,11 @@ export function buildLP({
     if (batteryToGridCoeff !== 0) objTerms.push(` + ${toNum(batteryToGridCoeff)} ${batteryToGrid(t)}`);
     if (batteryToLoadCoeff !== 0) objTerms.push(` + ${toNum(batteryToLoadCoeff)} ${batteryToLoad(t)}`);
     if (pvToBatteryCoeff !== 0) objTerms.push(` + ${toNum(pvToBatteryCoeff)} ${pvToBattery(t)}`);
+    if (evActive) {
+      if (importCoeff_cents !== 0) objTerms.push(` + ${toNum(importCoeff_cents)} ${gridToEv(t)}`);
+      objTerms.push(` + ${toNum(TIEBREAK.pvToLoad)} ${pvToEv(t)}`);
+      if (batteryCost_cents !== 0) objTerms.push(` + ${toNum(batteryCost_cents)} ${batteryToEv(t)}`);
+    }
     objTerms.push(` + ${toNum(socShortfallCoeff)} ${socShortfall(t)}`);
   }
   // Terminal SOC valuation
@@ -132,8 +154,8 @@ export function buildLP({
 
   // PV split
   for (let t = 0; t < T; t++) {
-    lines.push(` c_pv_split_${t}: ${pvToLoad(t)} + ${pvToBattery(t)} + ${pvToGrid(t)} = ${pv_W[t]}`
-    );
+    const pvEvTerm = evActive ? ` + ${pvToEv(t)}` : '';
+    lines.push(` c_pv_split_${t}: ${pvToLoad(t)} + ${pvToBattery(t)} + ${pvToGrid(t)}${pvEvTerm} = ${pv_W[t]}`);
   }
 
   // SOC evolution (includes idle drain: inverter consumes idleDrain_Wh per slot)
@@ -147,10 +169,12 @@ export function buildLP({
   for (let t = 0; t < T; t++) {
     // Charge/discharge limits
     lines.push(` c_charge_cap_${t}: ${gridToBattery(t)} + ${pvToBattery(t)} <= ${maxChargePower_W}`);
-    lines.push(` c_discharge_cap_${t}: ${batteryToLoad(t)} + ${batteryToGrid(t)} <= ${maxDischargePower_W}`);
+    const batEvTerm = evActive ? ` + ${batteryToEv(t)}` : '';
+    lines.push(` c_discharge_cap_${t}: ${batteryToLoad(t)} + ${batteryToGrid(t)}${batEvTerm} <= ${maxDischargePower_W}`);
 
     // Grid import/export limits
-    lines.push(` c_grid_import_cap_${t}: ${gridToLoad(t)} + ${gridToBattery(t)} <= ${maxGridImport_W}`);
+    const gridEvTerm = evActive ? ` + ${gridToEv(t)}` : '';
+    lines.push(` c_grid_import_cap_${t}: ${gridToLoad(t)} + ${gridToBattery(t)}${gridEvTerm} <= ${maxGridImport_W}`);
     lines.push(` c_grid_export_cap_${t}: ${pvToGrid(t)} + ${batteryToGrid(t)} <= ${maxGridExport_W}`);
 
     // Soft min SOC constraint
@@ -178,6 +202,24 @@ export function buildLP({
       lines.push(` c_rebalance_${t}: ${soc(t)}${terms.join('')} >= 0`);
     }
   }
+
+  // EV charging constraints (MILP)
+  if (evActive) {
+    for (let t = 0; t < T; t++) {
+      lines.push(` c_ev_min_${t}: ${gridToEv(t)} + ${pvToEv(t)} + ${batteryToEv(t)} - ${toNum(evMinPow_W)} ${evOn(t)} >= 0`);
+      lines.push(` c_ev_max_${t}: ${gridToEv(t)} + ${pvToEv(t)} + ${batteryToEv(t)} - ${toNum(evMaxPow_W)} ${evOn(t)} <= 0`);
+    }
+
+    lines.push(` c_ev_soc_0: ${evSocVar(0)} - ${toNum(stepHours)} ${gridToEv(0)} - ${toNum(stepHours)} ${pvToEv(0)} - ${toNum(stepHours)} ${batteryToEv(0)} = ${toNum(evInitialWh)}`);
+    for (let t = 1; t < T; t++) {
+      lines.push(` c_ev_soc_${t}: ${evSocVar(t)} - ${evSocVar(t - 1)} - ${toNum(stepHours)} ${gridToEv(t)} - ${toNum(stepHours)} ${pvToEv(t)} - ${toNum(stepHours)} ${batteryToEv(t)} = 0`);
+    }
+
+    if (evDepSlot <= T && evDepSlot > 0) {
+      lines.push(` c_ev_target: ${evSocVar(evDepSlot - 1)} >= ${toNum(evTargetWh)}`);
+    }
+  }
+
   lines.push("");
 
   // ===============
@@ -202,13 +244,26 @@ export function buildLP({
     // minSoc handled via soft constraint
     lines.push(` ${soc(t)} <= ${toNum(maxSoc_Wh)}`);
     lines.push(` ${socShortfall(t)} >= 0`);
+    if (evActive) {
+      lines.push(` 0 <= ${gridToEv(t)} <= ${toNum(evMaxPow_W)}`);
+      lines.push(` 0 <= ${pvToEv(t)} <= ${toNum(Math.min(pv_W[t], evMaxPow_W))}`);
+      lines.push(` 0 <= ${batteryToEv(t)} <= ${toNum(Math.min(maxDischargePower_W, evMaxPow_W))}`);
+      lines.push(` 0 <= ${evSocVar(t)} <= ${toNum(evCapacityWh)}`);
+    }
   }
   lines.push("");
 
-  if (D > 0) {
+  if (D > 0 || evActive) {
     lines.push("Binaries");
-    for (let k = 0; k <= T - D; k++) {
-      lines.push(` start_balance_${k}`);
+    if (D > 0) {
+      for (let k = 0; k <= T - D; k++) {
+        lines.push(` start_balance_${k}`);
+      }
+    }
+    if (evActive) {
+      for (let t = 0; t < T; t++) {
+        lines.push(` ${evOn(t)}`);
+      }
     }
     lines.push("");
   }

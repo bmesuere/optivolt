@@ -47,6 +47,8 @@ export interface Settings {
   evBatteryCapacity_kWh: number;
   evSocSensor: string;
   evPlugSensor: string;
+  evDepartureTime: string;
+  evTargetSoc_percent: number;
 }
 
 // ----------------------------- Persisted data ---------------------------

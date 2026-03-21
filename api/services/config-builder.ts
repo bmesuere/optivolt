@@ -2,12 +2,36 @@ import { HttpError } from '../http-errors.ts';
 import { loadSettings } from './settings-store.ts';
 import { loadData } from './data-store.ts';
 import { extractWindow, getQuarterStart } from '../../lib/time-series-utils.ts';
-import type { SolverConfig, TimeSeries } from '../../lib/types.ts';
+import { fetchHaEntityState } from './ha-client.ts';
+import type { SolverConfig, TimeSeries, EvConfig } from '../../lib/types.ts';
 import type { Settings, Data } from '../types.ts';
 
 function getSeriesEndMs(source: TimeSeries): number {
   const step = source.step ?? 15;
   return new Date(source.start).getTime() + source.values.length * step * 60_000;
+}
+
+function departureTimeToSlot(
+  departureTime: string,
+  startMs: number,
+  stepSize_m: number,
+  T: number,
+): number {
+  const parts = departureTime.split(':');
+  const hh = parseInt(parts[0] ?? '0', 10);
+  const mm = parseInt(parts[1] ?? '0', 10);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return 0;
+
+  const departure = new Date(startMs);
+  departure.setHours(hh, mm, 0, 0);
+
+  if (departure.getTime() <= startMs) {
+    departure.setDate(departure.getDate() + 1);
+  }
+
+  const slotsAvailable = Math.floor((departure.getTime() - startMs) / (stepSize_m * 60_000));
+  if (slotsAvailable <= 0) return 0;
+  return Math.min(slotsAvailable, T + 1);
 }
 
 /**
@@ -24,6 +48,7 @@ export function buildSolverConfigFromSettings(
   settings: Settings,
   data: Data,
   nowMs = getQuarterStart(new Date(), settings.stepSize_m),
+  evState?: { pluggedIn: boolean; soc_percent: number },
 ): SolverConfig {
   const loadEndMs   = getSeriesEndMs(data.load);
   const pvEndMs     = getSeriesEndMs(data.pv);
@@ -82,12 +107,60 @@ export function buildSolverConfigFromSettings(
     base.rebalanceTargetSoc_percent = settings.maxSoc_percent;
   }
 
+  if (settings.evEnabled && evState?.pluggedIn) {
+    const T = base.load_W.length;
+    const minPow_W = settings.evMinChargeCurrent_A * 230;
+    const maxPow_W = settings.evMaxChargeCurrent_A * 230;
+    const capacityWh = settings.evBatteryCapacity_kWh * 1000;
+    const stepHours = settings.stepSize_m / 60;
+
+    const D = departureTimeToSlot(settings.evDepartureTime, nowMs, settings.stepSize_m, T);
+    if (D > 0) {
+      const initialWh = (evState.soc_percent / 100) * capacityWh;
+      const requestedTargetWh = (settings.evTargetSoc_percent / 100) * capacityWh;
+      const chargingSlots = Math.min(D, T);
+      const maxChargeable_Wh = maxPow_W * stepHours * chargingSlots;
+      const achievableTargetWh = Math.min(requestedTargetWh, initialWh + maxChargeable_Wh, capacityWh);
+
+      const ev: EvConfig = {
+        evMinChargePower_W: Math.min(minPow_W, maxPow_W),
+        evMaxChargePower_W: maxPow_W,
+        evBatteryCapacity_Wh: capacityWh,
+        evInitialSoc_percent: evState.soc_percent,
+        evTargetSoc_percent: (achievableTargetWh / capacityWh) * 100,
+        evDepartureSlot: D,
+      };
+      base.ev = ev;
+    }
+  }
+
   return base;
 }
 
 export async function getSolverInputs(): Promise<{ cfg: SolverConfig; timing: { startMs: number; stepMin: number }; data: Data; settings: Settings }> {
   const [settings, data] = await Promise.all([loadSettings(), loadData()]);
   const startMs = getQuarterStart(new Date(), settings.stepSize_m);
-  const cfg = buildSolverConfigFromSettings(settings, data, startMs);
+
+  let evState: { pluggedIn: boolean; soc_percent: number } | undefined;
+  if (settings.evEnabled && settings.evSocSensor && settings.evPlugSensor) {
+    try {
+      const [socEntity, plugEntity] = await Promise.all([
+        fetchHaEntityState({ haUrl: settings.haUrl, haToken: settings.haToken, entityId: settings.evSocSensor }),
+        fetchHaEntityState({ haUrl: settings.haUrl, haToken: settings.haToken, entityId: settings.evPlugSensor }),
+      ]);
+      const soc_percent = parseFloat(socEntity.state);
+      const pluggedIn = plugEntity.state !== 'disconnected'
+        && plugEntity.state !== 'unavailable'
+        && plugEntity.state !== 'unknown'
+        && plugEntity.state !== 'off';
+      if (Number.isFinite(soc_percent)) {
+        evState = { pluggedIn, soc_percent };
+      }
+    } catch (err) {
+      console.warn('Could not read EV state from HA:', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  const cfg = buildSolverConfigFromSettings(settings, data, startMs, evState);
   return { cfg, timing: { startMs, stepMin: settings.stepSize_m }, data, settings };
 }
