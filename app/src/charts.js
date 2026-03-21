@@ -8,7 +8,11 @@ export const SOLUTION_COLORS = {
   b2l: "rgb(71, 144, 208)",   // Battery to Consumption (blue)
   g2l: "rgb(233, 122, 131)",  // Grid to Consumption (red)
   g2b: "rgb(225, 142, 233)",  // Grid to Battery (purple)
-  soc: "rgb(71, 144, 208)"    // SoC line color = battery-ish blue
+  soc: "rgb(71, 144, 208)",   // SoC line color = battery-ish blue
+  g2ev: "rgb(255, 120, 50)",   // Grid to EV (orange-red)
+  pv2ev: "rgb(255, 210, 80)", // Solar to EV (light yellow)
+  b2ev: "rgb(200, 120, 230)", // Battery to EV (violet)
+  ev_charge: "rgb(255, 120, 50)", // EV total (orange-red)
 };
 
 export const toRGBA = (rgb, alpha = 1) => {
@@ -248,10 +252,13 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, rebalance
     { key: "pv2b", color: SOLUTION_COLORS.pv2b, label: "Solar to Battery", sign: 1 },
     { key: "pv2g", color: SOLUTION_COLORS.pv2g, label: "Solar to Grid", sign: 1 },
     { key: "b2g", color: SOLUTION_COLORS.b2g, label: "Battery to Grid", sign: 1 },
+    { key: "pv2ev", color: SOLUTION_COLORS.pv2ev, label: "Solar to EV", sign: 1 },
     // Negative Stack
     { key: "b2l", color: SOLUTION_COLORS.b2l, label: "Battery to Consumption", sign: -1 },
     { key: "g2l", color: SOLUTION_COLORS.g2l, label: "Grid to Consumption", sign: -1 },
-    { key: "g2b", color: SOLUTION_COLORS.g2b, label: "Grid to Battery", sign: -1 }
+    { key: "g2b", color: SOLUTION_COLORS.g2b, label: "Grid to Battery", sign: -1 },
+    { key: "g2ev", color: SOLUTION_COLORS.g2ev, label: "Grid to EV", sign: -1 },
+    { key: "b2ev", color: SOLUTION_COLORS.b2ev, label: "Battery to EV", sign: -1 },
   ];
 
   const datasets = flowSpecs.map(spec =>
@@ -283,24 +290,39 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15) {
   const timestampsMs = rows.map(r => r.timestampMs);
   const axis = buildTimeAxisFromTimestamps(timestampsMs);
 
+  const hasEvSoc = rows.some(r => (r.ev_soc_percent ?? 0) > 0);
+
+  const datasets = [{
+    label: "Battery SoC (%)",
+    data: rows.map(r => r.soc_percent),
+    borderColor: SOLUTION_COLORS.soc,
+    backgroundColor: SOLUTION_COLORS.soc,
+    borderWidth: 2,
+    tension: 0.2,
+    pointRadius: 0,
+    hoverBorderColor: dim(SOLUTION_COLORS.soc),
+    clip: false
+  }];
+
+  if (hasEvSoc) {
+    datasets.push({
+      label: "EV SoC (%)",
+      data: rows.map(r => r.ev_soc_percent ?? 0),
+      borderColor: SOLUTION_COLORS.ev_charge,
+      backgroundColor: SOLUTION_COLORS.ev_charge,
+      borderWidth: 2,
+      tension: 0.2,
+      pointRadius: 0,
+      hoverBorderColor: dim(SOLUTION_COLORS.ev_charge),
+      clip: false
+    });
+  }
+
   renderChart(canvas, {
     type: "line",
-    data: {
-      labels: axis.labels,
-      datasets: [{
-        label: "SoC (%)",
-        data: rows.map(r => r.soc_percent),
-        borderColor: SOLUTION_COLORS.soc,
-        backgroundColor: SOLUTION_COLORS.soc,
-        borderWidth: 2,
-        tension: 0.2,
-        pointRadius: 0,
-        hoverBorderColor: dim(SOLUTION_COLORS.soc),
-        clip: false
-      }]
-    },
+    data: { labels: axis.labels, datasets },
     options: getBaseOptions({ ...axis, yTitle: "%" }, {
-      plugins: { legend: { display: false } }, // Hide legend for this chart
+      plugins: hasEvSoc ? {} : { legend: { display: false } },
       scales: { y: { max: 100 } }
     })
   });

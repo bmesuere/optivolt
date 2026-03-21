@@ -102,8 +102,8 @@ EV SoC tracking with hard constraint at departure slot.
 |-------|-------|--------|
 | 1 | EV settings + HA entity validation | **Done** |
 | 2 | LP integration (planned charging) | **Done** |
-| 3 | EV in optimizer charts/table/summary | **Next** |
-| 4 | EV tab + API endpoints | Depends on Phase 3 |
+| 3 | EV in optimizer charts/table/summary | **Done** |
+| 4 | EV tab + API endpoints | **Next** |
 
 ---
 

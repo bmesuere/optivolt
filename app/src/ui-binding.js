@@ -64,6 +64,13 @@ export function getElements() {
     haToken: $("#pred-ha-token"),
     haSettingsGroup: $("#pred-ha-settings-group"),
 
+    // EV summary (Optimizer tab)
+    evSummaryBlock: $("#ev-summary-block"),
+    sumEvGrid: $("#sum-ev-grid-kwh"),
+    sumEvPv: $("#sum-ev-pv-kwh"),
+    sumEvBatt: $("#sum-ev-batt-kwh"),
+    sumEvTotal: $("#sum-ev-total-kwh"),
+
     // EV Charging (Settings tab)
     evEnabled: $("#ev-enabled"),
     evMinChargeCurrent: $("#ev-min-charge-current"),

@@ -50,6 +50,28 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
     { key: "g2b", headerHtml: "g2b", fmt: x => fmtEnergy(x), tip: "Grid → Battery" },
     { key: "b2g", headerHtml: "b2g", fmt: x => fmtEnergy(x), tip: "Battery → Grid" },
 
+    {
+      key: "ev_charge",
+      headerHtml: "EV",
+      fmt: (x, ri) => {
+        const row = rows[ri];
+        const tip = `Grid→EV: ${fmtEnergy(row.g2ev)} · PV→EV: ${fmtEnergy(row.pv2ev)} · Battery→EV: ${fmtEnergy(row.b2ev)}`;
+        return { text: fmtEnergy(x), tip };
+      },
+      tip: "EV Charging (hover for breakdown)",
+      cellTip: true,
+    },
+    {
+      key: "ev_soc_percent",
+      headerHtml: "EV<br>SoC",
+      fmt: x => {
+        const n = Number(x) || 0;
+        if (n === 0) return "–";
+        return `${Math.round(n)}%`;
+      },
+      tip: "EV Battery SoC",
+    },
+
     { key: "imp", headerHtml: "Grid<br>import", fmt: x => fmtEnergy(x), tip: "Grid Import" },
     { key: "exp", headerHtml: "Grid<br>export", fmt: x => fmtEnergy(x), tip: "Grid Export" },
 
@@ -87,7 +109,7 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
     },
   ];
 
-  const SUMMABLE_KEYS = new Set(["load", "pv", "g2l", "b2l", "pv2l", "pv2b", "pv2g", "g2b", "b2g", "imp", "exp"]);
+  const SUMMABLE_KEYS = new Set(["load", "pv", "g2l", "b2l", "pv2l", "pv2b", "pv2g", "g2b", "b2g", "ev_charge", "imp", "exp"]);
 
   const totals = {};
   for (const key of SUMMABLE_KEYS) {

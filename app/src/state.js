@@ -155,6 +155,7 @@ export function updateSummaryUI(els, summary) {
     setText(els.gridChargeTp, "—");
     setText(els.batteryExportTp, "—");
     updateRebalanceStatus(els, null);
+    updateEvSummary(els, null);
 
     // reset mini bars
     const loadSplitBar = document.getElementById("load-split-bar");
@@ -205,6 +206,7 @@ export function updateSummaryUI(els, summary) {
   );
 
   updateRebalanceStatus(els, summary.rebalanceStatus);
+  updateEvSummary(els, summary);
 
   // --- Energy Flow Bar ---
   const g2b = Number(summary.gridToBattery_kWh) || 0;
@@ -212,17 +214,50 @@ export function updateSummaryUI(els, summary) {
   const b2l = Number(loadFromBattery_kWh) || 0;
   const b2g = Number(summary.batteryToGrid_kWh) || 0;
 
-
   const flowTotal = g2b + g2l + b2l + b2g;
 
   updateStackedBarContainer(
     document.getElementById("flow-split-bar"),
     flowTotal,
     [
-      { value: g2b, color: SOLUTION_COLORS.g2b, title: `Grid to Battery: ${formatKWh(g2b)}` }, // Charge
-      { value: g2l, color: SOLUTION_COLORS.g2l, title: `Grid to Load: ${formatKWh(g2l)}` },      // Load (Grid)
-      { value: b2l, color: SOLUTION_COLORS.b2l, title: `Battery to Load: ${formatKWh(b2l)}` },   // Load (Batt)
-      { value: b2g, color: SOLUTION_COLORS.b2g, title: `Battery to Grid: ${formatKWh(b2g)}` },   // Export
+      { value: g2b, color: SOLUTION_COLORS.g2b, title: `Grid to Battery: ${formatKWh(g2b)}` },
+      { value: g2l, color: SOLUTION_COLORS.g2l, title: `Grid to Load: ${formatKWh(g2l)}` },
+      { value: b2l, color: SOLUTION_COLORS.b2l, title: `Battery to Load: ${formatKWh(b2l)}` },
+      { value: b2g, color: SOLUTION_COLORS.b2g, title: `Battery to Grid: ${formatKWh(b2g)}` },
+    ]
+  );
+}
+
+function updateEvSummary(els, summary) {
+  if (!els.evSummaryBlock) return;
+
+  const total = Number(summary?.evChargeTotal_kWh) || 0;
+  if (total <= 0) {
+    els.evSummaryBlock.classList.add("hidden");
+    setText(els.sumEvGrid, "—");
+    setText(els.sumEvPv, "—");
+    setText(els.sumEvBatt, "—");
+    setText(els.sumEvTotal, "—");
+    return;
+  }
+
+  els.evSummaryBlock.classList.remove("hidden");
+  const fromGrid = Number(summary.evChargeFromGrid_kWh) || 0;
+  const fromPv   = Number(summary.evChargeFromPv_kWh) || 0;
+  const fromBatt = Number(summary.evChargeFromBattery_kWh) || 0;
+
+  setText(els.sumEvGrid, formatKWh(fromGrid));
+  setText(els.sumEvPv, formatKWh(fromPv));
+  setText(els.sumEvBatt, formatKWh(fromBatt));
+  setText(els.sumEvTotal, formatKWh(total));
+
+  updateStackedBarContainer(
+    document.getElementById("ev-split-bar"),
+    total,
+    [
+      { value: fromGrid, color: SOLUTION_COLORS.g2ev,  title: `Grid: ${formatKWh(fromGrid)}` },
+      { value: fromPv,   color: SOLUTION_COLORS.pv2ev, title: `PV: ${formatKWh(fromPv)}` },
+      { value: fromBatt, color: SOLUTION_COLORS.b2ev,  title: `Battery: ${formatKWh(fromBatt)}` },
     ]
   );
 }
