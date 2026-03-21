@@ -11,6 +11,7 @@ import { refreshVrmSettings } from "./src/api/api.js";
 import { loadInitialConfig, saveConfig } from "./src/config-store.js";
 import { requestRemoteSolve, fetchHaEntityState } from "./src/api/api.js";
 import { initPredictionsTab } from "./src/predictions.js";
+import { updateEvPanel } from "./src/ev-tab.js";
 
 // Import new modules
 import {
@@ -49,6 +50,7 @@ function setupTabSwitcher() {
   const tabs = [
     { tab: document.getElementById('tab-optimizer'),   panel: document.getElementById('panel-optimizer') },
     { tab: document.getElementById('tab-predictions'), panel: document.getElementById('panel-predictions') },
+    { tab: document.getElementById('tab-ev'),          panel: document.getElementById('panel-ev') },
     { tab: document.getElementById('tab-settings'),    panel: document.getElementById('panel-settings') },
   ].filter(t => t.tab && t.panel);
 
@@ -181,6 +183,8 @@ async function onRun() {
     });
 
     renderAllCharts(rows, cfgForViz, result.rebalanceWindow ?? null);
+
+    updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m);
   } catch (err) {
     console.error(err);
     if (els.status) {

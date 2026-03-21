@@ -76,10 +76,26 @@ export function getElements() {
     evMinChargeCurrent: $("#ev-min-charge-current"),
     evMaxChargeCurrent: $("#ev-max-charge-current"),
     evBatteryCapacity: $("#ev-battery-capacity"),
+    evDepartureTime: $("#ev-departure-time"),
+    evTargetSoc: $("#ev-target-soc"),
     evSocSensor: $("#ev-soc-sensor"),
     evPlugSensor: $("#ev-plug-sensor"),
     evSocValue: $("#ev-soc-value"),
     evPlugValue: $("#ev-plug-value"),
+
+    // EV tab
+    evNoCharging: $("#ev-no-charging"),
+    evChargingSummary: $("#ev-charging-summary"),
+    evTabDeparture: $("#ev-tab-departure"),
+    evTabTargetSoc: $("#ev-tab-target-soc"),
+    evTabGridKwh: $("#ev-tab-grid-kwh"),
+    evTabPvKwh: $("#ev-tab-pv-kwh"),
+    evTabBattKwh: $("#ev-tab-batt-kwh"),
+    evTabTotalKwh: $("#ev-tab-total-kwh"),
+    evTabSplitBar: $("#ev-tab-split-bar"),
+    evPowerChart: $("#ev-power-chart"),
+    evSocChartTab: $("#ev-soc-chart-tab"),
+    evScheduleTable: $("#ev-schedule-table"),
   };
 }
 

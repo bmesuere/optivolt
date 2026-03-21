@@ -64,6 +64,13 @@ function extractRebalanceWindow(
   return undefined;
 }
 
+// Cache of the last computed plan, used by /ev/* endpoints
+let lastPlan: ComputePlanResult | undefined;
+
+export function getLastPlan(): ComputePlanResult | undefined {
+  return lastPlan;
+}
+
 export async function computePlan({ updateData = false } = {}): Promise<ComputePlanResult> {
   if (updateData) {
     try {
@@ -124,7 +131,8 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
     cfg.rebalanceRemainingSlots ?? 0,
   );
 
-  return { cfg, data, timing, result, rows: rowsWithDess, summary, rebalanceWindow };
+  lastPlan = { cfg, data, timing, result, rows: rowsWithDess, summary, rebalanceWindow };
+  return lastPlan;
 }
 
 export async function writePlanToVictron(rows: PlanRowWithDess[]): Promise<void> {

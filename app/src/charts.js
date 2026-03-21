@@ -23,7 +23,7 @@ const dim = (rgb) => toRGBA(rgb, 0.6);
 
 // ---------------------- Time & Axis Helpers ----------------------
 
-function fmtHHMM(dt) {
+export function fmtHHMM(dt) {
   const HH = String(dt.getHours()).padStart(2, "0");
   const MM = String(dt.getMinutes()).padStart(2, "0");
   return `${HH}:${MM}`;
@@ -417,5 +417,56 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
       ]
     },
     options: getBaseOptions({ ...axis, yTitle: "kWh" })
+  });
+}
+
+// -----------------------------------------------------------------------------
+// EV tab charts
+// -----------------------------------------------------------------------------
+
+export function drawEvPowerChart(canvas, rows, stepSize_m = 15) {
+  const timestampsMs = rows.map(r => r.timestampMs);
+  const axis = buildTimeAxisFromTimestamps(timestampsMs);
+
+  const h = Math.max(0.000001, Number(stepSize_m) / 60);
+  const W2kWh = (x) => (x || 0) * h / 1000;
+
+  const datasets = [
+    dsBar("Grid → EV", rows.map(r => W2kWh(r.g2ev)), SOLUTION_COLORS.g2ev, "ev"),
+    dsBar("Solar → EV", rows.map(r => W2kWh(r.pv2ev)), SOLUTION_COLORS.pv2ev, "ev"),
+    dsBar("Battery → EV", rows.map(r => W2kWh(r.b2ev)), SOLUTION_COLORS.b2ev, "ev"),
+  ];
+
+  renderChart(canvas, {
+    type: "bar",
+    data: { labels: axis.labels, datasets },
+    options: getBaseOptions({ ...axis, yTitle: "kWh", stacked: true }),
+  });
+}
+
+export function drawEvSocChartTab(canvas, rows) {
+  const timestampsMs = rows.map(r => r.timestampMs);
+  const axis = buildTimeAxisFromTimestamps(timestampsMs);
+
+  renderChart(canvas, {
+    type: "line",
+    data: {
+      labels: axis.labels,
+      datasets: [{
+        label: "EV SoC (%)",
+        data: rows.map(r => r.ev_soc_percent ?? 0),
+        borderColor: SOLUTION_COLORS.ev_charge,
+        backgroundColor: SOLUTION_COLORS.ev_charge,
+        borderWidth: 2,
+        tension: 0.2,
+        pointRadius: 0,
+        hoverBorderColor: dim(SOLUTION_COLORS.ev_charge),
+        clip: false,
+      }]
+    },
+    options: getBaseOptions({ ...axis, yTitle: "%" }, {
+      plugins: { legend: { display: false } },
+      scales: { y: { min: 0, max: 100 } },
+    }),
   });
 }

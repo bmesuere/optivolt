@@ -42,6 +42,8 @@ export function snapshotUI(els) {
     evMinChargeCurrent_A: num(els.evMinChargeCurrent?.value),
     evMaxChargeCurrent_A: num(els.evMaxChargeCurrent?.value),
     evBatteryCapacity_kWh: num(els.evBatteryCapacity?.value),
+    evDepartureTime: els.evDepartureTime?.value ?? '',
+    evTargetSoc_percent: num(els.evTargetSoc?.value),
     evSocSensor: els.evSocSensor?.value ?? '',
     evPlugSensor: els.evPlugSensor?.value ?? '',
 
@@ -101,6 +103,8 @@ export function hydrateUI(els, obj = {}) {
   setIfDef(els.evMinChargeCurrent, obj.evMinChargeCurrent_A);
   setIfDef(els.evMaxChargeCurrent, obj.evMaxChargeCurrent_A);
   setIfDef(els.evBatteryCapacity, obj.evBatteryCapacity_kWh);
+  setIfDef(els.evDepartureTime, obj.evDepartureTime);
+  setIfDef(els.evTargetSoc, obj.evTargetSoc_percent);
   setIfDef(els.evSocSensor, obj.evSocSensor);
   setIfDef(els.evPlugSensor, obj.evPlugSensor);
 
@@ -287,7 +291,7 @@ export function updateTerminalCustomUI(els) {
 // ---------- Helpers ----------
 
 // Helper to update specific bar elements (legacy support for Load Split if we want, or unified)
-function updateStackedBarContainer(container, total, segments) {
+export function updateStackedBarContainer(container, total, segments) {
   if (!container) return;
   container.innerHTML = ""; // Clear for simplicity (or diff if performance needed, but this is infrequent)
 
@@ -331,7 +335,7 @@ function setText(el, txt) {
   el.textContent = txt;
 }
 
-function formatKWh(v) {
+export function formatKWh(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
   if (Math.abs(n) < 0.005) return "0.00 kWh";

@@ -28,6 +28,10 @@ export function fetchHaEntityState(entityId) {
   return getJson(`/ha/entity/${encodeURIComponent(entityId)}`);
 }
 
+// --- EV ---
+export const fetchEvSchedule = () => getJson('/ev/schedule');
+export const fetchEvCurrent = () => getJson('/ev/current');
+
 // --- Predictions ---
 export const fetchPredictionConfig = () => getJson('/predictions/config');
 export const savePredictionConfig = (c) => postJson('/predictions/config', c);
