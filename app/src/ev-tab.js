@@ -1,4 +1,4 @@
-import { SOLUTION_COLORS, toRGBA, fmtHHMM, drawEvPowerChart, drawEvSocChartTab } from "./charts.js";
+import { SOLUTION_COLORS, toRGBA, drawEvPowerChart, drawEvSocChartTab } from "./charts.js";
 import { formatKWh, updateStackedBarContainer } from "./state.js";
 
 export function updateEvPanel(els, rows, summary, stepSize_m = 15) {
@@ -103,10 +103,7 @@ function renderEvTable(rows, tableEl, stepSize_m = 15, evSettings = {}) {
 
   const departureMs = evSettings.departureTime ? new Date(evSettings.departureTime).getTime() : null;
   const departureIdx = departureMs != null
-    ? evRows.reduce((best, r, i) => {
-        const dist = Math.abs(r.timestampMs - departureMs);
-        return dist < Math.abs(evRows[best].timestampMs - departureMs) ? i : best;
-      }, 0)
+    ? (evRows.findIndex(r => r.timestampMs >= departureMs))
     : -1;
 
   const hasTarget = evSettings.targetSoc_percent != null && !isNaN(evSettings.targetSoc_percent);

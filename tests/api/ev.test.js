@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import app from '../../api/app.ts';
 
@@ -68,7 +68,11 @@ describe('GET /ev/schedule', () => {
 });
 
 describe('GET /ev/current', () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'] });
+  });
+  afterEach(() => vi.useRealTimers());
 
   it('returns 404 when no plan has been computed', async () => {
     getLastPlan.mockReturnValue(null);
@@ -86,8 +90,6 @@ describe('GET /ev/current', () => {
     expect(res.body.timestampMs).toBe(START_MS);
     expect(res.body.ev_charge_W).toBe(1380);
     expect(res.body.is_charging).toBe(true);
-
-    vi.useRealTimers();
   });
 
   it('selects the most recent past slot', async () => {
@@ -98,8 +100,6 @@ describe('GET /ev/current', () => {
 
     expect(res.body.timestampMs).toBe(START_MS + 1_800_000);
     expect(res.body.is_charging).toBe(false);
-
-    vi.useRealTimers();
   });
 
   it('falls back to rows[0] when all timestamps are in the future', async () => {
@@ -109,7 +109,5 @@ describe('GET /ev/current', () => {
     const res = await request(app).get('/ev/current');
 
     expect(res.body.timestampMs).toBe(START_MS);
-
-    vi.useRealTimers();
   });
 });

@@ -29,6 +29,6 @@
   "evBatteryCapacity_kWh": 60,
   "evSocSensor": "",
   "evPlugSensor": "",
-  "evDepartureTime": "07:30",
+  "evDepartureTime": "",
   "evTargetSoc_percent": 80
 }

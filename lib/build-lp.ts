@@ -159,10 +159,11 @@ export function buildLP({
   }
 
   // SOC evolution (includes idle drain: inverter consumes idleDrain_Wh per slot)
-  // soc_0 = initialSoc_Wh - idleDrain_Wh + (ηc * Δh) * (grid_to_battery_0 + pv_to_battery_0) - (Δh / ηd) * (battery_to_load_0 + battery_to_grid_0)
-  lines.push(` c_soc_0: ${soc(0)} - ${toNum(chargeWhPerW)} ${gridToBattery(0)} - ${toNum(chargeWhPerW)} ${pvToBattery(0)} + ${toNum(dischargeWhPerW)} ${batteryToLoad(0)} + ${toNum(dischargeWhPerW)} ${batteryToGrid(0)} = ${toNum(initialSoc_Wh - idleDrain_Wh)}`);
+  // soc_0 = initialSoc_Wh - idleDrain_Wh + (ηc * Δh) * (grid_to_battery_0 + pv_to_battery_0) - (Δh / ηd) * (battery_to_load_0 + battery_to_grid_0 + battery_to_ev_0)
+  const evBatTerm = (t: number) => evActive ? ` + ${toNum(dischargeWhPerW)} ${batteryToEv(t)}` : '';
+  lines.push(` c_soc_0: ${soc(0)} - ${toNum(chargeWhPerW)} ${gridToBattery(0)} - ${toNum(chargeWhPerW)} ${pvToBattery(0)} + ${toNum(dischargeWhPerW)} ${batteryToLoad(0)} + ${toNum(dischargeWhPerW)} ${batteryToGrid(0)}${evBatTerm(0)} = ${toNum(initialSoc_Wh - idleDrain_Wh)}`);
   for (let t = 1; t < T; t++) {
-    lines.push(` c_soc_${t}: ${soc(t)} - ${soc(t - 1)} - ${toNum(chargeWhPerW)} ${gridToBattery(t)} - ${toNum(chargeWhPerW)} ${pvToBattery(t)} + ${toNum(dischargeWhPerW)} ${batteryToLoad(t)} + ${toNum(dischargeWhPerW)} ${batteryToGrid(t)} = ${toNum(-idleDrain_Wh)}`);
+    lines.push(` c_soc_${t}: ${soc(t)} - ${soc(t - 1)} - ${toNum(chargeWhPerW)} ${gridToBattery(t)} - ${toNum(chargeWhPerW)} ${pvToBattery(t)} + ${toNum(dischargeWhPerW)} ${batteryToLoad(t)} + ${toNum(dischargeWhPerW)} ${batteryToGrid(t)}${evBatTerm(t)} = ${toNum(-idleDrain_Wh)}`);
   }
 
   // Limits per slot

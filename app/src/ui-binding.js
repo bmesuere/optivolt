@@ -109,7 +109,7 @@ export function wireGlobalInputs(els, { onInput, onSave = onInput, onRun, update
     if (el === els.updateDataBeforeRun) continue; // Checkbox doesn't trigger auto-save
     if (el === els.pushToVictron) continue; // Checkbox doesn't trigger auto-save
     if (el.dataset.predictionsOnly) continue; // Predictions tab inputs handled separately
-    const handler = el.dataset.noAutosolve ? onSave : onInput;
+    const handler = el.hasAttribute('data-no-autosolve') ? onSave : onInput;
     el.addEventListener("input", handler);
     el.addEventListener("change", handler);
   }
