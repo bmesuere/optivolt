@@ -6,12 +6,13 @@ export type TerminalSocValuation = 'zero' | 'min' | 'avg' | 'max' | 'custom';
 
 /**
  * How HA should control the charger for a given slot:
- *   fixed         — set exactly ev_charge_A amps (battery is used; stick to plan)
- *   pv_charging   — track actual PV output in real time (pv2ev > 0, no battery)
- *   grid_headroom — track actual grid headroom to avoid battery draw (g2ev only, no battery)
- *   off           — no charging
+ *   fixed      — set exactly ev_charge_A amps (charger is at minimum rate; can't track dynamically)
+ *   solar      — track actual PV surplus only; may turn off if PV drops below minimum
+ *   solar_plus — track PV surplus + grid headroom; no battery draw (covers grid-only slots too)
+ *   max        — charge at maximum amps using all available sources (battery involved)
+ *   off        — no charging
  */
-export type EvChargeMode = 'off' | 'fixed' | 'pv_charging' | 'grid_headroom';
+export type EvChargeMode = 'off' | 'fixed' | 'solar' | 'solar_plus' | 'max';
 
 export interface EvConfig {
   evMinChargePower_W: number;

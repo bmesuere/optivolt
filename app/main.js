@@ -91,11 +91,16 @@ async function boot() {
   });
 
   wireEvSensorInputs(els);
+  initDepartureDatetimeMin(els);
 
   if (els.status) {
     els.status.textContent =
       source === "api" ? "Loaded settings from API." : "No settings yet (use the VRM buttons).";
   }
+
+  // Fire-and-forget: fetch HA sensor states so the EV Status card shows current values.
+  // Not awaited — HA may be slow or unconfigured; the initial solve should not wait for it.
+  void refreshEvSensorStates(els);
 
   // Initial compute
   await onRun();
@@ -220,6 +225,35 @@ const SENSOR_IND_BASE = "mt-1 block text-xs";
 const SENSOR_IND_NEUTRAL = `${SENSOR_IND_BASE} text-slate-500 dark:text-slate-400`;
 const SENSOR_IND_SUCCESS = `${SENSOR_IND_BASE} text-emerald-600 dark:text-emerald-400`;
 const SENSOR_IND_ERROR = `${SENSOR_IND_BASE} text-red-600 dark:text-red-400`;
+
+function initDepartureDatetimeMin(els) {
+  const input = els.evDepartureTime;
+  if (!input) return;
+  // Round down to the last 15-min block
+  const blockMs = Math.floor(Date.now() / (15 * 60 * 1000)) * (15 * 60 * 1000);
+  const d = new Date(blockMs);
+  const pad = (n) => String(n).padStart(2, "0");
+  input.min = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function refreshEvSensorStates(els) {
+  const sensors = [
+    { input: els.evSocSensor, indicator: els.evSocValue },
+    { input: els.evPlugSensor, indicator: els.evPlugValue },
+  ];
+  await Promise.allSettled(sensors.map(async ({ input, indicator }) => {
+    const entityId = input?.value?.trim();
+    if (!entityId || !indicator) return;
+    try {
+      const state = await fetchHaEntityState(entityId);
+      indicator.textContent = `Current value: ${state.state}`;
+      indicator.className = SENSOR_IND_SUCCESS;
+      indicator.dataset.haState = state.state;
+    } catch {
+      // HA not configured or entity unavailable — leave indicator as-is
+    }
+  }));
+}
 
 function wireEvSensorInputs(els) {
   const sensors = [

@@ -88,6 +88,8 @@ export function getElements() {
     evChargingSummary: $("#ev-charging-summary"),
     evTabCurrentSocRow: $("#ev-tab-current-soc-row"),
     evTabCurrentSoc: $("#ev-tab-current-soc"),
+    evTabPlugRow: $("#ev-tab-plug-row"),
+    evTabPlugStatus: $("#ev-tab-plug-status"),
     evTabGridKwh: $("#ev-tab-grid-kwh"),
     evTabPvKwh: $("#ev-tab-pv-kwh"),
     evTabBattKwh: $("#ev-tab-batt-kwh"),

@@ -424,7 +424,7 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
 // EV tab charts
 // -----------------------------------------------------------------------------
 
-export function drawEvPowerChart(canvas, rows, stepSize_m = 15) {
+export function drawEvPowerChart(canvas, rows, stepSize_m = 15, evSettings = {}) {
   const timestampsMs = rows.map(r => r.timestampMs);
   const axis = buildTimeAxisFromTimestamps(timestampsMs);
 
@@ -432,15 +432,18 @@ export function drawEvPowerChart(canvas, rows, stepSize_m = 15) {
   const W2kWh = (x) => (x || 0) * h / 1000;
 
   const datasets = [
-    dsBar("Grid → EV", rows.map(r => W2kWh(r.g2ev)), SOLUTION_COLORS.g2ev, "ev"),
-    dsBar("Solar → EV", rows.map(r => W2kWh(r.pv2ev)), SOLUTION_COLORS.pv2ev, "ev"),
-    dsBar("Battery → EV", rows.map(r => W2kWh(r.b2ev)), SOLUTION_COLORS.b2ev, "ev"),
+    dsBar("Grid", rows.map(r => W2kWh(r.g2ev)), SOLUTION_COLORS.g2ev, "ev"),
+    dsBar("Solar", rows.map(r => W2kWh(r.pv2ev)), SOLUTION_COLORS.pv2ev, "ev"),
+    dsBar("Battery", rows.map(r => W2kWh(r.b2ev)), SOLUTION_COLORS.b2ev, "ev"),
   ];
+
+  const depPlugin = makeEvDeparturePlugin(rows, evSettings.departureTime);
 
   renderChart(canvas, {
     type: "bar",
     data: { labels: axis.labels, datasets },
     options: getBaseOptions({ ...axis, yTitle: "kWh", stacked: true }),
+    plugins: depPlugin ? [depPlugin] : [],
   });
 }
 
@@ -476,23 +479,51 @@ export function drawEvSocChartTab(canvas, rows, evSettings = {}) {
   });
 }
 
-/**
- * Inline Chart.js plugin that draws a horizontal target-SoC line and
- * a vertical departure-time line on the EV SoC chart.
- */
+function findDepartureSlotIdx(rows, departureTime) {
+  if (!departureTime) return -1;
+  const depMs = new Date(departureTime).getTime();
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].timestampMs >= depMs) return i;
+  }
+  return -1;
+}
+
+function makeEvDeparturePlugin(rows, departureTime) {
+  const depIdx = findDepartureSlotIdx(rows, departureTime);
+  if (depIdx < 0) return null;
+
+  const color = 'rgba(16, 185, 129, 0.75)';
+  const label = fmtHHMM(new Date(departureTime));
+
+  return {
+    id: 'evDeparture',
+    afterDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+      const xPx = scales.x.getPixelForValue(depIdx);
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(xPx, chartArea.top);
+      ctx.lineTo(xPx, chartArea.bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color;
+      ctx.font = '500 10px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, xPx, chartArea.top + 10);
+      ctx.restore();
+    }
+  };
+}
+
 function makeEvTargetPlugin(rows, departureTime, targetSoc_percent) {
   if (!departureTime || !(targetSoc_percent > 0)) return null;
 
-  const depMs = new Date(departureTime).getTime();
-  let depIdx = -1;
-  for (let i = 0; i < rows.length; i++) {
-    if (rows[i].timestampMs >= depMs) {
-      depIdx = i;
-      break;
-    }
-  }
-
-  const color = 'rgba(16, 185, 129, 0.75)'; // emerald
+  const depIdx = findDepartureSlotIdx(rows, departureTime);
+  const color = 'rgba(16, 185, 129, 0.75)';
 
   return {
     id: 'evTarget',
@@ -506,14 +537,12 @@ function makeEvTargetPlugin(rows, departureTime, targetSoc_percent) {
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
 
-      // Horizontal line at target SoC
       const yPx = yScale.getPixelForValue(targetSoc_percent);
       ctx.beginPath();
       ctx.moveTo(chartArea.left, yPx);
       ctx.lineTo(chartArea.right, yPx);
       ctx.stroke();
 
-      // Vertical line at departure slot
       if (depIdx >= 0) {
         const xPx = xScale.getPixelForValue(depIdx);
         ctx.beginPath();
