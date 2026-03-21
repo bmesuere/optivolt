@@ -42,8 +42,9 @@ export function buildLP({
   }
 
   const TIEBREAK = {
-    avoidExport: 2e-6, // stronger nudge: prefer pv used locally over pv→grid
-    pvToLoad: 1e-6,    // weaker nudge: prefer pv→load over pv→battery
+    avoidExport: 2e-6,   // stronger nudge: prefer pv used locally over pv→grid
+    pvToLoad: 1e-6,      // weaker nudge: prefer pv→load over pv→battery
+    preferPvForEv: 1e-6, // prefer pv→ev over grid→ev
   }
   const softMinSocPenalty_cents_per_Wh = 0.05; // penalty to keep soc above minSoc when possible
 
@@ -128,7 +129,8 @@ export function buildLP({
     if (batteryToLoadCoeff !== 0) objTerms.push(` + ${toNum(batteryToLoadCoeff)} ${batteryToLoad(t)}`);
     if (pvToBatteryCoeff !== 0) objTerms.push(` + ${toNum(pvToBatteryCoeff)} ${pvToBattery(t)}`);
     if (evActive) {
-      if (importCoeff_cents !== 0) objTerms.push(` + ${toNum(importCoeff_cents)} ${gridToEv(t)}`);
+      const gridToEvCoeff = importCoeff_cents + TIEBREAK.preferPvForEv;
+      objTerms.push(` + ${toNum(gridToEvCoeff)} ${gridToEv(t)}`);
       objTerms.push(` + ${toNum(TIEBREAK.pvToLoad)} ${pvToEv(t)}`);
       if (batteryCost_cents !== 0) objTerms.push(` + ${toNum(batteryCost_cents)} ${batteryToEv(t)}`);
     }

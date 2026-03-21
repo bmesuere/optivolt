@@ -179,17 +179,24 @@ async function onRun() {
       batteryCapacity_Wh: Number(els.cap?.value),
     };
 
+    const evSettings = {
+      departureTime: els.evDepartureTime?.value || null,
+      targetSoc_percent: parseFloat(els.evTargetSoc?.value) || null,
+    };
+
     renderTable({
       rows,
       cfg: cfgForViz,
       targets: { table: els.table, tableUnit: els.tableUnit },
       showKwh: !!els.tableKwh?.checked,
       rebalanceWindow: result.rebalanceWindow ?? null,
+      evSettings,
     });
 
-    renderAllCharts(rows, cfgForViz, result.rebalanceWindow ?? null);
+    renderAllCharts(rows, cfgForViz, result.rebalanceWindow ?? null, evSettings);
 
     updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m);
+    updateEvDepartureQuickSet(els, rows, cfgForViz.stepSize_m);
   } catch (err) {
     console.error(err);
     if (els.status) {
@@ -201,9 +208,9 @@ async function onRun() {
   }
 }
 
-function renderAllCharts(rows, cfg, rebalanceWindow = null) {
-  drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, rebalanceWindow);
-  drawSocChart(els.soc, rows, cfg.stepSize_m);
+function renderAllCharts(rows, cfg, rebalanceWindow = null, evSettings = null) {
+  drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, rebalanceWindow, evSettings);
+  drawSocChart(els.soc, rows, cfg.stepSize_m, evSettings);
   drawPricesStepLines(els.prices, rows, cfg.stepSize_m);
   drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m);
 }
@@ -226,14 +233,17 @@ const SENSOR_IND_NEUTRAL = `${SENSOR_IND_BASE} text-slate-500 dark:text-slate-40
 const SENSOR_IND_SUCCESS = `${SENSOR_IND_BASE} text-emerald-600 dark:text-emerald-400`;
 const SENSOR_IND_ERROR = `${SENSOR_IND_BASE} text-red-600 dark:text-red-400`;
 
+function toDatetimeLocal(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function initDepartureDatetimeMin(els) {
   const input = els.evDepartureTime;
   if (!input) return;
   // Round down to the last 15-min block
   const blockMs = Math.floor(Date.now() / (15 * 60 * 1000)) * (15 * 60 * 1000);
-  const d = new Date(blockMs);
-  const pad = (n) => String(n).padStart(2, "0");
-  input.min = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  input.min = toDatetimeLocal(new Date(blockMs));
 }
 
 async function refreshEvSensorStates(els) {
@@ -253,6 +263,47 @@ async function refreshEvSensorStates(els) {
       // HA not configured or entity unavailable — leave indicator as-is
     }
   }));
+  updateEvSocQuickSet(els);
+}
+
+function updateEvDepartureQuickSet(els, rows, stepSize_m) {
+  const btn = els.evDepartureQuickSet;
+  if (!btn) return;
+  const lastRow = rows[rows.length - 1];
+  if (!lastRow) {
+    btn.disabled = true;
+    btn.title = "Run a plan first";
+    btn.onclick = null;
+    return;
+  }
+  const endMs = lastRow.timestampMs + stepSize_m * 60 * 1000;
+  const d = new Date(endMs);
+  const dtLocal = toDatetimeLocal(d);
+  btn.disabled = false;
+  btn.title = `Set to end of current plan (${d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })})`;
+  btn.onclick = () => {
+    els.evDepartureTime.value = dtLocal;
+    els.evDepartureTime.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+}
+
+function updateEvSocQuickSet(els) {
+  const btn = els.evTargetSocQuickSet;
+  if (!btn) return;
+  const soc = parseFloat(els.evSocValue?.dataset.haState);
+  if (!isNaN(soc)) {
+    const rounded = Math.round(soc);
+    btn.disabled = false;
+    btn.title = `Set to current EV SoC (${rounded}%)`;
+    btn.onclick = () => {
+      els.evTargetSoc.value = rounded;
+      els.evTargetSoc.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+  } else {
+    btn.disabled = true;
+    btn.title = "Configure EV SoC sensor first";
+    btn.onclick = null;
+  }
 }
 
 function wireEvSensorInputs(els) {
@@ -270,6 +321,7 @@ function wireEvSensorInputs(els) {
       indicator.textContent = "";
       indicator.className = SENSOR_IND_NEUTRAL;
       delete indicator.dataset.haState;
+      updateEvSocQuickSet(els);
     });
 
     input.addEventListener("blur", async () => {
@@ -295,11 +347,13 @@ function wireEvSensorInputs(els) {
         indicator.textContent = `Current value: ${state.state}`;
         indicator.className = SENSOR_IND_SUCCESS;
         indicator.dataset.haState = state.state;
+        updateEvSocQuickSet(els);
       } catch (err) {
         if (id !== seq) return; // stale response
         indicator.textContent = `Error: ${err.message}`;
         indicator.className = SENSOR_IND_ERROR;
         delete indicator.dataset.haState;
+        updateEvSocQuickSet(els);
       }
     });
   }
