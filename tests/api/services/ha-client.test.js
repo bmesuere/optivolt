@@ -24,12 +24,12 @@ describe('fetchHaEntityState', () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     delete process.env.SUPERVISOR_TOKEN;
-    global.fetch = vi.fn();
+    vi.stubGlobal('fetch', vi.fn());
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('fetches entity state via REST', async () => {

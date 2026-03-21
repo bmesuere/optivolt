@@ -79,6 +79,7 @@ async function boot() {
       queuePersistSnapshot();
       debounceRun();
     },
+    onSave: queuePersistSnapshot,
     onRun: onRun,
     updateTerminalCustomUI: () => updateTerminalCustomUI(els),
   });
@@ -241,9 +242,10 @@ function wireEvSensorInputs(els) {
 
       const id = ++seq;
 
-      // Cancel any pending debounced save and flush immediately so the server
-      // has the latest HA credentials before we validate the entity.
+      // Cancel any pending debounced save/solve and flush immediately so the
+      // server has the latest HA credentials before we validate the entity.
       persistConfigDebounced.cancel();
+      debounceRun.cancel();
       await persistConfig();
 
       if (id !== seq) return; // another blur fired while we were saving

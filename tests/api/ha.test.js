@@ -51,13 +51,13 @@ describe('GET /ha/entity/:entityId', () => {
     expect(res.body.error).toContain('404');
   });
 
-  it('URL-encodes the entity ID when calling fetchHaEntityState', async () => {
+  it('passes URL-decoded entity ID to fetchHaEntityState', async () => {
     fetchHaEntityState.mockResolvedValue(mockEntityState);
 
-    await request(app).get('/ha/entity/sensor.ev_battery_level');
+    await request(app).get('/ha/entity/sensor.test%20entity');
 
     expect(fetchHaEntityState).toHaveBeenCalledWith(
-      expect.objectContaining({ entityId: 'sensor.ev_battery_level' }),
+      expect.objectContaining({ entityId: 'sensor.test entity' }),
     );
   });
 });

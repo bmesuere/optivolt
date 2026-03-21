@@ -76,15 +76,17 @@ export function getElements() {
   };
 }
 
-export function wireGlobalInputs(els, { onInput, onRun, updateTerminalCustomUI }) {
-  // Auto-save whenever anything changes (except table toggler and run options)
+export function wireGlobalInputs(els, { onInput, onSave = onInput, onRun, updateTerminalCustomUI }) {
+  // Auto-save whenever anything changes (except table toggler and run options).
+  // Inputs with data-no-autosolve save settings but do not trigger an auto-solve.
   for (const el of document.querySelectorAll("input, select, textarea")) {
     if (el === els.tableKwh) continue;
     if (el === els.updateDataBeforeRun) continue; // Checkbox doesn't trigger auto-save
     if (el === els.pushToVictron) continue; // Checkbox doesn't trigger auto-save
     if (el.dataset.predictionsOnly) continue; // Predictions tab inputs handled separately
-    el.addEventListener("input", onInput);
-    el.addEventListener("change", onInput);
+    const handler = el.dataset.noAutosolve ? onSave : onInput;
+    el.addEventListener("input", handler);
+    el.addEventListener("change", handler);
   }
 
   els.terminal?.addEventListener("change", updateTerminalCustomUI);
