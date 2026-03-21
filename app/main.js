@@ -235,6 +235,7 @@ function wireEvSensorInputs(els) {
     input.addEventListener("input", () => {
       indicator.textContent = "";
       indicator.className = SENSOR_IND_NEUTRAL;
+      delete indicator.dataset.haState;
     });
 
     input.addEventListener("blur", async () => {
@@ -259,10 +260,12 @@ function wireEvSensorInputs(els) {
         if (id !== seq) return; // stale response
         indicator.textContent = `Current value: ${state.state}`;
         indicator.className = SENSOR_IND_SUCCESS;
+        indicator.dataset.haState = state.state;
       } catch (err) {
         if (id !== seq) return; // stale response
         indicator.textContent = `Error: ${err.message}`;
         indicator.className = SENSOR_IND_ERROR;
+        delete indicator.dataset.haState;
       }
     });
   }

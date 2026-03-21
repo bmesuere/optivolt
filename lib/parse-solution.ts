@@ -1,4 +1,6 @@
-import type { PlanRow, SolverConfig } from './types.ts';
+import type { PlanRow, SolverConfig, EvChargeMode } from './types.ts';
+
+const EV_CHARGE_VOLTAGE_V = 230; // single-phase AC voltage assumed for A conversion
 
 // Minimal type for the HiGHS solver result columns (keyed by variable name).
 interface HighsColumn {
@@ -64,6 +66,7 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
   for (let t = 0; t < T; t++) {
     const imp = g2l[t] + g2b[t] + g2ev[t];
     const exp = pv2g[t] + b2g[t];
+    const evW = g2ev[t] + pv2ev[t] + b2ev[t];
 
     rows.push({
       tIdx: t,
@@ -89,12 +92,21 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
       g2ev:          round(g2ev[t]),
       pv2ev:         round(pv2ev[t]),
       b2ev:          round(b2ev[t]),
-      ev_charge:     round(g2ev[t] + pv2ev[t] + b2ev[t]),
+      ev_charge:     round(evW),
+      ev_charge_A:   round(evW / EV_CHARGE_VOLTAGE_V),
+      ev_charge_mode: evChargeMode(g2ev[t], pv2ev[t], b2ev[t]),
       ev_soc_percent: (evSoc[t] / evCap) * 100,
     });
   }
 
   return rows;
+}
+
+function evChargeMode(g: number, pv: number, b: number): EvChargeMode {
+  if (g + pv + b < 1e-9) return 'off';
+  if (b > 1e-9)          return 'fixed';         // battery involved → honour planned amps exactly
+  if (pv > 1e-9)         return 'pv_charging';   // PV contributing → track actual PV output
+  return 'grid_headroom';                         // grid only → track actual grid headroom
 }
 
 // --- helpers ---

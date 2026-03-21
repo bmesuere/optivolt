@@ -4,6 +4,15 @@
 
 export type TerminalSocValuation = 'zero' | 'min' | 'avg' | 'max' | 'custom';
 
+/**
+ * How HA should control the charger for a given slot:
+ *   fixed         — set exactly ev_charge_A amps (battery is used; stick to plan)
+ *   pv_charging   — track actual PV output in real time (pv2ev > 0, no battery)
+ *   grid_headroom — track actual grid headroom to avoid battery draw (g2ev only, no battery)
+ *   off           — no charging
+ */
+export type EvChargeMode = 'off' | 'fixed' | 'pv_charging' | 'grid_headroom';
+
 export interface EvConfig {
   evMinChargePower_W: number;
   evMaxChargePower_W: number;
@@ -90,6 +99,8 @@ export interface PlanRow {
   pv2ev: number;        // PV → EV W
   b2ev: number;         // battery → EV W
   ev_charge: number;    // total EV charge power W
+  ev_charge_A: number;  // charge current A (ev_charge / 230 / phases)
+  ev_charge_mode: EvChargeMode;
   ev_soc_percent: number;  // EV SoC %
 }
 

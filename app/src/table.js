@@ -55,7 +55,12 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
       headerHtml: "EV",
       fmt: (x, ri) => {
         const row = rows[ri];
-        const tip = `Grid→EV: ${fmtEnergy(row.g2ev)} · PV→EV: ${fmtEnergy(row.pv2ev)} · Battery→EV: ${fmtEnergy(row.b2ev)}`;
+        const parts = [
+          row.g2ev    > 0 && `Grid→EV: ${fmtEnergy(row.g2ev)}`,
+          row.b2ev    > 0 && `Battery→EV: ${fmtEnergy(row.b2ev)}`,
+          row.pv2ev   > 0 && `PV→EV: ${fmtEnergy(row.pv2ev)}`,
+        ].filter(Boolean);
+        const tip = parts.length ? parts.join(' · ') : null;
         return { text: fmtEnergy(x), tip };
       },
       tip: "EV Charging (hover for breakdown)",

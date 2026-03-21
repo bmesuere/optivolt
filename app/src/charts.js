@@ -9,10 +9,10 @@ export const SOLUTION_COLORS = {
   g2l: "rgb(233, 122, 131)",  // Grid to Consumption (red)
   g2b: "rgb(225, 142, 233)",  // Grid to Battery (purple)
   soc: "rgb(71, 144, 208)",   // SoC line color = battery-ish blue
-  g2ev: "rgb(255, 120, 50)",   // Grid to EV (orange-red)
-  pv2ev: "rgb(255, 210, 80)", // Solar to EV (light yellow)
-  b2ev: "rgb(200, 120, 230)", // Battery to EV (violet)
-  ev_charge: "rgb(255, 120, 50)", // EV total (orange-red)
+  g2ev: "rgb(185, 38, 55)",   // Grid to EV (dark red — variant of g2l)
+  pv2ev: "rgb(142, 158, 22)", // Solar to EV (dark yellow-green — variant of pv2l)
+  b2ev: "rgb(20, 78, 160)",   // Battery to EV (dark blue — variant of b2l)
+  ev_charge: "rgb(16, 185, 129)", // EV total (emerald — distinct EV colour)
 };
 
 export const toRGBA = (rgb, alpha = 1) => {
@@ -444,9 +444,13 @@ export function drawEvPowerChart(canvas, rows, stepSize_m = 15) {
   });
 }
 
-export function drawEvSocChartTab(canvas, rows) {
+export function drawEvSocChartTab(canvas, rows, evSettings = {}) {
   const timestampsMs = rows.map(r => r.timestampMs);
   const axis = buildTimeAxisFromTimestamps(timestampsMs);
+
+  const { departureTime, targetSoc_percent } = evSettings;
+  const targetPlugin = makeEvTargetPlugin(rows, departureTime, targetSoc_percent);
+  const plugins = targetPlugin ? [targetPlugin] : [];
 
   renderChart(canvas, {
     type: "line",
@@ -468,5 +472,63 @@ export function drawEvSocChartTab(canvas, rows) {
       plugins: { legend: { display: false } },
       scales: { y: { min: 0, max: 100 } },
     }),
+    plugins,
   });
+}
+
+/**
+ * Inline Chart.js plugin that draws a horizontal target-SoC line and
+ * a vertical departure-time line on the EV SoC chart.
+ */
+function makeEvTargetPlugin(rows, departureTime, targetSoc_percent) {
+  if (!departureTime || !(targetSoc_percent > 0)) return null;
+
+  const depMs = new Date(departureTime).getTime();
+  let depIdx = -1;
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].timestampMs >= depMs) {
+      depIdx = i;
+      break;
+    }
+  }
+
+  const color = 'rgba(16, 185, 129, 0.75)'; // emerald
+
+  return {
+    id: 'evTarget',
+    afterDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+      const { x: xScale, y: yScale } = scales;
+
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+
+      // Horizontal line at target SoC
+      const yPx = yScale.getPixelForValue(targetSoc_percent);
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, yPx);
+      ctx.lineTo(chartArea.right, yPx);
+      ctx.stroke();
+
+      // Vertical line at departure slot
+      if (depIdx >= 0) {
+        const xPx = xScale.getPixelForValue(depIdx);
+        ctx.beginPath();
+        ctx.moveTo(xPx, chartArea.top);
+        ctx.lineTo(xPx, chartArea.bottom);
+        ctx.stroke();
+      }
+
+      ctx.setLineDash([]);
+      ctx.fillStyle = color;
+      ctx.font = '500 10px system-ui, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(`${targetSoc_percent}%`, chartArea.right - 4, yPx - 4);
+
+      ctx.restore();
+    }
+  };
 }

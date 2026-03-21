@@ -86,8 +86,8 @@ export function getElements() {
     // EV tab
     evNoCharging: $("#ev-no-charging"),
     evChargingSummary: $("#ev-charging-summary"),
-    evTabDeparture: $("#ev-tab-departure"),
-    evTabTargetSoc: $("#ev-tab-target-soc"),
+    evTabCurrentSocRow: $("#ev-tab-current-soc-row"),
+    evTabCurrentSoc: $("#ev-tab-current-soc"),
     evTabGridKwh: $("#ev-tab-grid-kwh"),
     evTabPvKwh: $("#ev-tab-pv-kwh"),
     evTabBattKwh: $("#ev-tab-batt-kwh"),

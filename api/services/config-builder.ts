@@ -17,19 +17,10 @@ function departureTimeToSlot(
   stepSize_m: number,
   T: number,
 ): number {
-  const parts = departureTime.split(':');
-  const hh = parseInt(parts[0] ?? '0', 10);
-  const mm = parseInt(parts[1] ?? '0', 10);
-  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return 0;
+  const departureMs = new Date(departureTime).getTime();
+  if (!Number.isFinite(departureMs)) return 0;
 
-  const departure = new Date(startMs);
-  departure.setHours(hh, mm, 0, 0);
-
-  if (departure.getTime() <= startMs) {
-    departure.setDate(departure.getDate() + 1);
-  }
-
-  const slotsAvailable = Math.floor((departure.getTime() - startMs) / (stepSize_m * 60_000));
+  const slotsAvailable = Math.floor((departureMs - startMs) / (stepSize_m * 60_000));
   if (slotsAvailable <= 0) return 0;
   return Math.min(slotsAvailable, T + 1);
 }

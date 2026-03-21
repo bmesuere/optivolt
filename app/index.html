@@ -269,6 +269,15 @@
               </svg>
               <span class="hidden sm:inline">Optimizer</span>
             </button>
+            <button id="tab-ev" role="tab" aria-selected="false" aria-controls="panel-ev"
+              class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50">
+              <!-- EV car icon -->
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"
+                aria-hidden="true">
+                <path d="M19 20H5v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V11l2.48-5.788A2 2 0 0 1 6.32 4h11.36a2 2 0 0 1 1.838 1.212L22 11v10a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1zm1-7H4v5h16v-5zM4.176 11h15.648l-2.143-5H6.32L4.176 11zM6.5 17a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm11 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>
+              </svg>
+              <span class="hidden sm:inline">EV</span>
+            </button>
             <button id="tab-predictions" role="tab" aria-selected="false" aria-controls="panel-predictions"
               class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50">
               <!-- Trending up / predictions icon -->
@@ -277,15 +286,6 @@
                 <path d="M3.5 18.5l6-6 4 4L22 6.92 20.59 5.5l-7.09 8-4-4L2 17l1.5 1.5z" />
               </svg>
               <span class="hidden sm:inline">Predictions</span>
-            </button>
-            <button id="tab-ev" role="tab" aria-selected="false" aria-controls="panel-ev"
-              class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50">
-              <!-- EV car icon -->
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"
-                aria-hidden="true">
-                <path d="M20 11c-.18 0-.36.03-.53.05L17.41 9H20V7l-3 .01-1.83-2.74C14.79 3.48 14.05 3 13.22 3H6C4.9 3 4 3.9 4 5v9H2v3h1c0 1.66 1.34 3 3 3s3-1.34 3-3h5c0 1.66 1.34 3 3 3s3-1.34 3-3h1v-3c0-1.65-1.35-3-3-3zm-14 8c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm7-8H6V5h7.22l2.88 4.32-.1.68H13zm4 8c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
-              </svg>
-              <span class="hidden sm:inline">EV</span>
             </button>
             <button id="tab-settings" role="tab" aria-selected="false" aria-controls="panel-settings"
               class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50">
@@ -451,13 +451,13 @@
             </div>
             <div id="ev-summary-block" class="summary-block border-t border-slate-100 dark:border-white/5 hidden">
               <div class="flex items-baseline justify-between mb-2">
-                <span class="stat-label">EV charging</span>
-                <span class="text-[11px] text-slate-400 dark:text-slate-600">grid · PV · battery</span>
+                <span class="stat-label">EV split</span>
+                <span class="text-[11px] text-slate-400 dark:text-slate-600">grid · battery · PV</span>
               </div>
               <div class="flex font-mono text-[11px] text-slate-500 dark:text-slate-400 justify-between mb-2">
                 <span id="sum-ev-grid-kwh" title="From grid">—</span>
-                <span id="sum-ev-pv-kwh" title="From PV">—</span>
                 <span id="sum-ev-batt-kwh" title="From battery">—</span>
+                <span id="sum-ev-pv-kwh" title="From PV">—</span>
               </div>
               <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80"
                 id="ev-split-bar"></div>
@@ -954,10 +954,6 @@
             <h2 class="sidebar-label">EV Charging</h2>
           </div>
           <div class="space-y-3">
-            <label class="flex items-center gap-2 text-sm cursor-pointer">
-              <input id="ev-enabled" type="checkbox" class="form-checkbox" />
-              Enable EV charging
-            </label>
             <label class="block text-sm">Min charge current (A)
               <input id="ev-min-charge-current" type="number" min="6" max="32" step="1"
                 class="form-input" />
@@ -970,14 +966,6 @@
               <input id="ev-battery-capacity" type="number" min="1" step="0.1"
                 class="form-input" />
             </label>
-            <div class="grid grid-cols-2 gap-3">
-              <label class="block text-sm">Departure time
-                <input id="ev-departure-time" type="time" class="form-input" />
-              </label>
-              <label class="block text-sm">Target SoC (%)
-                <input id="ev-target-soc" type="number" min="0" max="100" step="1" class="form-input" />
-              </label>
-            </div>
             <label class="block text-sm">SoC sensor entity ID
               <input id="ev-soc-sensor" type="text" placeholder="sensor.ev_battery_level"
                 class="form-input font-mono text-xs" data-no-autosolve />
@@ -1001,33 +989,48 @@
   <div id="panel-ev" role="tabpanel" aria-labelledby="tab-ev"
     class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3 hidden">
 
-    <!-- Sidebar: EV Status -->
+    <!-- Sidebar: EV Settings + EV Status -->
     <aside class="lg:col-span-1 min-w-0 space-y-6">
+
+      <!-- EV Settings card -->
+      <section class="card">
+        <h2 class="sidebar-label mb-4">EV Settings</h2>
+        <div class="space-y-3">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input id="ev-enabled" type="checkbox" class="form-checkbox" />
+            Enable EV charging
+          </label>
+          <div id="ev-tab-current-soc-row" class="hidden">
+            <div class="stat-label mb-0.5">Current EV SoC</div>
+            <div id="ev-tab-current-soc" class="stat-value">—</div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block text-sm">Departure
+              <input id="ev-departure-time" type="datetime-local" class="form-input" />
+            </label>
+            <label class="block text-sm">Target SoC (%)
+              <input id="ev-target-soc" type="number" min="0" max="100" step="1" class="form-input" />
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- EV Status card -->
       <section class="card">
         <h2 class="sidebar-label mb-4">EV Status</h2>
         <div id="ev-no-charging" class="text-sm text-slate-500 dark:text-slate-400 py-2">
           No EV charging scheduled in current plan.
         </div>
         <div id="ev-charging-summary" class="hidden">
-          <div class="grid grid-cols-2 border-b border-slate-100 dark:border-white/5 mb-3">
-            <div class="py-2 pr-3 border-r border-slate-100 dark:border-white/5">
-              <div class="stat-label mb-0.5">Departure</div>
-              <div id="ev-tab-departure" class="stat-value">—</div>
-            </div>
-            <div class="py-2 pl-3">
-              <div class="stat-label mb-0.5">Target SoC</div>
-              <div id="ev-tab-target-soc" class="stat-value">—</div>
-            </div>
-          </div>
           <div class="summary-block">
             <div class="flex items-baseline justify-between mb-2">
-              <span class="stat-label">EV charging</span>
-              <span class="text-[11px] text-slate-400 dark:text-slate-600">grid · PV · battery</span>
+              <span class="stat-label">EV split</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-600">grid · battery · PV</span>
             </div>
             <div class="flex font-mono text-[11px] text-slate-500 dark:text-slate-400 justify-between mb-2">
               <span id="ev-tab-grid-kwh" title="From grid">—</span>
-              <span id="ev-tab-pv-kwh" title="From PV">—</span>
               <span id="ev-tab-batt-kwh" title="From battery">—</span>
+              <span id="ev-tab-pv-kwh" title="From PV">—</span>
             </div>
             <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80"
               id="ev-tab-split-bar"></div>
@@ -1037,6 +1040,7 @@
           </div>
         </div>
       </section>
+
     </aside>
 
     <!-- Main: Charts + Table -->

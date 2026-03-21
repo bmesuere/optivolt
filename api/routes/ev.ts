@@ -16,6 +16,8 @@ router.get('/schedule', (req: Request, res: Response, next: NextFunction) => {
     const slots = plan.rows.map(row => ({
       timestampMs: row.timestampMs,
       ev_charge_W: row.ev_charge,
+      ev_charge_A: row.ev_charge_A,
+      ev_charge_mode: row.ev_charge_mode,
       g2ev_W: row.g2ev,
       pv2ev_W: row.pv2ev,
       b2ev_W: row.b2ev,
@@ -58,6 +60,8 @@ router.get('/current', (req: Request, res: Response, next: NextFunction) => {
     res.json({
       timestampMs: row.timestampMs,
       ev_charge_W: row.ev_charge,
+      ev_charge_A: row.ev_charge_A,
+      ev_charge_mode: row.ev_charge_mode,
       g2ev_W: row.g2ev,
       pv2ev_W: row.pv2ev,
       b2ev_W: row.b2ev,

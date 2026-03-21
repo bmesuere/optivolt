@@ -260,8 +260,8 @@ function updateEvSummary(els, summary) {
     total,
     [
       { value: fromGrid, color: SOLUTION_COLORS.g2ev,  title: `Grid: ${formatKWh(fromGrid)}` },
-      { value: fromPv,   color: SOLUTION_COLORS.pv2ev, title: `PV: ${formatKWh(fromPv)}` },
       { value: fromBatt, color: SOLUTION_COLORS.b2ev,  title: `Battery: ${formatKWh(fromBatt)}` },
+      { value: fromPv,   color: SOLUTION_COLORS.pv2ev, title: `PV: ${formatKWh(fromPv)}` },
     ]
   );
 }
