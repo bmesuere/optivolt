@@ -43,9 +43,6 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow, evSe
   const cols = [
     { key: "time", headerHtml: "Time", fmt: (_, idx) => {
       const label = timesDisp[idx];
-      if (idx === departureIdx) {
-        return label + `<span class="ml-1.5 inline-block rounded px-1 py-0 text-[9px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" title="EV ready by">ready</span>`;
-      }
       return label;
     }},
     { key: "load", headerHtml: "Exp.<br>load", fmt: x => fmtEnergy(x, { dash: false }), tip: "Expected Load" },
@@ -83,10 +80,14 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow, evSe
       {
         key: "ev_soc_percent",
         headerHtml: "EV<br>SoC",
-        fmt: x => {
+        fmt: (x, ri) => {
           const n = Number(x) || 0;
           if (n === 0) return "–";
-          return `${Math.round(n)}%`;
+          const text = `${Math.round(n)}%`;
+          if (ri === departureIdx) {
+            return `<span class="text-emerald-600 dark:text-emerald-400 font-semibold">${text}</span>`;
+          }
+          return text;
         },
         tip: "EV Battery SoC",
       },

@@ -179,10 +179,10 @@ async function onRun() {
       batteryCapacity_Wh: Number(els.cap?.value),
     };
 
-    const evSettings = {
+    const evSettings = els.evEnabled?.checked ? {
       departureTime: els.evDepartureTime?.value || null,
       targetSoc_percent: parseFloat(els.evTargetSoc?.value) || null,
-    };
+    } : null;
 
     renderTable({
       rows,
@@ -276,8 +276,7 @@ function updateEvDepartureQuickSet(els, rows, stepSize_m) {
     btn.onclick = null;
     return;
   }
-  const endMs = lastRow.timestampMs + stepSize_m * 60 * 1000;
-  const d = new Date(endMs);
+  const d = new Date(lastRow.timestampMs);
   const dtLocal = toDatetimeLocal(d);
   btn.disabled = false;
   btn.title = `Set to end of current plan (${d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })})`;

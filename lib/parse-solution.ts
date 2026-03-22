@@ -102,14 +102,17 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
   return rows;
 }
 
+// 1 W threshold avoids spurious mode classification from solver floating-point residuals
+const EV_FLOW_THRESHOLD_W = 1;
+
 function evChargeMode(g: number, pv: number, b: number, evMinPow_W: number): EvChargeMode {
   const total = g + pv + b;
-  if (total < 1e-9)                          return 'off';
-  if (b > 1e-9)                              return 'max';       // battery involved → all sources
-  if (evMinPow_W > 0 && total <= evMinPow_W * 1.02) return 'fixed'; // at minimum charge rate → set exact amps
-  if (pv > 1e-9 && g > 1e-9)               return 'solar_plus'; // PV + grid → track PV + grid headroom
-  if (pv > 1e-9)                             return 'solar';     // PV only → track PV surplus
-  return 'solar_plus';                                            // grid only (or PV+grid) → track grid headroom
+  if (total < EV_FLOW_THRESHOLD_W)                             return 'off';
+  if (b > EV_FLOW_THRESHOLD_W)                                 return 'max';       // battery involved → all sources
+  if (evMinPow_W > 0 && total <= evMinPow_W * 1.02)           return 'fixed'; // at minimum charge rate → set exact amps
+  if (pv > EV_FLOW_THRESHOLD_W && g > EV_FLOW_THRESHOLD_W)   return 'solar_plus'; // PV + grid → track PV + grid headroom
+  if (pv > EV_FLOW_THRESHOLD_W)                                return 'solar';     // PV only → track PV surplus
+  return 'solar_plus';                                                              // grid only (or PV+grid) → track grid headroom
 }
 
 // --- helpers ---

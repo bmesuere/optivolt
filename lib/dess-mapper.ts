@@ -71,7 +71,7 @@ export function mapRowsToDess(rows: PlanRow[], cfg: SolverConfig): DessResult {
 
     // Expectations (from inputs)
     const expectedPv = row.pv;
-    const expectedLoad = row.load;
+    const expectedLoad = row.load + row.ev_charge;
     const pvCoversLoad = expectedPv >= (expectedLoad - FLOW_EPSILON_W);
     const loadExceedsPv = expectedLoad > (expectedPv + FLOW_EPSILON_W);
 
@@ -214,7 +214,7 @@ function aggregateSegmentPrice(
  */
 function findHighestGridUsageCost(rows: PlanRow[], segment: Segment | null, cfg: SolverConfig): number {
   const maxDischarge = cfg.maxDischargePower_W - FLOW_EPSILON_W;
-  return aggregateSegmentPrice(rows, segment, r => r.g2l > FLOW_EPSILON_W && r.b2l < maxDischarge, r => r.ic, 'max');
+  return aggregateSegmentPrice(rows, segment, r => r.g2l > FLOW_EPSILON_W && r.b2l + (r.b2ev ?? 0) < maxDischarge, r => r.ic, 'max');
 }
 
 /**
@@ -351,13 +351,13 @@ export function mapRowsToDessV2(rows: PlanRow[], cfg: SolverConfig): DessResult 
     let socTarget_percent = row.soc_percent;
 
     // Expected PV/load for PV surplus check
-    const pvSurplus = row.pv > row.load + FLOW_EPSILON_W;
+    const pvSurplus = row.pv > row.load + row.ev_charge + FLOW_EPSILON_W;
 
     // Precompute flow totals for saturation checks
-    const gridImport = row.g2l + row.g2b;
+    const gridImport = row.g2l + row.g2b + (row.g2ev ?? 0);
     const gridExport = row.b2g + row.pv2g;
     const chargePower = row.g2b + row.pv2b;
-    const dischargePower = row.b2g + row.b2l;
+    const dischargePower = row.b2g + row.b2l + (row.b2ev ?? 0);
 
     // O(1) tipping-point lookup for this slot's segment
     const seg = getSegmentForIndex(segments, t);

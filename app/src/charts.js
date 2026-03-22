@@ -600,19 +600,48 @@ export function drawEvPowerChart(canvas, rows, stepSize_m = 15, evSettings = {})
 
   const h = Math.max(0.000001, Number(stepSize_m) / 60);
   const W2kWh = (x) => (x || 0) * h / 1000;
+  const theme = getChartTheme();
 
   const datasets = [
     dsBar("Grid", rows.map(r => W2kWh(r.g2ev)), SOLUTION_COLORS.g2ev, "ev"),
     dsBar("Solar", rows.map(r => W2kWh(r.pv2ev)), SOLUTION_COLORS.pv2ev, "ev"),
     dsBar("Battery", rows.map(r => W2kWh(r.b2ev)), SOLUTION_COLORS.b2ev, "ev"),
+    {
+      label: "Price",
+      data: rows.map(r => r.ic ?? 0),
+      type: "line",
+      yAxisID: "y2",
+      borderColor: "rgba(251, 191, 36, 0.5)",
+      backgroundColor: "transparent",
+      borderWidth: 1.5,
+      borderDash: [3, 3],
+      pointRadius: 0,
+      tension: 0.3,
+      order: 0,
+    },
   ];
+
+  const options = getBaseOptions({ ...axis, yTitle: "kWh", stacked: true });
+  options.scales.y2 = {
+    type: "linear",
+    position: "right",
+    beginAtZero: false,
+    ticks: {
+      color: "rgba(251, 191, 36, 0.65)",
+      font: { size: 10 },
+      callback: (v) => `${v.toFixed(0)}¢`,
+      maxTicksLimit: 4,
+    },
+    grid: { drawOnChartArea: false, color: theme.gridColor },
+    title: { display: false },
+  };
 
   const depPlugin = makeEvDeparturePlugin(rows, evSettings.departureTime);
 
   renderChart(canvas, {
     type: "bar",
     data: { labels: axis.labels, datasets },
-    options: getBaseOptions({ ...axis, yTitle: "kWh", stacked: true }),
+    options,
     plugins: depPlugin ? [depPlugin] : [],
   });
 }

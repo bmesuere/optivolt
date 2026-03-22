@@ -1079,8 +1079,13 @@
             </div>
           </div>
         </div>
-        <div id="ev-no-charging" class="text-sm text-slate-500 dark:text-slate-400 py-2">
-          No EV charging scheduled in current plan.
+        <div id="ev-no-charging" class="py-3 text-center">
+          <div class="text-slate-300 dark:text-slate-600 mb-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="inline-block h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 10h-6m-3-7v4M9 3v4m3-4v4M3 10h6m6 0v4a3 3 0 01-6 0v-4m6 0H9" />
+            </svg>
+          </div>
+          <div class="text-xs text-slate-400 dark:text-slate-500">No EV charging in current plan</div>
         </div>
         <div id="ev-charging-summary" class="hidden">
           <div class="summary-block">
@@ -1099,6 +1104,26 @@
               Total: <span id="ev-tab-total-kwh">—</span>
             </div>
           </div>
+          <div class="summary-block border-t border-slate-100 dark:border-white/5">
+            <div class="grid grid-cols-2 gap-x-2 gap-y-2.5">
+              <div>
+                <div class="stat-label mb-0.5">Total cost</div>
+                <div id="ev-tab-total-cost" class="stat-value">—</div>
+              </div>
+              <div>
+                <div class="stat-label mb-0.5">Effective rate</div>
+                <div id="ev-tab-effective-rate" class="stat-value">—</div>
+              </div>
+              <div class="col-span-2">
+                <div class="stat-label mb-0.5">Free solar</div>
+                <div id="ev-tab-free-solar" class="stat-value">—</div>
+              </div>
+            </div>
+          </div>
+          <div class="summary-block border-t border-slate-100 dark:border-white/5">
+            <div class="stat-label mb-2">Charge modes</div>
+            <div id="ev-tab-mode-rows"></div>
+          </div>
         </div>
       </section>
 
@@ -1108,13 +1133,13 @@
     <section class="lg:col-span-2 space-y-6 min-w-0">
       <div class="card">
         <h3 class="mb-3 sidebar-label">Charging flows</h3>
-        <div class="h-40 w-full">
+        <div class="h-52 w-full">
           <canvas id="ev-power-chart" class="h-full w-full"></canvas>
         </div>
       </div>
       <div class="card">
         <h3 class="mb-3 sidebar-label">EV battery SoC</h3>
-        <div class="h-40 w-full">
+        <div class="h-52 w-full">
           <canvas id="ev-soc-chart-tab" class="h-full w-full"></canvas>
         </div>
       </div>

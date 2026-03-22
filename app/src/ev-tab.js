@@ -25,6 +25,9 @@ export function updateEvPanel(els, rows, summary, stepSize_m = 15) {
     departureTime: els.evDepartureTime?.value || null,
   };
 
+  const h = Math.max(0.000001, stepSize_m / 60);
+  const evRows = rows.filter(r => (r.ev_soc_percent ?? 0) > 0);
+
   if (hasEv) {
     const grid = summary.evChargeFromGrid_kWh ?? 0;
     const pv = summary.evChargeFromPv_kWh ?? 0;
@@ -39,17 +42,64 @@ export function updateEvPanel(els, rows, summary, stepSize_m = 15) {
       { value: batt, color: SOLUTION_COLORS.b2ev },
       { value: pv,   color: SOLUTION_COLORS.pv2ev },
     ]);
+
+    const totalCost_cents = evRows.reduce((s, r) => s + (r.g2ev || 0) * h / 1000 * (r.ic || 0), 0);
+    const effectiveRate = evTotal > 0 ? totalCost_cents / evTotal : 0;
+
+    if (els.evTabTotalCost) els.evTabTotalCost.textContent = `${totalCost_cents.toFixed(1)}¢`;
+    if (els.evTabEffectiveRate) els.evTabEffectiveRate.textContent = `${effectiveRate.toFixed(1)}¢/kWh`;
+    if (els.evTabFreeSolar) {
+      els.evTabFreeSolar.textContent = `${formatKWh(pv)} free`;
+      els.evTabFreeSolar.className = `stat-value ${pv > 0.001 ? 'text-emerald-600 dark:text-emerald-400' : ''}`;
+    }
+
+    renderModeRows(els.evTabModeRows, evRows);
   }
 
   if (els.evPowerChart) drawEvPowerChart(els.evPowerChart, rows, stepSize_m, evSettings);
   if (els.evSocChartTab) drawEvSocChartTab(els.evSocChartTab, rows, evSettings);
-  renderEvTable(rows, els.evScheduleTable, stepSize_m, evSettings);
+  renderEvTable(evRows, els.evScheduleTable, stepSize_m, evSettings);
 }
 
-function renderEvTable(rows, tableEl, stepSize_m = 15, evSettings = {}) {
-  if (!tableEl) return;
+const MODE_CONFIG = [
+  { key: 'solar',      label: 'solar',   color: '#10b981', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' },
+  { key: 'solar_plus', label: 'solar+',  color: '#f59e0b', badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' },
+  { key: 'max',        label: 'max',     color: '#ef4444', badge: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' },
+  { key: 'fixed',      label: 'fixed',   color: '#94a3b8', badge: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400' },
+];
 
-  const evRows = rows.filter(r => (r.ev_soc_percent ?? 0) > 0);
+function renderModeRows(el, evRows) {
+  if (!el) return;
+
+  const counts = {};
+  for (const r of evRows) {
+    if ((r.ev_charge ?? 0) > 0 && r.ev_charge_mode) {
+      counts[r.ev_charge_mode] = (counts[r.ev_charge_mode] ?? 0) + 1;
+    }
+  }
+
+  const present = MODE_CONFIG.filter(m => (counts[m.key] ?? 0) > 0);
+  if (present.length === 0) { el.innerHTML = ''; return; }
+
+  const maxCount = Math.max(...present.map(m => counts[m.key]));
+
+  const trackBg = document.documentElement.classList.contains('dark') ? '#334155' : '#e2e8f0';
+
+  el.innerHTML = present.map(m => {
+    const count = counts[m.key];
+    const pct = Math.round((count / maxCount) * 100);
+    return `<div style="display:grid;grid-template-columns:4.5rem 1fr 2.5rem;align-items:center;gap:6px;margin-bottom:5px">
+      <span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${m.badge}">${m.label}</span>
+      <div style="height:4px;border-radius:2px;background:${trackBg}">
+        <div style="height:4px;border-radius:2px;width:${pct}%;background:${m.color}"></div>
+      </div>
+      <span class="text-right font-mono text-[10px] text-slate-400 dark:text-slate-500">${count}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderEvTable(evRows, tableEl, stepSize_m = 15, evSettings = {}) {
+  if (!tableEl) return;
 
   if (evRows.length === 0) {
     tableEl.innerHTML = `<tbody><tr><td class="px-2 py-4 text-center text-slate-400 dark:text-slate-500 text-xs" colspan="9">No EV charging in current plan.</td></tr></tbody>`;
