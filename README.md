@@ -29,8 +29,9 @@ Plan and control a home energy system with forecasts, dynamic tariffs, and a day
    Go to **Settings → Apps → Install App**. Reload local Apps if necessary (click check for updates), find **Optivolt**, and click **Install**.
 4. **Configure connection settings:**
    Open the Optivolt App configuration panel and enter your Victron VRM credentials / installation ID, and the Victron IP address on your local network.
+   *(Note: Make sure mqtt access is enabled on your local Venus OS device: open the remote console: Settings, Services → toggle the MQTT access switch.)*
    *(Note: Optivolt automatically connects to the internal HA WebSocket API using the supervisor token to fetch historical sensor data.)*
-5. **Start and verify:**
+6. **Start and verify:**
    Start the Optivolt App, open the UI, and verify that data (time series, prices, SoC, etc.) is being fetched correctly.
 
 ### Standalone / Local Development
