@@ -3,7 +3,7 @@
 Plan and control a home energy system with forecasts, dynamic tariffs, and a day-ahead optimization pipeline. OptiVolt builds a linear program over 15-minute slots to decide how your **battery**, **PV**, **EV**, **heat pump**, and the **grid** should interact to minimize cost.
 
 - **Primary focus:** Victron Energy ESS systems via the **Victron VRM API** and MQTT Dynamic ESS schedule writing.
-- **How to run:** as a **Home Assistant add-on** (recommended) _or_ as a **standalone Node.js server** that serves the web UI and API from the same port.
+- **How to run:** as a **Home Assistant App** (recommended) _or_ as a **standalone Node.js server** that serves the web UI and API from the same port.
 
 ## Features
 
@@ -16,22 +16,22 @@ Plan and control a home energy system with forecasts, dynamic tariffs, and a day
 
 ## Installation
 
-### Home Assistant Add-on (Recommended)
+### Home Assistant App (Recommended)
 
 1. **Expose the add-on directory over Samba:**
-   Install the Samba share add-on in Home Assistant and configure it so the `/addons` directory is available as a network share. Mount that share on your computer.
+   Install the Samba share App in Home Assistant and configure it so the `/addons` directory is available as a network share. Mount that share on your computer. Apps used to be add-ons in Home Assistant, this has been changed in the ui but not yet on the file system, so this directory is called addons.
 2. **Copy the Optivolt files:**
    Copy the contents of your local Optivolt repository into the mounted `addons` share. Using `rsync` (macOS/Linux) skips development artifacts:
    ```bash
    rsync -av --delete --exclude 'node_modules' --exclude '.git' --exclude '.DS_Store' --exclude 'tests' --exclude 'vendor/highs-js' ~/Code/optivolt/ /Volumes/addons/optivolt/
    ```
-3. **Install the add-on:**
-   Go to **Settings → Add-ons → Add-on Store**. Reload local add-ons if necessary, find **Optivolt**, and click **Install**.
+3. **Install the App:**
+   Go to **Settings → Apps → Install App**. Reload local Apps if necessary (click check for updates), find **Optivolt**, and click **Install**.
 4. **Configure connection settings:**
-   Open the Optivolt add-on configuration panel and enter your Victron VRM credentials / installation ID, and the Victron IP address on your local network.
+   Open the Optivolt App configuration panel and enter your Victron VRM credentials / installation ID, and the Victron IP address on your local network.
    *(Note: Optivolt automatically connects to the internal HA WebSocket API using the supervisor token to fetch historical sensor data.)*
 5. **Start and verify:**
-   Start the Optivolt add-on, open the UI, and verify that data (time series, prices, SoC, etc.) is being fetched correctly.
+   Start the Optivolt App, open the UI, and verify that data (time series, prices, SoC, etc.) is being fetched correctly.
 
 ### Standalone / Local Development
 
