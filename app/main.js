@@ -196,7 +196,7 @@ async function onRun() {
     renderAllCharts(rows, cfgForViz, result.rebalanceWindow ?? null, evSettings);
 
     updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m);
-    updateEvDepartureQuickSet(els, rows, cfgForViz.stepSize_m);
+    updateEvDepartureQuickSet(els, rows);
   } catch (err) {
     console.error(err);
     if (els.status) {
@@ -266,7 +266,7 @@ async function refreshEvSensorStates(els) {
   updateEvSocQuickSet(els);
 }
 
-function updateEvDepartureQuickSet(els, rows, stepSize_m) {
+function updateEvDepartureQuickSet(els, rows) {
   const btn = els.evDepartureQuickSet;
   if (!btn) return;
   const lastRow = rows[rows.length - 1];

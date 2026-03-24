@@ -96,13 +96,30 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const lpText = buildLP(cfg);
   const highs = await getHighsInstance();
+  const hasBinaries = cfg.ev != null || (cfg.rebalanceRemainingSlots ?? 0) > 0;
+  const solveOptions = hasBinaries ? { mip_rel_gap: 0.005, mip_abs_gap: 0.01 } : {};
   let result: ReturnType<typeof highs.solve>;
+  const t0 = performance.now();
   try {
-    result = highs.solve(lpText);
+    result = highs.solve(lpText, solveOptions);
   } catch (err) {
     highsPromise = undefined; // force re-initialisation on next call
     throw err;
   }
+  const solveMs = performance.now() - t0;
+  const evCfg = cfg.ev;
+  const evInfo = evCfg ? {
+    depSlot: evCfg.evDepartureSlot,
+    deficitWh: Math.round((evCfg.evTargetSoc_percent - evCfg.evInitialSoc_percent) / 100 * evCfg.evBatteryCapacity_Wh),
+    minW: evCfg.evMinChargePower_W,
+    maxW: evCfg.evMaxChargePower_W,
+  } : null;
+  console.log('[calculate] solve', {
+    slots: cfg.load_W.length,
+    ev: evInfo,
+    rebalance: (cfg.rebalanceRemainingSlots ?? 0) > 0,
+    solveMs: Math.round(solveMs),
+  });
 
   const rows = parseSolution(result, cfg, timing);
 

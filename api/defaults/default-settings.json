@@ -30,5 +30,6 @@
   "evSocSensor": "",
   "evPlugSensor": "",
   "evDepartureTime": "",
-  "evTargetSoc_percent": 80
+  "evTargetSoc_percent": 80,
+  "evChargeEfficiency_percent": 90
 }

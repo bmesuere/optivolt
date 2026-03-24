@@ -76,6 +76,7 @@ export function getElements() {
     evMinChargeCurrent: $("#ev-min-charge-current"),
     evMaxChargeCurrent: $("#ev-max-charge-current"),
     evBatteryCapacity: $("#ev-battery-capacity"),
+    evChargeEfficiency: $("#ev-charge-efficiency"),
     evDepartureTime: $("#ev-departure-time"),
     evDepartureQuickSet: $("#ev-departure-quick-set"),
     evTargetSoc: $("#ev-target-soc"),

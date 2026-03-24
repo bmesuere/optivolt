@@ -1,4 +1,3 @@
-/* global Chart */
 /**
  * predictions.js
  *

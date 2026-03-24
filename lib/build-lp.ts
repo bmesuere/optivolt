@@ -41,10 +41,18 @@ export function buildLP({
     throw new Error("Arrays must have same length");
   }
 
+  // Tiebreak hierarchy (at near-zero prices, zero batteryCost):
+  //   pv→load (0) < pv→ev (2e-6) < pv→battery (3e-6) < pv→grid (4e-6)
+  //   grid→ev tiebreak (1e-6) < pv→ev (2e-6): PV is strictly preferred for EV at real prices.
+  //   At zero prices grid→ev (1e-6) < pv→ev (2e-6), but PV still prefers load because
+  //   routing PV to EV only saves 1e-6 net (grid_to_ev tiebreak - pv_to_ev tiebreak = -1e-6).
   const TIEBREAK = {
-    avoidExport: 2e-6,   // stronger nudge: prefer pv used locally over pv→grid
-    pvToLoad: 1e-6,      // weaker nudge: prefer pv→load over pv→battery
-    preferPvForEv: 1e-6, // prefer pv→ev over grid→ev
+    avoidExport: 4e-6,           // prefer pv used locally over pv→grid
+    pvToLoad: 3e-6,              // prefer pv→load over pv→battery; must exceed pv→ev (2e-6) so pv→battery > pv→ev when batteryCost=0
+    preferPvForEv: 1e-6,         // extra cost on grid→ev and pv→ev; ensures pv→battery+grid→ev (4e-6) > pv→ev (2e-6)
+    pvLoadOverEv: 1e-6,          // extra cost on pv→ev beyond preferPvForEv; prefer pv→load over pv→ev
+    evOnPerSlot: 1e-6,           // escalating per-slot penalty on ev_on_t: breaks symmetry between equivalent charging schedules
+    rebalanceStartPerSlot: 1e-6, // escalating per-window penalty on start_balance_k: breaks symmetry between equivalent rebalance windows
   }
   const softMinSocPenalty_cents_per_Wh = 0.05; // penalty to keep soc above minSoc when possible
 
@@ -82,13 +90,14 @@ export function buildLP({
   const evSocVar    = (t: number) => `ev_soc_${t}`;
 
   // EV derived constants (only used when ev is defined)
-  const evActive     = ev != null;
-  const evCapacityWh = ev?.evBatteryCapacity_Wh ?? 0;
-  const evInitialWh  = (ev?.evInitialSoc_percent ?? 0) / 100 * evCapacityWh;
-  const evTargetWh   = (ev?.evTargetSoc_percent  ?? 0) / 100 * evCapacityWh;
-  const evMinPow_W   = ev?.evMinChargePower_W ?? 0;
-  const evMaxPow_W   = ev?.evMaxChargePower_W ?? 0;
-  const evDepSlot    = ev?.evDepartureSlot ?? (T + 1);
+  const evActive        = ev != null;
+  const evCapacityWh    = ev?.evBatteryCapacity_Wh ?? 0;
+  const evInitialWh     = (ev?.evInitialSoc_percent ?? 0) / 100 * evCapacityWh;
+  const evTargetWh      = (ev?.evTargetSoc_percent  ?? 0) / 100 * evCapacityWh;
+  const evMinPow_W      = ev?.evMinChargePower_W ?? 0;
+  const evMaxPow_W      = ev?.evMaxChargePower_W ?? 0;
+  const evDepSlot       = ev?.evDepartureSlot ?? (T + 1);
+  const evChargeWhPerW  = stepHours * ((ev?.evChargeEfficiency_percent ?? 100) / 100);
 
   // Variable name helpers
   const gridToLoad = (t: number) => `grid_to_load_${t}`;
@@ -131,14 +140,22 @@ export function buildLP({
     if (evActive) {
       const gridToEvCoeff = importCoeff_cents + TIEBREAK.preferPvForEv;
       objTerms.push(` + ${toNum(gridToEvCoeff)} ${gridToEv(t)}`);
-      objTerms.push(` + ${toNum(TIEBREAK.pvToLoad)} ${pvToEv(t)}`);
+      objTerms.push(` + ${toNum(TIEBREAK.preferPvForEv + TIEBREAK.pvLoadOverEv)} ${pvToEv(t)}`);
       if (batteryCost_cents !== 0) objTerms.push(` + ${toNum(batteryCost_cents)} ${batteryToEv(t)}`);
+      // Symmetry-breaking: escalating penalty prefers earlier charging when slots are cost-equivalent.
+      objTerms.push(` + ${toNum(TIEBREAK.evOnPerSlot * (t + 1))} ${evOn(t)}`);
     }
     objTerms.push(` + ${toNum(socShortfallCoeff)} ${socShortfall(t)}`);
   }
   // Terminal SOC valuation
   if (terminalPrice_cents_per_Wh > 0) {
     objTerms.push(` - ${toNum(terminalPrice_cents_per_Wh)} ${soc(T - 1)}`);
+  }
+  // Rebalancing symmetry-breaking: escalating penalty prefers earlier windows when cost-equivalent.
+  if (D > 0) {
+    for (let k = 0; k <= T - D; k++) {
+      objTerms.push(` + ${toNum(TIEBREAK.rebalanceStartPerSlot * (k + 1))} ${startBalance(k)}`);
+    }
   }
   lines.push(objTerms.join(""));
   lines.push("");
@@ -213,13 +230,29 @@ export function buildLP({
       lines.push(` c_ev_max_${t}: ${gridToEv(t)} + ${pvToEv(t)} + ${batteryToEv(t)} - ${toNum(evMaxPow_W)} ${evOn(t)} <= 0`);
     }
 
-    lines.push(` c_ev_soc_0: ${evSocVar(0)} - ${toNum(stepHours)} ${gridToEv(0)} - ${toNum(stepHours)} ${pvToEv(0)} - ${toNum(stepHours)} ${batteryToEv(0)} = ${toNum(evInitialWh)}`);
+    lines.push(` c_ev_soc_0: ${evSocVar(0)} - ${toNum(evChargeWhPerW)} ${gridToEv(0)} - ${toNum(evChargeWhPerW)} ${pvToEv(0)} - ${toNum(evChargeWhPerW)} ${batteryToEv(0)} = ${toNum(evInitialWh)}`);
     for (let t = 1; t < T; t++) {
-      lines.push(` c_ev_soc_${t}: ${evSocVar(t)} - ${evSocVar(t - 1)} - ${toNum(stepHours)} ${gridToEv(t)} - ${toNum(stepHours)} ${pvToEv(t)} - ${toNum(stepHours)} ${batteryToEv(t)} = 0`);
+      lines.push(` c_ev_soc_${t}: ${evSocVar(t)} - ${evSocVar(t - 1)} - ${toNum(evChargeWhPerW)} ${gridToEv(t)} - ${toNum(evChargeWhPerW)} ${pvToEv(t)} - ${toNum(evChargeWhPerW)} ${batteryToEv(t)} = 0`);
     }
 
     if (evDepSlot <= T && evDepSlot > 0) {
       lines.push(` c_ev_target: ${evSocVar(evDepSlot - 1)} >= ${toNum(evTargetWh)}`);
+    }
+
+    // Cardinality lower bound: tightens the LP relaxation by telling the solver the minimum
+    // number of on-slots needed to meet the target. Without this, each ev_on_t floats freely
+    // in [0,1] during LP relaxation, giving weak bounds and causing excessive MIP branching.
+    const evDeficitWh = Math.max(0, evTargetWh - evInitialWh);
+    const evChargeWhPerSlot = evChargeWhPerW * evMaxPow_W;
+    if (evDeficitWh > 0 && evChargeWhPerSlot > 0) {
+      const kMin = Math.ceil(evDeficitWh / evChargeWhPerSlot);
+      const depLimit = Math.min(evDepSlot, T);
+      if (kMin >= 1 && kMin < depLimit) {
+        const termParts: string[] = [];
+        for (let t = 0; t < depLimit; t++) termParts.push(` ${evOn(t)}`);
+        const terms = termParts.join(' +');
+        lines.push(` c_ev_min_on:${terms} >= ${kMin}`);
+      }
     }
   }
 

@@ -62,8 +62,8 @@ export function updateEvPanel(els, rows, summary, stepSize_m = 15) {
 }
 
 const MODE_CONFIG = [
-  { key: 'solar',      label: 'solar',   color: '#10b981', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' },
-  { key: 'solar_plus', label: 'solar+',  color: '#f59e0b', badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' },
+  { key: 'solar_only', label: 'solar only',  color: '#10b981', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' },
+  { key: 'solar_grid', label: 'solar+grid', color: '#f59e0b', badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' },
   { key: 'max',        label: 'max',     color: '#ef4444', badge: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400' },
   { key: 'fixed',      label: 'fixed',   color: '#94a3b8', badge: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400' },
 ];
@@ -162,8 +162,8 @@ function renderEvTable(evRows, tableEl, stepSize_m = 15, evSettings = {}) {
 
   const MODE_BADGE = {
     fixed:      `<span class="rounded px-1 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400">fixed</span>`,
-    solar:      `<span class="rounded px-1 py-0.5 text-[10px] font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400">solar</span>`,
-    solar_plus: `<span class="rounded px-1 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">solar+</span>`,
+    solar_only: `<span class="rounded px-1 py-0.5 text-[10px] font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400">solar only</span>`,
+    solar_grid: `<span class="rounded px-1 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">solar+grid</span>`,
     max:        `<span class="rounded px-1 py-0.5 text-[10px] font-medium bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">max</span>`,
   };
 

@@ -241,4 +241,16 @@ describe('buildLP — EV charging (MILP)', () => {
     const lp = buildLP({ ...base, ev: { ...evCfg, evDepartureSlot: T + 5 } });
     expect(lp).not.toContain('c_ev_target:');
   });
+
+  it('applies evChargeEfficiency_percent to EV SoC evolution coefficients', () => {
+    // 90% efficiency → evChargeWhPerW = 0.25 * 0.9 = 0.225
+    const lp = buildLP({ ...base, ev: { ...evCfg, evChargeEfficiency_percent: 90 } });
+    expect(lp).toMatch(/c_ev_soc_0:.*0\.225 grid_to_ev_0/);
+    expect(lp).toMatch(/c_ev_soc_1:.*0\.225 grid_to_ev_1/);
+  });
+
+  it('uses bare stepHours (0.25) in EV SoC constraints when efficiency is 100%', () => {
+    const lp = buildLP({ ...base, ev: { ...evCfg, evChargeEfficiency_percent: 100 } });
+    expect(lp).toMatch(/c_ev_soc_0:.*0\.25 grid_to_ev_0/);
+  });
 });

@@ -103,6 +103,7 @@ const evSettings = {
   evBatteryCapacity_kWh: 60,
   evDepartureTime: '2024-01-01T14:00:00Z', // 2 h after NOW_MS → 8 slots @ 15 min
   evTargetSoc_percent: 80,
+  evChargeEfficiency_percent: 100,
 };
 
 describe('buildSolverConfigFromSettings — EV config', () => {
@@ -143,6 +144,25 @@ describe('buildSolverConfigFromSettings — EV config', () => {
     );
     const expectedPct = (37360 / 60000) * 100;
     expect(cfg.ev.evTargetSoc_percent).toBeCloseTo(expectedPct, 3);
+  });
+
+  it('reduces achievable target by evChargeEfficiency_percent when clamping', () => {
+    // 90% efficiency: 8 slots × 3680 W × 0.25 h × 0.9 = 6624 Wh reachable
+    // achievable = min(48000, 30000 + 6624, 60000) = 36624 → 61.04%
+    const cfg = buildSolverConfigFromSettings(
+      { ...evSettings, evChargeEfficiency_percent: 90 },
+      makeData(), NOW_MS, { pluggedIn: true, soc_percent: 50 },
+    );
+    const expectedPct = (36624 / 60000) * 100;
+    expect(cfg.ev.evTargetSoc_percent).toBeCloseTo(expectedPct, 3);
+  });
+
+  it('passes evChargeEfficiency_percent through to EvConfig', () => {
+    const cfg = buildSolverConfigFromSettings(
+      { ...evSettings, evChargeEfficiency_percent: 85 },
+      makeData(), NOW_MS, { pluggedIn: true, soc_percent: 50 },
+    );
+    expect(cfg.ev.evChargeEfficiency_percent).toBe(85);
   });
 
   it('does not add ev when departure is in the past (D=0)', () => {

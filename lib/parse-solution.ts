@@ -94,7 +94,7 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
       b2ev:          round(b2ev[t]),
       ev_charge:     round(evW),
       ev_charge_A:   round(evW / EV_CHARGE_VOLTAGE_V),
-      ev_charge_mode: evChargeMode(g2ev[t], pv2ev[t], b2ev[t], cfg.ev?.evMinChargePower_W ?? 0),
+      ev_charge_mode: evChargeMode(g2ev[t], pv2ev[t], b2ev[t], cfg.ev?.evMinChargePower_W ?? 0, pv2b[t]),
       ev_soc_percent: (evSoc[t] / evCap) * 100,
     });
   }
@@ -105,14 +105,15 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
 // 1 W threshold avoids spurious mode classification from solver floating-point residuals
 const EV_FLOW_THRESHOLD_W = 1;
 
-function evChargeMode(g: number, pv: number, b: number, evMinPow_W: number): EvChargeMode {
+function evChargeMode(g: number, pv: number, b: number, evMinPow_W: number, pv2b: number): EvChargeMode {
   const total = g + pv + b;
   if (total < EV_FLOW_THRESHOLD_W)                             return 'off';
-  if (b > EV_FLOW_THRESHOLD_W)                                 return 'max';       // battery involved → all sources
-  if (evMinPow_W > 0 && total <= evMinPow_W * 1.02)           return 'fixed'; // at minimum charge rate → set exact amps
-  if (pv > EV_FLOW_THRESHOLD_W && g > EV_FLOW_THRESHOLD_W)   return 'solar_plus'; // PV + grid → track PV + grid headroom
-  if (pv > EV_FLOW_THRESHOLD_W)                                return 'solar';     // PV only → track PV surplus
-  return 'solar_plus';                                                              // grid only (or PV+grid) → track grid headroom
+  if (evMinPow_W > 0 && total <= evMinPow_W * 1.02)           return 'fixed';       // at minimum charge rate → set exact amps (even if battery tops up)
+  if (b > EV_FLOW_THRESHOLD_W)                                 return 'max';         // battery above minimum rate → use all sources
+  if (pv2b > EV_FLOW_THRESHOLD_W)                              return 'fixed';       // PV split with battery → respect solver allocation
+  if (pv > EV_FLOW_THRESHOLD_W && g > EV_FLOW_THRESHOLD_W)   return 'solar_grid';  // PV + grid → track PV + grid headroom
+  if (pv > EV_FLOW_THRESHOLD_W)                                return 'solar_only';  // PV only → track PV surplus
+  return 'solar_grid';                                                                // grid only → track grid headroom
 }
 
 // --- helpers ---

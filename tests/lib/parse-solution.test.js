@@ -58,12 +58,13 @@ describe('parseSolution — ev_charge_mode derivation', () => {
   };
   const opts = { startMs: 1700000000000, stepMin: 15 };
 
-  function makeResult(g2ev, pv2ev, b2ev) {
+  function makeResult(g2ev, pv2ev, b2ev, pv2b = 0) {
     return {
       Columns: {
         'grid_to_ev_0':    { Primal: g2ev },
         'pv_to_ev_0':      { Primal: pv2ev },
         'battery_to_ev_0': { Primal: b2ev },
+        'pv_to_battery_0': { Primal: pv2b },
         'ev_soc_0':        { Primal: 30000 },
       },
     };
@@ -85,28 +86,50 @@ describe('parseSolution — ev_charge_mode derivation', () => {
     expect(row.ev_charge_mode).toBe('fixed');
   });
 
-  it('solar_plus — grid only, above minimum (same mode as PV+grid)', () => {
+  it('solar_grid — grid only, above minimum (same mode as PV+grid)', () => {
     const [row] = parseSolution(makeResult(2000, 0, 0), evCfg, opts);
-    expect(row.ev_charge_mode).toBe('solar_plus');
+    expect(row.ev_charge_mode).toBe('solar_grid');
   });
 
-  it('solar — PV only, no grid or battery', () => {
+  it('solar_only — PV only, no grid or battery', () => {
     const [row] = parseSolution(makeResult(0, 2000, 0), evCfg, opts);
-    expect(row.ev_charge_mode).toBe('solar');
+    expect(row.ev_charge_mode).toBe('solar_only');
   });
 
-  it('solar_plus — PV + grid above minimum, no battery', () => {
+  it('solar_grid — PV + grid above minimum, no battery', () => {
     const [row] = parseSolution(makeResult(1000, 1000, 0), evCfg, opts);
-    expect(row.ev_charge_mode).toBe('solar_plus');
+    expect(row.ev_charge_mode).toBe('solar_grid');
   });
 
-  it('max — battery involved (+ grid + PV)', () => {
+  it('max — battery involved above minimum rate (+ grid + PV)', () => {
     const [row] = parseSolution(makeResult(1000, 500, 500), evCfg, opts);
     expect(row.ev_charge_mode).toBe('max');
   });
 
-  it('max — battery only (no PV or grid)', () => {
+  it('max — battery only, above minimum rate', () => {
     const [row] = parseSolution(makeResult(0, 0, 2000), evCfg, opts);
     expect(row.ev_charge_mode).toBe('max');
+  });
+
+  it('fixed — battery tops up to reach minimum charge rate (not max)', () => {
+    // PV delivers 1150W, battery chips in 230W to reach 1380W minimum; not "max" speed
+    const [row] = parseSolution(makeResult(0, 1150, 230), evCfg, opts);
+    expect(row.ev_charge_mode).toBe('fixed');
+  });
+
+  it('fixed — PV to EV and PV to battery simultaneously (split PV)', () => {
+    // Solver splits PV between EV and house battery; solar tracking would conflict
+    const [row] = parseSolution(makeResult(0, 2000, 0, 500), evCfg, opts);
+    expect(row.ev_charge_mode).toBe('fixed');
+  });
+
+  it('fixed — PV + grid to EV with PV also going to battery', () => {
+    const [row] = parseSolution(makeResult(500, 1000, 0, 800), evCfg, opts);
+    expect(row.ev_charge_mode).toBe('fixed');
+  });
+
+  it('solar_only — PV only to EV, no competing battery sink', () => {
+    const [row] = parseSolution(makeResult(0, 2000, 0, 0), evCfg, opts);
+    expect(row.ev_charge_mode).toBe('solar_only');
   });
 });

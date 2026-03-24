@@ -696,7 +696,7 @@ function makeEvDeparturePlugin(rows, departureTime) {
 
   return {
     id: 'evDeparture',
-    afterDraw(chart) {
+    afterDatasetsDraw(chart) {
       const { ctx, chartArea, scales } = chart;
       if (!chartArea) return;
       const xPx = scales.x.getPixelForValue(depIdx);
@@ -726,7 +726,7 @@ function makeEvTargetPlugin(rows, departureTime, targetSoc_percent) {
 
   return {
     id: 'evTarget',
-    afterDraw(chart) {
+    afterDatasetsDraw(chart) {
       const { ctx, chartArea, scales } = chart;
       if (!chartArea) return;
       const { x: xScale, y: yScale } = scales;

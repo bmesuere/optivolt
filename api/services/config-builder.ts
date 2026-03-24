@@ -110,7 +110,8 @@ export function buildSolverConfigFromSettings(
       const initialWh = (evState.soc_percent / 100) * capacityWh;
       const requestedTargetWh = (settings.evTargetSoc_percent / 100) * capacityWh;
       const chargingSlots = Math.min(D, T);
-      const maxChargeable_Wh = maxPow_W * stepHours * chargingSlots;
+      const efficiency = settings.evChargeEfficiency_percent / 100;
+      const maxChargeable_Wh = maxPow_W * stepHours * chargingSlots * efficiency;
       const achievableTargetWh = Math.min(requestedTargetWh, initialWh + maxChargeable_Wh, capacityWh);
 
       const ev: EvConfig = {
@@ -120,6 +121,7 @@ export function buildSolverConfigFromSettings(
         evInitialSoc_percent: evState.soc_percent,
         evTargetSoc_percent: (achievableTargetWh / capacityWh) * 100,
         evDepartureSlot: D,
+        evChargeEfficiency_percent: settings.evChargeEfficiency_percent,
       };
       base.ev = ev;
     }

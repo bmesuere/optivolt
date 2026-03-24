@@ -7,12 +7,12 @@ export type TerminalSocValuation = 'zero' | 'min' | 'avg' | 'max' | 'custom';
 /**
  * How HA should control the charger for a given slot:
  *   fixed      — set exactly ev_charge_A amps (charger is at minimum rate; can't track dynamically)
- *   solar      — track actual PV surplus only; may turn off if PV drops below minimum
- *   solar_plus — track PV surplus + grid headroom; no battery draw (covers grid-only slots too)
+ *   solar_only — track actual PV surplus only; may turn off if PV drops below minimum
+ *   solar_grid — track PV surplus + grid headroom; no battery draw (covers grid-only slots too)
  *   max        — charge at maximum amps using all available sources (battery involved)
  *   off        — no charging
  */
-export type EvChargeMode = 'off' | 'fixed' | 'solar' | 'solar_plus' | 'max';
+export type EvChargeMode = 'off' | 'fixed' | 'solar_only' | 'solar_grid' | 'max';
 
 export interface EvConfig {
   evMinChargePower_W: number;
@@ -22,6 +22,8 @@ export interface EvConfig {
   evTargetSoc_percent: number;
   /** Number of available charging slots before departure. Constraint emitted if <= T. */
   evDepartureSlot: number;
+  /** AC-to-DC efficiency of the EV's onboard charger, as a percentage (e.g. 90 = 90%). */
+  evChargeEfficiency_percent: number;
 }
 
 /**
