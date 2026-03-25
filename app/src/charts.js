@@ -91,10 +91,13 @@ function makeFlowsTooltip(rows, flowSpecs, h) {
 
   return function({ chart, tooltip }) {
     if (!el) {
-      el = document.createElement("div");
-      el.className = "flows-tt";
-      chart.canvas.parentNode.style.position = "relative";
-      chart.canvas.parentNode.appendChild(el);
+      const parent = chart.canvas.parentNode;
+      el = parent.querySelector(".flows-tt") ?? document.createElement("div");
+      if (!el.parentNode) {
+        el.className = "flows-tt";
+        parent.style.position = "relative";
+        parent.appendChild(el);
+      }
     }
 
     if (tooltip.opacity === 0) { el.style.opacity = "0"; return; }
@@ -304,6 +307,7 @@ export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacke
     maintainAspectRatio: false,
     responsive: true,
     interaction: { mode: "index", intersect: false },
+    layout: { padding: { bottom: overrides.layout?.padding?.bottom ?? -6 } },
     plugins: {
       legend: legendSquare, // default, can be overridden
       tooltip: {
@@ -492,6 +496,7 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15, evSettings = null) 
     data: { labels: axis.labels, datasets },
     options: getBaseOptions({ ...axis, yTitle: "%" }, {
       plugins: hasEvSoc ? {} : { legend: { display: false } },
+      layout: hasEvSoc ? undefined : { padding: { bottom: 0 } },
       scales: { y: { max: 100 } }
     }),
     plugins: evTargetPlugin ? [evTargetPlugin] : [],
@@ -672,6 +677,7 @@ export function drawEvSocChartTab(canvas, rows, evSettings = {}) {
     },
     options: getBaseOptions({ ...axis, yTitle: "%" }, {
       plugins: { legend: { display: false } },
+      layout: { padding: { bottom: 0 } },
       scales: { y: { min: 0, max: 100 } },
     }),
     plugins,
