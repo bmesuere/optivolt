@@ -521,7 +521,7 @@
     <section class="lg:col-span-2 space-y-6 min-w-0">
       <div class="card">
         <h3 class="mb-3 sidebar-label">Battery SoC</h3>
-        <div class="h-40 w-full">
+        <div class="h-52 w-full">
           <canvas id="soc" class="h-full w-full"></canvas>
         </div>
       </div>
@@ -997,14 +997,16 @@
                   class="form-input" />
               </label>
             </div>
-            <label class="block text-sm">EV battery capacity (kWh)
-              <input id="ev-battery-capacity" type="number" min="1" step="0.1"
-                class="form-input" />
-            </label>
-            <label class="block text-sm">Charging efficiency (%)
-              <input id="ev-charge-efficiency" type="number" min="50" max="100" step="1"
-                class="form-input" />
-            </label>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="block text-sm">EV battery capacity (kWh)
+                <input id="ev-battery-capacity" type="number" min="1" step="0.1"
+                  class="form-input" />
+              </label>
+              <label class="block text-sm">Charging efficiency (%)
+                <input id="ev-charge-efficiency" type="number" min="50" max="100" step="1"
+                  class="form-input" />
+              </label>
+            </div>
             <label class="block text-sm">SoC sensor entity ID
               <input id="ev-soc-sensor" type="text" placeholder="sensor.ev_battery_level"
                 class="form-input font-mono text-xs" data-no-autosolve />
@@ -1066,67 +1068,64 @@
             </div>
           </label>
         </div>
-      </section>
 
-      <!-- EV Status card -->
-      <section class="card">
-        <h2 class="sidebar-label mb-4">Status</h2>
-        <div id="ev-tab-current-soc-row" class="hidden mb-3 pb-3 border-b border-slate-100 dark:border-white/5">
-          <div class="grid grid-cols-2 gap-3">
-            <div>
+        <!-- Plan summary -->
+        <div class="mt-4 summary-panel">
+          <div id="ev-tab-current-soc-row" class="hidden grid grid-cols-2 border-b border-slate-100 dark:border-white/5">
+            <div class="px-3 py-2.5 border-r border-slate-100 dark:border-white/5">
               <div class="stat-label mb-0.5">Current SoC</div>
               <div id="ev-tab-current-soc" class="stat-value">—</div>
             </div>
-            <div id="ev-tab-plug-row" class="hidden">
+            <div id="ev-tab-plug-row" class="px-3 py-2.5 hidden">
               <div class="stat-label mb-0.5">Plug</div>
               <div id="ev-tab-plug-status" class="stat-value">—</div>
             </div>
           </div>
-        </div>
-        <div id="ev-no-charging" class="py-3 text-center">
-          <div class="text-slate-300 dark:text-slate-600 mb-1.5">
-            <svg xmlns="http://www.w3.org/2000/svg" class="inline-block h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M21 10h-6m-3-7v4M9 3v4m3-4v4M3 10h6m6 0v4a3 3 0 01-6 0v-4m6 0H9" />
-            </svg>
+          <div id="ev-no-charging" class="py-3 text-center">
+            <div class="text-slate-300 dark:text-slate-600 mb-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="inline-block h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 10h-6m-3-7v4M9 3v4m3-4v4M3 10h6m6 0v4a3 3 0 01-6 0v-4m6 0H9" />
+              </svg>
+            </div>
+            <div class="text-xs text-slate-400 dark:text-slate-500">No EV charging in current plan</div>
           </div>
-          <div class="text-xs text-slate-400 dark:text-slate-500">No EV charging in current plan</div>
-        </div>
-        <div id="ev-charging-summary" class="hidden">
-          <div class="summary-block">
-            <div class="flex items-baseline justify-between mb-2">
-              <span class="stat-label">EV split</span>
-              <span class="text-[11px] text-slate-400 dark:text-slate-600">grid · battery · PV</span>
-            </div>
-            <div class="flex font-mono text-[11px] text-slate-500 dark:text-slate-400 justify-between mb-2">
-              <span id="ev-tab-grid-kwh" title="From grid">—</span>
-              <span id="ev-tab-batt-kwh" title="From battery">—</span>
-              <span id="ev-tab-pv-kwh" title="From PV">—</span>
-            </div>
-            <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80"
-              id="ev-tab-split-bar"></div>
-            <div class="mt-1 text-right font-mono text-[11px] text-slate-400 dark:text-slate-500">
-              Total: <span id="ev-tab-total-kwh">—</span>
-            </div>
-          </div>
-          <div class="summary-block border-t border-slate-100 dark:border-white/5">
-            <div class="grid grid-cols-2 gap-x-2 gap-y-2.5">
-              <div>
-                <div class="stat-label mb-0.5">Total cost</div>
-                <div id="ev-tab-total-cost" class="stat-value">—</div>
+          <div id="ev-charging-summary" class="hidden">
+            <div class="summary-block">
+              <div class="flex items-baseline justify-between mb-2">
+                <span class="stat-label">EV split</span>
+                <span class="text-[11px] text-slate-400 dark:text-slate-600">grid · battery · PV</span>
               </div>
-              <div>
-                <div class="stat-label mb-0.5">Effective rate</div>
-                <div id="ev-tab-effective-rate" class="stat-value">—</div>
+              <div class="flex font-mono text-[11px] text-slate-500 dark:text-slate-400 justify-between mb-2">
+                <span id="ev-tab-grid-kwh" title="From grid">—</span>
+                <span id="ev-tab-batt-kwh" title="From battery">—</span>
+                <span id="ev-tab-pv-kwh" title="From PV">—</span>
               </div>
-              <div class="col-span-2">
-                <div class="stat-label mb-0.5">Free solar</div>
-                <div id="ev-tab-free-solar" class="stat-value">—</div>
+              <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80"
+                id="ev-tab-split-bar"></div>
+              <div class="mt-1 text-right font-mono text-[11px] text-slate-400 dark:text-slate-500">
+                Total: <span id="ev-tab-total-kwh">—</span>
               </div>
             </div>
-          </div>
-          <div class="summary-block border-t border-slate-100 dark:border-white/5">
-            <div class="stat-label mb-2">Charge modes</div>
-            <div id="ev-tab-mode-rows"></div>
+            <div class="summary-block border-t border-slate-100 dark:border-white/5">
+              <div class="grid grid-cols-2 gap-x-2 gap-y-2.5">
+                <div>
+                  <div class="stat-label mb-0.5">Total cost</div>
+                  <div id="ev-tab-total-cost" class="stat-value">—</div>
+                </div>
+                <div>
+                  <div class="stat-label mb-0.5">Effective rate</div>
+                  <div id="ev-tab-effective-rate" class="stat-value">—</div>
+                </div>
+                <div class="col-span-2">
+                  <div class="stat-label mb-0.5">Free solar</div>
+                  <div id="ev-tab-free-solar" class="stat-value">—</div>
+                </div>
+              </div>
+            </div>
+            <div class="summary-block border-t border-slate-100 dark:border-white/5">
+              <div class="stat-label mb-2">Charge mode slots</div>
+              <div id="ev-tab-mode-rows"></div>
+            </div>
           </div>
         </div>
       </section>

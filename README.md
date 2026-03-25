@@ -11,6 +11,7 @@ Plan and control a home energy system with forecasts, dynamic tariffs, and a day
 - Built-in load forecasting based on Home Assistant historical sensor data
 - Server-side VRM integration for forecasts/prices and system limits
 - Optional Dynamic ESS schedule pushes over MQTT (first 4 slots)
+- EV charging integration: LP-optimized schedule with departure deadline, target SoC, and per-slot charge mode classification
 - Static, build-free web UI served by the same Express process
 - Persistent settings + time-series data under a configurable data directory
 
@@ -128,6 +129,28 @@ rest_command:
       }
 ```
 
+### 5. EV Charger Control via REST Sensor (Optional)
+
+Poll the `/ev/current` endpoint every minute to get the current slot's EV charging decision. Add this to your HA `configuration.yaml`:
+
+```yaml
+rest:
+  - resource: http://localhost:3070/ev/current
+    scan_interval: 60
+    sensor:
+      - name: "OptiVolt EV Charge Mode"
+        value_template: "{{ value_json.ev_charge_mode }}"
+        unique_id: optivolt_ev_charge_mode
+
+      - name: "OptiVolt EV Charge Current"
+        value_template: "{{ value_json.ev_charge_A }}"
+        unit_of_measurement: A
+        device_class: current
+        unique_id: optivolt_ev_charge_current_a
+```
+
+Use `sensor.optivolt_ev_charge_mode` and `sensor.optivolt_ev_charge_current_a` in automations to control your charger. The mode values are `off`, `fixed`, `solar_only`, `solar_grid`, and `max`; the current is the target charge rate in amps.
+
 ## Architecture & HTTP API
 
 ```text
@@ -156,5 +179,8 @@ The **UI** is static and calls the **Express API** on the same origin. The **API
   ```
 - `POST /vrm/refresh-settings` — Fetches latest Dynamic ESS limits/settings from VRM and persists.
 - `GET/POST /predictions/*` — Load forecasting features (`/validate`, `/forecast`, `/forecast/now`).
+- `GET /ev/current` — Current time slot's EV charging decision (`ev_charge_mode`, `ev_charge_A`, source flows, EV SoC).
+- `GET /ev/schedule` — Full per-slot EV charging schedule from the last computed plan.
+- `GET /ha/entity/:entityId` — Fetch live entity state from Home Assistant (used to validate EV sensor configuration).
 
 *Note:* Data and settings are server-owned. VRM refreshes write to `DATA_DIR/data.json` and the solver always reads from this persisted snapshot.

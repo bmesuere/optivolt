@@ -142,14 +142,14 @@ function renderEvTable(evRows, tableEl, stepSize_m = 15, evSettings = {}) {
   const baseTh = "px-2 py-1.5 border-b border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900";
 
   const totalsRow = `<tr>
-    <th class="${baseTh}" scope="row"><span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-200/80 dark:bg-slate-700/60 text-[9px] font-bold text-slate-400 dark:text-slate-500" title="Column totals (kWh)">Σ</span></th>
+    <th class="${baseTh} text-left" scope="row"><span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-200/80 dark:bg-slate-700/60 text-[9px] font-bold text-slate-400 dark:text-slate-500" title="Column totals (kWh)">Σ</span></th>
     <th class="${baseTh} text-right font-mono tabular-nums text-[11px] font-semibold text-slate-500 dark:text-slate-400">${totGridCost_cents.toFixed(1)}¢</th>
     <th class="${baseTh}"></th>
     <th class="${baseTh}"></th>
     <th class="${baseTh} text-right">${fmtTotalChip(totGrid,  'g2ev')}</th>
     <th class="${baseTh} text-right">${fmtTotalChip(totBatt,  'b2ev')}</th>
     <th class="${baseTh} text-right">${fmtTotalChip(totSolar, 'pv2ev')}</th>
-    <th class="${baseTh} text-right font-mono tabular-nums text-[11px] font-semibold text-slate-500 dark:text-slate-400">${finalSoc.toFixed(1)}%</th>
+    <th class="${baseTh}"></th>
     ${evSettings.targetSoc_percent != null ? `<th class="${baseTh}"></th>` : ''}
   </tr>`;
 
