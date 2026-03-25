@@ -88,15 +88,13 @@ export function ttDivider() {
   return `<div class="ov-tt-div"></div>`;
 }
 
-/** Renders a buy/sell price footer row. */
-export function ttPrices(buyVal, sellVal) {
-  return `<div class="ov-tt-prices">
-    <span>Buy / Sell</span>
-    <span>
-      <span class="ov-tt-badge ov-tt-buy">${buyVal}</span>
-      <span class="ov-tt-badge ov-tt-sell">${sellVal}</span>
-    </span>
-  </div>`;
+/** Renders a buy/sell price footer row. Pass only buyVal to show a single "Buy price" badge. */
+export function ttPrices(buyVal, sellVal = null) {
+  const label = sellVal != null ? "Buy / Sell" : "Buy price";
+  const badges = sellVal != null
+    ? `<span class="ov-tt-badge ov-tt-buy">${buyVal}</span><span class="ov-tt-badge ov-tt-sell">${sellVal}</span>`
+    : `<span class="ov-tt-badge ov-tt-buy">${buyVal}</span>`;
+  return `<div class="ov-tt-prices"><span>${label}</span><span>${badges}</span></div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +111,7 @@ export function ttPrices(buyVal, sellVal) {
 export function createTooltipHandler({ renderContent }) {
   injectTooltipStyles();
   let el = null;
+  let lastIdx = null;
 
   return function({ chart, tooltip }) {
     if (!el) {
@@ -125,12 +124,15 @@ export function createTooltipHandler({ renderContent }) {
       }
     }
 
-    if (tooltip.opacity === 0) { el.style.opacity = "0"; return; }
+    if (tooltip.opacity === 0) { el.style.opacity = "0"; lastIdx = null; return; }
 
     const idx = tooltip.dataPoints?.[0]?.dataIndex;
     if (idx == null) return;
 
-    el.innerHTML = renderContent(idx, tooltip);
+    if (idx !== lastIdx) {
+      el.innerHTML = renderContent(idx, tooltip);
+      lastIdx = idx;
+    }
     el.style.opacity = "1";
 
     // Position beside caret; flip left if it would overflow the canvas
@@ -160,30 +162,18 @@ export function fmtKwh(v) {
 // Animation configs
 // ---------------------------------------------------------------------------
 
-/**
- * Returns a Chart.js v4 animation config.
- * @param {'bar'|'line'} type
- */
 export function getChartAnimations(type) {
-  if (type === 'bar') {
-    return {
-      animation: {
-        duration: 600,
-        easing: 'easeOutQuart',
-        // Staggered wave: each bar is delayed by 25ms, capped at 700ms so
-        // dense charts (96 slots) still finish in reasonable time.
-        delay: (ctx) => ctx.type === 'data' && ctx.mode === 'default'
-          ? Math.min(ctx.dataIndex * 25, 700) : 0,
-      },
-    };
-  }
-  // line — delay each point so the line "draws itself" left-to-right
+  // Staggered wave: each item is delayed per slot, capped at 700ms so
+  // dense charts (96 slots) still finish in reasonable time.
+  const { duration, perSlot } = type === 'bar'
+    ? { duration: 600, perSlot: 25 }
+    : { duration: 500, perSlot: 20 };
   return {
     animation: {
-      duration: 500,
+      duration,
       easing: 'easeOutQuart',
       delay: (ctx) => ctx.type === 'data' && ctx.mode === 'default'
-        ? Math.min(ctx.dataIndex * 20, 700) : 0,
+        ? Math.min(ctx.dataIndex * perSlot, 700) : 0,
     },
   };
 }

@@ -456,7 +456,7 @@ function renderAccuracyCharts(overlayCanvasId, diffCanvasId, recentData, options
               const color = v >= 0 ? 'rgb(139,201,100)' : 'rgb(233,122,131)';
               let html = ttHeader(time);
               html += ttDivider();
-              html += ttRow(color, 'Pred − Actual', `${v >= 0 ? '+' : ''}${fmtKwh(v)} kWh`);
+              html += ttRow(color, 'Pred − Actual', `${v >= 0 ? '+' : ''}${fmtKwh(Math.abs(v))} kWh`);
               return html;
             },
           }),

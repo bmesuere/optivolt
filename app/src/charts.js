@@ -200,10 +200,7 @@ export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacke
       pointStyle: "rect",
       boxWidth: 10,
       padding: 12,
-      font: (_ctx) => ({
-        size: 12,
-        family: getComputedStyle(document.documentElement).fontFamily
-      })
+      font: { size: 12, family: getComputedStyle(document.documentElement).fontFamily }
     }
   };
 
@@ -215,7 +212,7 @@ export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacke
     layout: { padding: { bottom: overrides.layout?.padding?.bottom ?? -6 } },
     ...(overrides.animation ? { animation: overrides.animation } : {}),
     plugins: {
-      legend: legendSquare, // default, can be overridden
+      legend: legendSquare,
       tooltip: {
         mode: "index",
         intersect: false,
@@ -275,6 +272,8 @@ export function getChartTheme() {
 export function renderChart(canvas, config) {
   if (canvas._chart) canvas._chart.destroy();
   canvas._chart = new Chart(canvas.getContext("2d"), config);
+  const overlay = canvas.parentElement?.querySelector('.chart-empty');
+  if (overlay) overlay.style.display = 'none';
 }
 
 // Helper for signed stacked bars
@@ -304,22 +303,21 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, rebalance
   // Define structure: key -> params
   const flowSpecs = [
     // Positive Stack
-    { key: "pv2l", color: SOLUTION_COLORS.pv2l, label: "Solar to Consumption", sign: 1 },
-    { key: "pv2ev", color: SOLUTION_COLORS.pv2ev, label: "Solar to EV", sign: 1 },
-    { key: "pv2b", color: SOLUTION_COLORS.pv2b, label: "Solar to Battery", sign: 1 },
-    { key: "pv2g", color: SOLUTION_COLORS.pv2g, label: "Solar to Grid", sign: 1 },
-    { key: "b2g", color: SOLUTION_COLORS.b2g, label: "Battery to Grid", sign: 1 },
+    { key: "pv2l",  color: SOLUTION_COLORS.pv2l,  label: "Solar → Load",     sign: 1 },
+    { key: "pv2ev", color: SOLUTION_COLORS.pv2ev, label: "Solar → EV",       sign: 1 },
+    { key: "pv2b",  color: SOLUTION_COLORS.pv2b,  label: "Solar → Battery",  sign: 1 },
+    { key: "pv2g",  color: SOLUTION_COLORS.pv2g,  label: "Solar → Grid",     sign: 1 },
+    { key: "b2g",   color: SOLUTION_COLORS.b2g,   label: "Battery → Grid",   sign: 1 },
     // Negative Stack
-    { key: "b2l", color: SOLUTION_COLORS.b2l, label: "Battery to Consumption", sign: -1 },
-    { key: "b2ev", color: SOLUTION_COLORS.b2ev, label: "Battery to EV", sign: -1 },
-    { key: "g2l", color: SOLUTION_COLORS.g2l, label: "Grid to Consumption", sign: -1 },
-    { key: "g2ev", color: SOLUTION_COLORS.g2ev, label: "Grid to EV", sign: -1 },
-    { key: "g2b", color: SOLUTION_COLORS.g2b, label: "Grid to Battery", sign: -1 },
+    { key: "b2l",   color: SOLUTION_COLORS.b2l,   label: "Battery → Load",   sign: -1 },
+    { key: "b2ev",  color: SOLUTION_COLORS.b2ev,  label: "Battery → EV",     sign: -1 },
+    { key: "g2l",   color: SOLUTION_COLORS.g2l,   label: "Grid → Load",      sign: -1 },
+    { key: "g2ev",  color: SOLUTION_COLORS.g2ev,  label: "Grid → EV",        sign: -1 },
+    { key: "g2b",   color: SOLUTION_COLORS.g2b,   label: "Grid → Battery",   sign: -1 },
   ];
 
-  const specKeys = new Set(flowSpecs.map(s => s.key));
   const nonZeroKeys = new Set();
-  for (const r of rows) for (const k of specKeys) if ((r[k] || 0) !== 0) nonZeroKeys.add(k);
+  for (const r of rows) for (const { key } of flowSpecs) if ((r[key] || 0) !== 0) nonZeroKeys.add(key);
   const datasets = flowSpecs
     .filter(spec => nonZeroKeys.has(spec.key))
     .map(spec =>
@@ -368,11 +366,22 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15, evSettings = null) 
 
   const hasEvSoc = rows.some(r => (r.ev_soc_percent ?? 0) > 0);
 
+  const makeSocGradient = (color) => (context) => {
+    const { chart } = context;
+    const { ctx, chartArea } = chart;
+    if (!chartArea) return toRGBA(color, 0.15);
+    const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    gradient.addColorStop(0, toRGBA(color, 0.25));
+    gradient.addColorStop(1, toRGBA(color, 0));
+    return gradient;
+  };
+
   const datasets = [{
     label: "Battery SoC (%)",
     data: rows.map(r => r.soc_percent),
     borderColor: SOLUTION_COLORS.soc,
-    backgroundColor: SOLUTION_COLORS.soc,
+    backgroundColor: makeSocGradient(SOLUTION_COLORS.soc),
+    fill: 'origin',
     borderWidth: 2,
     tension: 0.2,
     pointRadius: 0,
@@ -385,7 +394,8 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15, evSettings = null) 
       label: "EV SoC (%)",
       data: rows.map(r => r.ev_soc_percent ?? 0),
       borderColor: SOLUTION_COLORS.ev_charge,
-      backgroundColor: SOLUTION_COLORS.ev_charge,
+      backgroundColor: makeSocGradient(SOLUTION_COLORS.ev_charge),
+      fill: 'origin',
       borderWidth: 2,
       tension: 0.2,
       pointRadius: 0,
@@ -611,7 +621,7 @@ export function drawEvPowerChart(canvas, rows, stepSize_m = 15, evSettings = {})
         }
       }
       html += ttDivider();
-      html += `<div class="ov-tt-prices"><span>Buy price</span><span class="ov-tt-badge ov-tt-buy">${(row.ic ?? 0).toFixed(1)}¢</span></div>`;
+      html += ttPrices(`${(row.ic ?? 0).toFixed(1)}¢`);
       return html;
     },
   });
