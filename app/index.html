@@ -309,15 +309,6 @@
       display: inline-block;
     }
 
-    /* === Chart fade-in === */
-    .chart-fade {
-      transition: opacity 0.4s ease;
-    }
-
-    .chart-fade.chart-pending {
-      opacity: 0;
-    }
-
     /* === Tab panel transitions === */
     [role="tabpanel"] {
       transition: opacity 0.2s ease, transform 0.2s ease;
@@ -357,6 +348,62 @@
     .card.revealed {
       animation: card-reveal 0.35s ease forwards;
     }
+
+    /* === Background dot grid (light) === */
+    body {
+      background-image:
+        radial-gradient(circle, rgba(100, 116, 139, 0.10) 1px, transparent 1px),
+        linear-gradient(to bottom, #f8fafc, #f1f5f9);
+      background-size: 20px 20px, 100% 100%;
+      background-attachment: fixed;
+    }
+
+    :root.dark body {
+      background-image:
+        radial-gradient(circle, rgba(148, 163, 184, 0.055) 1px, transparent 1px),
+        linear-gradient(to bottom, #0f172a, #020617);
+      background-size: 20px 20px, 100% 100%;
+    }
+
+    /* === Domain color utilities (mirror flow chart palette) === */
+    .color-flow-grid     { color: rgb(233, 122, 131); }
+    .color-flow-battery  { color: rgb(71, 144, 208); }
+    .color-flow-solar    { color: rgb(247, 171, 62); }
+
+
+    /* === Chart empty state === */
+    .chart-wrap {
+      position: relative;
+    }
+
+    .chart-empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.625rem;
+      pointer-events: none;
+    }
+
+    .chart-empty span {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      letter-spacing: 0.01em;
+    }
+
+    :root.dark .chart-empty span {
+      color: #334155;
+    }
+
+    .chart-empty-bars rect {
+      fill: #e2e8f0;
+    }
+
+    :root.dark .chart-empty-bars rect {
+      fill: rgba(148, 163, 184, 0.10);
+    }
   </style>
 
   <!-- Fonts -->
@@ -374,7 +421,7 @@
 </head>
 
 <body
-  class="min-h-full w-full bg-fixed bg-gradient-to-b from-slate-50 to-slate-100 text-ink dark:from-slate-900 dark:to-slate-950 dark:text-slate-100">
+  class="min-h-full w-full text-ink dark:text-slate-100">
   <!-- Header -->
   <header class="border-b border-white/60 dark:border-white/5 bg-white/70 dark:bg-slate-900/60 backdrop-blur">
     <div class="relative mx-auto w-full max-w-7xl px-4 py-2 sm:py-3 flex items-center justify-between">
@@ -452,8 +499,22 @@
     <section class="lg:col-span-3 min-w-0">
       <div class="card">
         <h3 class="mb-3 sidebar-label">Power flows</h3>
-        <div class="h-80 w-full">
+        <div class="h-80 w-full chart-wrap">
           <canvas id="flows" class="h-full w-full"></canvas>
+          <div class="chart-empty">
+            <svg width="80" height="28" viewBox="0 0 80 28" aria-hidden="true" class="chart-empty-bars">
+              <rect x="0"  y="16" width="7" height="12" rx="1.5"/>
+              <rect x="9"  y="8"  width="7" height="20" rx="1.5"/>
+              <rect x="18" y="12" width="7" height="16" rx="1.5"/>
+              <rect x="27" y="4"  width="7" height="24" rx="1.5"/>
+              <rect x="36" y="9"  width="7" height="19" rx="1.5"/>
+              <rect x="45" y="2"  width="7" height="26" rx="1.5"/>
+              <rect x="54" y="11" width="7" height="17" rx="1.5"/>
+              <rect x="63" y="6"  width="7" height="22" rx="1.5"/>
+              <rect x="72" y="15" width="7" height="13" rx="1.5"/>
+            </svg>
+            <span>Run the optimizer to see results</span>
+          </div>
         </div>
       </div>
     </section>
@@ -540,7 +601,7 @@
             <div class="grid grid-cols-2 border-t border-slate-100 dark:border-white/5">
               <div class="px-3 py-2.5 border-b border-r border-slate-100 dark:border-white/5">
                 <div class="stat-label mb-0.5">Current SoC</div>
-                <div class="stat-value"><span id="plan-soc-now">—</span><span
+                <div class="stat-value color-flow-battery"><span id="plan-soc-now">—</span><span
                     class="text-[10px] opacity-50 ml-0.5">%</span></div>
               </div>
               <div class="px-3 py-2.5 border-b border-slate-100 dark:border-white/5">
@@ -553,7 +614,7 @@
               </div>
               <div class="px-3 py-2.5 border-b border-slate-100 dark:border-white/5">
                 <div class="stat-label mb-0.5">Predicted PV</div>
-                <div id="sum-pv-kwh" class="stat-value">—</div>
+                <div id="sum-pv-kwh" class="stat-value color-flow-solar">—</div>
               </div>
               <div class="px-3 py-2.5 col-span-2">
                 <div class="stat-label mb-0.5">Avg. import price</div>
@@ -566,9 +627,9 @@
                 <span class="text-[11px] text-slate-400 dark:text-slate-600">grid · battery · PV</span>
               </div>
               <div class="flex font-mono text-[11px] text-slate-500 dark:text-slate-400 justify-between mb-2">
-                <span id="sum-load-grid-kwh" title="Grid">—</span>
-                <span id="sum-load-batt-kwh" title="Battery">—</span>
-                <span id="sum-load-pv-kwh" title="PV">—</span>
+                <span id="sum-load-grid-kwh" title="Grid" class="color-flow-grid">—</span>
+                <span id="sum-load-batt-kwh" title="Battery" class="color-flow-battery">—</span>
+                <span id="sum-load-pv-kwh" title="PV" class="color-flow-solar">—</span>
               </div>
               <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80"
                 id="load-split-bar"></div>
@@ -579,9 +640,9 @@
                 <span class="text-[11px] text-slate-400 dark:text-slate-600">grid · battery · PV</span>
               </div>
               <div class="flex font-mono text-[11px] text-slate-500 dark:text-slate-400 justify-between mb-2">
-                <span id="sum-ev-grid-kwh" title="From grid">—</span>
-                <span id="sum-ev-batt-kwh" title="From battery">—</span>
-                <span id="sum-ev-pv-kwh" title="From PV">—</span>
+                <span id="sum-ev-grid-kwh" title="From grid" class="color-flow-grid">—</span>
+                <span id="sum-ev-batt-kwh" title="From battery" class="color-flow-battery">—</span>
+                <span id="sum-ev-pv-kwh" title="From PV" class="color-flow-solar">—</span>
               </div>
               <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700/80"
                 id="ev-split-bar"></div>
@@ -612,22 +673,64 @@
     <section class="lg:col-span-2 space-y-6 min-w-0">
       <div class="card">
         <h3 class="mb-3 sidebar-label">Battery SoC</h3>
-        <div class="h-52 w-full">
+        <div class="h-52 w-full chart-wrap">
           <canvas id="soc" class="h-full w-full"></canvas>
+          <div class="chart-empty">
+            <svg width="80" height="28" viewBox="0 0 80 28" aria-hidden="true" class="chart-empty-bars">
+              <rect x="0"  y="16" width="7" height="12" rx="1.5"/>
+              <rect x="9"  y="8"  width="7" height="20" rx="1.5"/>
+              <rect x="18" y="12" width="7" height="16" rx="1.5"/>
+              <rect x="27" y="4"  width="7" height="24" rx="1.5"/>
+              <rect x="36" y="9"  width="7" height="19" rx="1.5"/>
+              <rect x="45" y="2"  width="7" height="26" rx="1.5"/>
+              <rect x="54" y="11" width="7" height="17" rx="1.5"/>
+              <rect x="63" y="6"  width="7" height="22" rx="1.5"/>
+              <rect x="72" y="15" width="7" height="13" rx="1.5"/>
+            </svg>
+            <span>Run the optimizer to see results</span>
+          </div>
         </div>
       </div>
 
       <div class="card">
         <h3 class="mb-3 sidebar-label">Energy prices</h3>
-        <div class="h-56 w-full">
+        <div class="h-56 w-full chart-wrap">
           <canvas id="prices" class="h-full w-full"></canvas>
+          <div class="chart-empty">
+            <svg width="80" height="28" viewBox="0 0 80 28" aria-hidden="true" class="chart-empty-bars">
+              <rect x="0"  y="16" width="7" height="12" rx="1.5"/>
+              <rect x="9"  y="8"  width="7" height="20" rx="1.5"/>
+              <rect x="18" y="12" width="7" height="16" rx="1.5"/>
+              <rect x="27" y="4"  width="7" height="24" rx="1.5"/>
+              <rect x="36" y="9"  width="7" height="19" rx="1.5"/>
+              <rect x="45" y="2"  width="7" height="26" rx="1.5"/>
+              <rect x="54" y="11" width="7" height="17" rx="1.5"/>
+              <rect x="63" y="6"  width="7" height="22" rx="1.5"/>
+              <rect x="72" y="15" width="7" height="13" rx="1.5"/>
+            </svg>
+            <span>Run the optimizer to see results</span>
+          </div>
         </div>
       </div>
 
       <div class="card">
         <h3 class="mb-3 sidebar-label">Predicted load and solar</h3>
-        <div class="h-56 w-full">
+        <div class="h-56 w-full chart-wrap">
           <canvas id="loadpv" class="h-full w-full"></canvas>
+          <div class="chart-empty">
+            <svg width="80" height="28" viewBox="0 0 80 28" aria-hidden="true" class="chart-empty-bars">
+              <rect x="0"  y="16" width="7" height="12" rx="1.5"/>
+              <rect x="9"  y="8"  width="7" height="20" rx="1.5"/>
+              <rect x="18" y="12" width="7" height="16" rx="1.5"/>
+              <rect x="27" y="4"  width="7" height="24" rx="1.5"/>
+              <rect x="36" y="9"  width="7" height="19" rx="1.5"/>
+              <rect x="45" y="2"  width="7" height="26" rx="1.5"/>
+              <rect x="54" y="11" width="7" height="17" rx="1.5"/>
+              <rect x="63" y="6"  width="7" height="22" rx="1.5"/>
+              <rect x="72" y="15" width="7" height="13" rx="1.5"/>
+            </svg>
+            <span>Run the optimizer to see results</span>
+          </div>
         </div>
       </div>
     </section>
@@ -854,30 +957,100 @@
             </label>
           </div>
         </div>
-        <div class="h-80 w-full">
+        <div class="h-80 w-full chart-wrap">
           <canvas id="forecast-chart" class="h-full w-full"></canvas>
+          <div class="chart-empty">
+            <svg width="80" height="28" viewBox="0 0 80 28" aria-hidden="true" class="chart-empty-bars">
+              <rect x="0"  y="16" width="7" height="12" rx="1.5"/>
+              <rect x="9"  y="8"  width="7" height="20" rx="1.5"/>
+              <rect x="18" y="12" width="7" height="16" rx="1.5"/>
+              <rect x="27" y="4"  width="7" height="24" rx="1.5"/>
+              <rect x="36" y="9"  width="7" height="19" rx="1.5"/>
+              <rect x="45" y="2"  width="7" height="26" rx="1.5"/>
+              <rect x="54" y="11" width="7" height="17" rx="1.5"/>
+              <rect x="63" y="6"  width="7" height="22" rx="1.5"/>
+              <rect x="72" y="15" width="7" height="13" rx="1.5"/>
+            </svg>
+            <span>Run a forecast to see results</span>
+          </div>
         </div>
       </section>
 
       <!-- Load History Comparison Chart -->
       <section class="card">
         <h2 class="mb-3 sidebar-label">Load Prediction Accuracy</h2>
-        <div class="h-56 w-full">
+        <div class="h-56 w-full chart-wrap">
           <canvas id="load-accuracy-chart" class="h-full w-full"></canvas>
+          <div class="chart-empty">
+            <svg width="80" height="28" viewBox="0 0 80 28" aria-hidden="true" class="chart-empty-bars">
+              <rect x="0"  y="16" width="7" height="12" rx="1.5"/>
+              <rect x="9"  y="8"  width="7" height="20" rx="1.5"/>
+              <rect x="18" y="12" width="7" height="16" rx="1.5"/>
+              <rect x="27" y="4"  width="7" height="24" rx="1.5"/>
+              <rect x="36" y="9"  width="7" height="19" rx="1.5"/>
+              <rect x="45" y="2"  width="7" height="26" rx="1.5"/>
+              <rect x="54" y="11" width="7" height="17" rx="1.5"/>
+              <rect x="63" y="6"  width="7" height="22" rx="1.5"/>
+              <rect x="72" y="15" width="7" height="13" rx="1.5"/>
+            </svg>
+            <span>Run a forecast to see results</span>
+          </div>
         </div>
-        <div class="h-40 w-full mt-4">
+        <div class="h-40 w-full mt-4 chart-wrap">
           <canvas id="load-accuracy-diff-chart" class="h-full w-full"></canvas>
+          <div class="chart-empty">
+            <svg width="80" height="28" viewBox="0 0 80 28" aria-hidden="true" class="chart-empty-bars">
+              <rect x="0"  y="16" width="7" height="12" rx="1.5"/>
+              <rect x="9"  y="8"  width="7" height="20" rx="1.5"/>
+              <rect x="18" y="12" width="7" height="16" rx="1.5"/>
+              <rect x="27" y="4"  width="7" height="24" rx="1.5"/>
+              <rect x="36" y="9"  width="7" height="19" rx="1.5"/>
+              <rect x="45" y="2"  width="7" height="26" rx="1.5"/>
+              <rect x="54" y="11" width="7" height="17" rx="1.5"/>
+              <rect x="63" y="6"  width="7" height="22" rx="1.5"/>
+              <rect x="72" y="15" width="7" height="13" rx="1.5"/>
+            </svg>
+            <span>Run a forecast to see results</span>
+          </div>
         </div>
       </section>
 
       <!-- PV History Chart -->
       <section class="card">
         <h2 class="mb-3 sidebar-label">PV Prediction Accuracy</h2>
-        <div class="h-56 w-full">
+        <div class="h-56 w-full chart-wrap">
           <canvas id="pv-accuracy-chart" class="h-full w-full"></canvas>
+          <div class="chart-empty">
+            <svg width="80" height="28" viewBox="0 0 80 28" aria-hidden="true" class="chart-empty-bars">
+              <rect x="0"  y="16" width="7" height="12" rx="1.5"/>
+              <rect x="9"  y="8"  width="7" height="20" rx="1.5"/>
+              <rect x="18" y="12" width="7" height="16" rx="1.5"/>
+              <rect x="27" y="4"  width="7" height="24" rx="1.5"/>
+              <rect x="36" y="9"  width="7" height="19" rx="1.5"/>
+              <rect x="45" y="2"  width="7" height="26" rx="1.5"/>
+              <rect x="54" y="11" width="7" height="17" rx="1.5"/>
+              <rect x="63" y="6"  width="7" height="22" rx="1.5"/>
+              <rect x="72" y="15" width="7" height="13" rx="1.5"/>
+            </svg>
+            <span>Run a forecast to see results</span>
+          </div>
         </div>
-        <div class="h-40 w-full mt-4">
+        <div class="h-40 w-full mt-4 chart-wrap">
           <canvas id="pv-accuracy-diff-chart" class="h-full w-full"></canvas>
+          <div class="chart-empty">
+            <svg width="80" height="28" viewBox="0 0 80 28" aria-hidden="true" class="chart-empty-bars">
+              <rect x="0"  y="16" width="7" height="12" rx="1.5"/>
+              <rect x="9"  y="8"  width="7" height="20" rx="1.5"/>
+              <rect x="18" y="12" width="7" height="16" rx="1.5"/>
+              <rect x="27" y="4"  width="7" height="24" rx="1.5"/>
+              <rect x="36" y="9"  width="7" height="19" rx="1.5"/>
+              <rect x="45" y="2"  width="7" height="26" rx="1.5"/>
+              <rect x="54" y="11" width="7" height="17" rx="1.5"/>
+              <rect x="63" y="6"  width="7" height="22" rx="1.5"/>
+              <rect x="72" y="15" width="7" height="13" rx="1.5"/>
+            </svg>
+            <span>Run a forecast to see results</span>
+          </div>
         </div>
       </section>
 
@@ -1227,14 +1400,42 @@
     <section class="lg:col-span-2 space-y-6 min-w-0">
       <div class="card">
         <h3 class="mb-3 sidebar-label">Charging flows</h3>
-        <div class="h-52 w-full">
+        <div class="h-52 w-full chart-wrap">
           <canvas id="ev-power-chart" class="h-full w-full"></canvas>
+          <div class="chart-empty">
+            <svg width="80" height="28" viewBox="0 0 80 28" aria-hidden="true" class="chart-empty-bars">
+              <rect x="0"  y="16" width="7" height="12" rx="1.5"/>
+              <rect x="9"  y="8"  width="7" height="20" rx="1.5"/>
+              <rect x="18" y="12" width="7" height="16" rx="1.5"/>
+              <rect x="27" y="4"  width="7" height="24" rx="1.5"/>
+              <rect x="36" y="9"  width="7" height="19" rx="1.5"/>
+              <rect x="45" y="2"  width="7" height="26" rx="1.5"/>
+              <rect x="54" y="11" width="7" height="17" rx="1.5"/>
+              <rect x="63" y="6"  width="7" height="22" rx="1.5"/>
+              <rect x="72" y="15" width="7" height="13" rx="1.5"/>
+            </svg>
+            <span>Run the optimizer to see results</span>
+          </div>
         </div>
       </div>
       <div class="card">
         <h3 class="mb-3 sidebar-label">EV battery SoC</h3>
-        <div class="h-52 w-full">
+        <div class="h-52 w-full chart-wrap">
           <canvas id="ev-soc-chart-tab" class="h-full w-full"></canvas>
+          <div class="chart-empty">
+            <svg width="80" height="28" viewBox="0 0 80 28" aria-hidden="true" class="chart-empty-bars">
+              <rect x="0"  y="16" width="7" height="12" rx="1.5"/>
+              <rect x="9"  y="8"  width="7" height="20" rx="1.5"/>
+              <rect x="18" y="12" width="7" height="16" rx="1.5"/>
+              <rect x="27" y="4"  width="7" height="24" rx="1.5"/>
+              <rect x="36" y="9"  width="7" height="19" rx="1.5"/>
+              <rect x="45" y="2"  width="7" height="26" rx="1.5"/>
+              <rect x="54" y="11" width="7" height="17" rx="1.5"/>
+              <rect x="63" y="6"  width="7" height="22" rx="1.5"/>
+              <rect x="72" y="15" width="7" height="13" rx="1.5"/>
+            </svg>
+            <span>Run the optimizer to see results</span>
+          </div>
         </div>
       </div>
       <div class="card overflow-auto">

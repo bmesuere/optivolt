@@ -275,20 +275,10 @@ async function onRun() {
 }
 
 function renderAllCharts(rows, cfg, rebalanceWindow = null, evSettings = null) {
-  // Set chart containers to pending (opacity 0) before redrawing
-  const canvases = [els.flows, els.soc, els.prices, els.loadpv].filter(Boolean);
-  const containers = canvases.map(c => c.parentElement).filter(Boolean);
-  containers.forEach(el => el.classList.add('chart-fade', 'chart-pending'));
-
   drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, rebalanceWindow, evSettings);
   drawSocChart(els.soc, rows, cfg.stepSize_m, evSettings);
   drawPricesStepLines(els.prices, rows, cfg.stepSize_m);
   drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m);
-
-  // Double-rAF: Chart.js draws on its own rAF pass; wait one extra frame before revealing.
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    containers.forEach(el => el.classList.remove('chart-pending'));
-  }));
 }
 
 async function persistConfig(cfg = snapshotUI(els)) {

@@ -12,6 +12,7 @@ import {
 } from './api/api.js';
 import { debounce } from './utils.js';
 import { buildTimeAxisFromTimestamps, getBaseOptions, renderChart, toRGBA, SOLUTION_COLORS } from './charts.js';
+import { createTooltipHandler, fmtKwh, getChartAnimations, ttHeader, ttRow, ttDivider } from './chart-tooltip.js';
 import { initValidation } from './predictions-validation.js';
 
 let lastLoadForecast = null;
@@ -297,7 +298,28 @@ function renderCombinedForecastChart() {
         },
       ],
     },
-    options: getBaseOptions({ ...axis, yTitle: 'kWh' }),
+    options: getBaseOptions({ ...axis, yTitle: 'kWh' }, {
+      ...getChartAnimations('bar'),
+      plugins: {
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          enabled: false,
+          external: createTooltipHandler({
+            renderContent: (_idx, tooltip) => {
+              const time = tooltip.title?.[0] ?? '';
+              let html = ttHeader(time);
+              for (const pt of (tooltip.dataPoints ?? [])) {
+                if (pt.raw == null) continue;
+                html += ttRow(pt.dataset.borderColor, pt.dataset.label, `${fmtKwh(pt.raw)} kWh`);
+              }
+              return html;
+            },
+          }),
+          callbacks: { title: axis.tooltipTitleCb },
+        },
+      },
+    }),
   });
 }
 
@@ -375,7 +397,27 @@ function renderAccuracyCharts(overlayCanvasId, diffCanvasId, recentData, options
         },
       ],
     },
-    options: getBaseOptions({ ...axis, yTitle: 'kWh' }),
+    options: getBaseOptions({ ...axis, yTitle: 'kWh' }, {
+      ...getChartAnimations('line'),
+      plugins: {
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          enabled: false,
+          external: createTooltipHandler({
+            renderContent: (_idx, tooltip) => {
+              const time = tooltip.title?.[0] ?? '';
+              let html = ttHeader(time);
+              for (const pt of (tooltip.dataPoints ?? [])) {
+                html += ttRow(pt.dataset.borderColor, pt.dataset.label, `${fmtKwh(pt.raw)} kWh`);
+              }
+              return html;
+            },
+          }),
+          callbacks: { title: axis.tooltipTitleCb },
+        },
+      },
+    }),
   });
 
   // Chart 2: predicted − actual difference area, no legend
@@ -397,7 +439,31 @@ function renderAccuracyCharts(overlayCanvasId, diffCanvasId, recentData, options
         },
       ],
     },
-    options: getBaseOptions({ ...axis, yTitle: 'kWh diff' }, { plugins: { legend: { display: false } } }),
+    options: getBaseOptions({ ...axis, yTitle: 'kWh diff' }, {
+      ...getChartAnimations('line'),
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          enabled: false,
+          external: createTooltipHandler({
+            renderContent: (_idx, tooltip) => {
+              const time = tooltip.title?.[0] ?? '';
+              const pt = tooltip.dataPoints?.[0];
+              if (!pt) return ttHeader(time);
+              const v = pt.raw;
+              const color = v >= 0 ? 'rgb(139,201,100)' : 'rgb(233,122,131)';
+              let html = ttHeader(time);
+              html += ttDivider();
+              html += ttRow(color, 'Pred − Actual', `${v >= 0 ? '+' : ''}${fmtKwh(Math.abs(v))} kWh`);
+              return html;
+            },
+          }),
+          callbacks: { title: axis.tooltipTitleCb },
+        },
+      },
+    }),
   });
 }
 
