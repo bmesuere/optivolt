@@ -580,14 +580,18 @@ export function drawEvPowerChart(canvas, rows, stepSize_m = 15, evSettings = {})
   const timestampsMs = rows.map(r => r.timestampMs);
   const axis = buildTimeAxisFromTimestamps(timestampsMs);
 
-  const h = Math.max(0.000001, Number(stepSize_m) / 60);
-  const W2kWh = (x) => (x || 0) * h / 1000;
   const theme = getChartTheme();
 
+  const toSourceAmps = (r, key) => {
+    const total_W = (r.g2ev || 0) + (r.pv2ev || 0) + (r.b2ev || 0);
+    const ev_A = r.ev_charge_A || 0;
+    return total_W > 0 ? ev_A * (r[key] || 0) / total_W : 0;
+  };
+
   const datasets = [
-    dsBar("Grid", rows.map(r => W2kWh(r.g2ev)), SOLUTION_COLORS.g2ev, "ev"),
-    dsBar("Solar", rows.map(r => W2kWh(r.pv2ev)), SOLUTION_COLORS.pv2ev, "ev"),
-    dsBar("Battery", rows.map(r => W2kWh(r.b2ev)), SOLUTION_COLORS.b2ev, "ev"),
+    dsBar("Grid", rows.map(r => toSourceAmps(r, "g2ev")), SOLUTION_COLORS.g2ev, "ev"),
+    dsBar("Solar", rows.map(r => toSourceAmps(r, "pv2ev")), SOLUTION_COLORS.pv2ev, "ev"),
+    dsBar("Battery", rows.map(r => toSourceAmps(r, "b2ev")), SOLUTION_COLORS.b2ev, "ev"),
     {
       label: "Price",
       data: rows.map(r => r.ic ?? 0),
@@ -611,13 +615,13 @@ export function drawEvPowerChart(canvas, rows, stepSize_m = 15, evSettings = {})
         { key: "g2ev", color: SOLUTION_COLORS.g2ev, label: "Grid" },
         { key: "pv2ev", color: SOLUTION_COLORS.pv2ev, label: "Solar" },
         { key: "b2ev", color: SOLUTION_COLORS.b2ev, label: "Battery" },
-      ].filter(s => W2kWh(row[s.key]) > 0);
+      ].filter(s => toSourceAmps(row, s.key) > 0);
 
       let html = ttHeader(time);
       if (sources.length) {
-        html += ttSection("Charging");
+        html += ttSection(`Charging — ${(row.ev_charge_A || 0).toFixed(1)} A total`);
         for (const s of sources) {
-          html += ttRow(s.color, s.label, `${fmtKwh(W2kWh(row[s.key]))} kWh`);
+          html += ttRow(s.color, s.label, `${toSourceAmps(row, s.key).toFixed(1)} A`);
         }
       }
       html += ttDivider();
@@ -626,7 +630,7 @@ export function drawEvPowerChart(canvas, rows, stepSize_m = 15, evSettings = {})
     },
   });
 
-  const options = getBaseOptions({ ...axis, yTitle: "kWh", stacked: true }, {
+  const options = getBaseOptions({ ...axis, yTitle: "A", stacked: true }, {
     ...getChartAnimations('bar'),
     plugins: {
       tooltip: {
