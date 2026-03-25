@@ -299,7 +299,7 @@ function renderCombinedForecastChart() {
       ],
     },
     options: getBaseOptions({ ...axis, yTitle: 'kWh' }, {
-      ...getChartAnimations('bar'),
+      ...getChartAnimations('bar', allTs.length),
       plugins: {
         tooltip: {
           mode: 'index',
@@ -398,7 +398,7 @@ function renderAccuracyCharts(overlayCanvasId, diffCanvasId, recentData, options
       ],
     },
     options: getBaseOptions({ ...axis, yTitle: 'kWh' }, {
-      ...getChartAnimations('line'),
+      ...getChartAnimations('line', sorted.length),
       plugins: {
         tooltip: {
           mode: 'index',
@@ -440,7 +440,7 @@ function renderAccuracyCharts(overlayCanvasId, diffCanvasId, recentData, options
       ],
     },
     options: getBaseOptions({ ...axis, yTitle: 'kWh diff' }, {
-      ...getChartAnimations('line'),
+      ...getChartAnimations('line', sorted.length),
       plugins: {
         legend: { display: false },
         tooltip: {

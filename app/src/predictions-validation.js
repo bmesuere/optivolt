@@ -192,7 +192,7 @@ function onShowChart(row) {
     diffChart = null;
   }
 
-  const lineAnims = getChartAnimations('line');
+  const lineAnims = getChartAnimations('line', preds.length);
 
   // Chart 1: two clean lines, solid legend swatch (backgroundColor = line color, fill: false)
   accuracyChart = new Chart(canvas, {

@@ -341,7 +341,7 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, rebalance
     type: "bar",
     data: { labels: axis.labels, datasets },
     options: getBaseOptions({ ...axis, yTitle: "kWh", stacked: true }, {
-      ...getChartAnimations('bar'),
+      ...getChartAnimations('bar', rows.length),
       plugins: {
         tooltip: {
           mode: "index",
@@ -412,7 +412,7 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15, evSettings = null) 
     type: "line",
     data: { labels: axis.labels, datasets },
     options: getBaseOptions({ ...axis, yTitle: "%" }, {
-      ...getChartAnimations('line'),
+      ...getChartAnimations('line', rows.length),
       plugins: {
         ...(hasEvSoc ? {} : { legend: { display: false } }),
         tooltip: {
@@ -477,7 +477,7 @@ export function drawPricesStepLines(canvas, rows, _stepSize_m = 15) {
       ]
     },
     options: getBaseOptions({ ...axis, yTitle: "c€/kWh" }, {
-      ...getChartAnimations('line'),
+      ...getChartAnimations('line', rows.length),
       plugins: {
         tooltip: {
           mode: "index",
@@ -548,7 +548,7 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
       ]
     },
     options: getBaseOptions({ ...axis, yTitle: "kWh" }, {
-      ...getChartAnimations('bar'),
+      ...getChartAnimations('bar', buckets.length),
       plugins: {
         tooltip: {
           mode: "index",
@@ -631,7 +631,7 @@ export function drawEvPowerChart(canvas, rows, stepSize_m = 15, evSettings = {})
   });
 
   const options = getBaseOptions({ ...axis, yTitle: "A", stacked: true }, {
-    ...getChartAnimations('bar'),
+    ...getChartAnimations('bar', rows.length),
     plugins: {
       tooltip: {
         mode: "index",
@@ -691,7 +691,7 @@ export function drawEvSocChartTab(canvas, rows, evSettings = {}) {
       }]
     },
     options: getBaseOptions({ ...axis, yTitle: "%" }, {
-      ...getChartAnimations('line'),
+      ...getChartAnimations('line', rows.length),
       plugins: {
         legend: { display: false },
         tooltip: {

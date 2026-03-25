@@ -162,18 +162,18 @@ export function fmtKwh(v) {
 // Animation configs
 // ---------------------------------------------------------------------------
 
-export function getChartAnimations(type) {
-  // Staggered wave: each item is delayed per slot, capped at 700ms so
-  // dense charts (96 slots) still finish in reasonable time.
-  const { duration, perSlot } = type === 'bar'
-    ? { duration: 600, perSlot: 25 }
-    : { duration: 500, perSlot: 20 };
+export function getChartAnimations(type, numSlots = 1) {
+  // Total stagger window is 500ms; per-slot delay is derived from slot count
+  // so the animation always completes in ~500ms regardless of dataset size.
+  const totalStagger = 500;
+  const duration = type === 'bar' ? 600 : 500;
+  const perSlot = numSlots > 1 ? totalStagger / (numSlots - 1) : 0;
   return {
     animation: {
       duration,
       easing: 'easeOutQuart',
       delay: (ctx) => ctx.type === 'data' && ctx.mode === 'default'
-        ? Math.min(ctx.dataIndex * perSlot, 700) : 0,
+        ? ctx.dataIndex * perSlot : 0,
     },
   };
 }
