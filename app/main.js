@@ -27,6 +27,15 @@ import {
   updateTerminalCustomUI,
 } from "./src/state.js";
 
+// ---------- Helpers ----------
+function revealCards(panel) {
+  const cards = panel.querySelectorAll('.card');
+  cards.forEach((card, i) => {
+    card.style.animationDelay = `${i * 50}ms`;
+    card.classList.add('revealed');
+  });
+}
+
 // ---------- DOM ----------
 // 'els' is now retrieved via getElements() in boot() and passed around or accessed globally if we kept it global.
 // For cleaner refactoring, let's keep a module-level reference initialized in boot,
@@ -54,13 +63,54 @@ function setupTabSwitcher() {
     { tab: document.getElementById('tab-settings'),    panel: document.getElementById('panel-settings') },
   ].filter(t => t.tab && t.panel);
 
-  function activateTab(activeIndex) {
-    tabs.forEach(({ tab, panel }, i) => {
-      const isActive = i === activeIndex;
-      panel.classList.toggle('hidden', !isActive);
-      tab.setAttribute('aria-selected', String(isActive));
-      tab.className = isActive ? ACTIVE_CLS : INACTIVE_CLS;
+  let activeIndex = 0;
+  let pendingSwitch = null;
+
+  function activateTab(newIndex) {
+    // Update tab button styles immediately
+    tabs.forEach(({ tab }, i) => {
+      tab.setAttribute('aria-selected', String(i === newIndex));
+      tab.className = i === newIndex ? ACTIVE_CLS : INACTIVE_CLS;
     });
+
+    if (newIndex === activeIndex) return;
+
+    // Cancel any in-progress transition and snap to clean state
+    if (pendingSwitch !== null) {
+      clearTimeout(pendingSwitch);
+      pendingSwitch = null;
+      tabs.forEach(({ panel }, i) => {
+        panel.classList.remove('panel-exit', 'panel-enter');
+        panel.classList.toggle('panel-hidden', i !== activeIndex);
+      });
+    }
+
+    const outgoing = tabs[activeIndex];
+    const incoming = tabs[newIndex];
+
+    outgoing.panel.classList.add('panel-exit');
+
+    pendingSwitch = setTimeout(() => {
+      pendingSwitch = null;
+      outgoing.panel.classList.add('panel-hidden');
+      outgoing.panel.classList.remove('panel-exit');
+
+      // Pre-reveal cards so they don't double-fade during the panel crossfade
+      incoming.panel.querySelectorAll('.card').forEach(card => {
+        card.style.animationDelay = '';
+        card.classList.add('revealed');
+      });
+
+      // Show incoming, start transparent
+      incoming.panel.classList.remove('panel-hidden');
+      incoming.panel.classList.add('panel-enter');
+
+      // Force reflow, then remove panel-enter to trigger fade-in transition
+      incoming.panel.getBoundingClientRect();
+      incoming.panel.classList.remove('panel-enter');
+
+      activeIndex = newIndex;
+    }, 200);
   }
 
   tabs.forEach(({ tab }, i) => tab.addEventListener('click', () => activateTab(i)));
@@ -104,6 +154,10 @@ async function boot() {
 
   // Initial compute
   await onRun();
+
+  // Reveal cards on the initial (optimizer) panel after first compute
+  const optimizerPanel = document.getElementById('panel-optimizer');
+  if (optimizerPanel) revealCards(optimizerPanel);
 }
 
 // ---------- Actions ----------
@@ -132,6 +186,13 @@ async function onRun() {
     // Reset color to neutral
     els.status.className = "text-sm font-medium text-ink dark:text-slate-100";
   }
+
+  const runBtn = els.run;
+  if (runBtn) {
+    runBtn.classList.add('loading');
+    runBtn.disabled = true;
+  }
+
   try {
     // Persist current inputs to /settings; server will read these
     await persistConfig();
@@ -205,14 +266,29 @@ async function onRun() {
     }
     // In error, clear summary so it doesn't look "fresh"
     updateSummaryUI(els, null);
+  } finally {
+    if (runBtn) {
+      runBtn.classList.remove('loading');
+      runBtn.disabled = false;
+    }
   }
 }
 
 function renderAllCharts(rows, cfg, rebalanceWindow = null, evSettings = null) {
+  // Set chart containers to pending (opacity 0) before redrawing
+  const canvases = [els.flows, els.soc, els.prices, els.loadpv].filter(Boolean);
+  const containers = canvases.map(c => c.parentElement).filter(Boolean);
+  containers.forEach(el => el.classList.add('chart-fade', 'chart-pending'));
+
   drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, rebalanceWindow, evSettings);
   drawSocChart(els.soc, rows, cfg.stepSize_m, evSettings);
   drawPricesStepLines(els.prices, rows, cfg.stepSize_m);
   drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m);
+
+  // Double-rAF: Chart.js draws on its own rAF pass; wait one extra frame before revealing.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    containers.forEach(el => el.classList.remove('chart-pending'));
+  }));
 }
 
 async function persistConfig(cfg = snapshotUI(els)) {

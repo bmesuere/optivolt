@@ -334,7 +334,20 @@ function num(val) {
 
 function setText(el, txt) {
   if (!el) return;
-  el.textContent = txt;
+  if (el.textContent === txt) return;
+
+  // Clear any in-flight fade
+  if (el._fadeTimer) clearTimeout(el._fadeTimer);
+
+  el.style.transition = 'opacity 0.15s ease';
+  el.classList.add('value-updating');
+  el._fadeTimer = setTimeout(() => {
+    if (el.isConnected) {
+      el.textContent = txt;
+      el.classList.remove('value-updating');
+    }
+    el._fadeTimer = null;
+  }, 150);
 }
 
 export function formatKWh(v) {
