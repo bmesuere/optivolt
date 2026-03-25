@@ -229,7 +229,6 @@
       font-size: 0.8125rem;
       font-weight: 500;
       color: #0f172a;
-      transition: opacity 0.15s ease;
     }
 
     :root.dark .stat-value {
@@ -275,7 +274,7 @@
     }
 
     /* === Summary value fade === */
-    .stat-value.value-updating {
+    .value-updating {
       opacity: 0;
     }
 
@@ -523,7 +522,7 @@
           <div class="mt-4">
             <button id="run" title="Recompute (⌘+Enter)"
               class="w-full rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-sky-400/50 transition-all flex items-center justify-center gap-2">
-              <span class="spinner"></span>
+              <span class="spinner" aria-hidden="true"></span>
               <span class="btn-label">Recompute</span>
             </button>
           </div>

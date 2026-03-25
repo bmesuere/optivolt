@@ -64,6 +64,7 @@ function setupTabSwitcher() {
   ].filter(t => t.tab && t.panel);
 
   let activeIndex = 0;
+  let pendingSwitch = null;
 
   function activateTab(newIndex) {
     // Update tab button styles immediately
@@ -74,13 +75,23 @@ function setupTabSwitcher() {
 
     if (newIndex === activeIndex) return;
 
+    // Cancel any in-progress transition and snap to clean state
+    if (pendingSwitch !== null) {
+      clearTimeout(pendingSwitch);
+      pendingSwitch = null;
+      tabs.forEach(({ panel }, i) => {
+        panel.classList.remove('panel-exit', 'panel-enter');
+        panel.classList.toggle('panel-hidden', i !== activeIndex);
+      });
+    }
+
     const outgoing = tabs[activeIndex];
     const incoming = tabs[newIndex];
 
-    // Fade out current panel
     outgoing.panel.classList.add('panel-exit');
 
-    setTimeout(() => {
+    pendingSwitch = setTimeout(() => {
+      pendingSwitch = null;
       outgoing.panel.classList.add('panel-hidden');
       outgoing.panel.classList.remove('panel-exit');
 

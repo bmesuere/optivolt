@@ -339,6 +339,7 @@ function setText(el, txt) {
   // Clear any in-flight fade
   if (el._fadeTimer) clearTimeout(el._fadeTimer);
 
+  el.style.transition = 'opacity 0.15s ease';
   el.classList.add('value-updating');
   el._fadeTimer = setTimeout(() => {
     if (el.isConnected) {
