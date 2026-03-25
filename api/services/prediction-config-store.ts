@@ -34,5 +34,7 @@ export async function loadPredictionConfig(): Promise<PredictionConfig> {
 }
 
 export async function savePredictionConfig(config: PredictionConfig): Promise<void> {
-  await writeJson(PREDICTION_CONFIG_PATH, config);
+  // Never persist validationWindow — it's always computed dynamically from the current date
+  const { validationWindow: _vw, ...rest } = config;
+  await writeJson(PREDICTION_CONFIG_PATH, rest);
 }

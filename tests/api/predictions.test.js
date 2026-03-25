@@ -15,10 +15,8 @@ import { loadSettings } from '../../api/services/settings-store.ts';
 import { loadData, saveData } from '../../api/services/data-store.ts';
 
 const mockConfig = {
-  historyStart: '2025-11-01T00:00:00Z',
   sensors: [{ id: 'sensor.grid', name: 'Grid Import', unit: 'kWh' }],
   derived: [],
-  validationWindow: { start: '2026-01-18T00:00:00Z', end: '2026-01-25T00:00:00Z' },
   activeConfig: { sensor: 'Grid Import', lookbackWeeks: 4, dayFilter: 'weekday-weekend', aggregation: 'mean' },
 };
 
