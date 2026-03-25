@@ -5,6 +5,28 @@
 export type TerminalSocValuation = 'zero' | 'min' | 'avg' | 'max' | 'custom';
 
 /**
+ * How HA should control the charger for a given slot:
+ *   fixed      — set exactly ev_charge_A amps (charger is at minimum rate; can't track dynamically)
+ *   solar_only — track actual PV surplus only; may turn off if PV drops below minimum
+ *   solar_grid — track PV surplus + grid headroom; no battery draw (covers grid-only slots too)
+ *   max        — charge at maximum amps using all available sources (battery involved)
+ *   off        — no charging
+ */
+export type EvChargeMode = 'off' | 'fixed' | 'solar_only' | 'solar_grid' | 'max';
+
+export interface EvConfig {
+  evMinChargePower_W: number;
+  evMaxChargePower_W: number;
+  evBatteryCapacity_Wh: number;
+  evInitialSoc_percent: number;
+  evTargetSoc_percent: number;
+  /** Number of available charging slots before departure. Constraint emitted if <= T. */
+  evDepartureSlot: number;
+  /** AC-to-DC efficiency of the EV's onboard charger, as a percentage (e.g. 90 = 90%). */
+  evChargeEfficiency_percent: number;
+}
+
+/**
  * Fully resolved solver configuration, as produced by config-builder.
  * All scalar fields are validated and present; arrays are aligned time series.
  */
@@ -40,6 +62,9 @@ export interface SolverConfig {
   rebalanceHoldSlots?: number;
   rebalanceRemainingSlots?: number;
   rebalanceTargetSoc_percent?: number;
+
+  // EV charging (optional — only present when evEnabled is true and EV is plugged in)
+  ev?: EvConfig;
 }
 
 /**
@@ -73,6 +98,13 @@ export interface PlanRow {
   exp: number;   // total export W (pv2g + b2g)
   soc: number;   // battery SoC Wh
   soc_percent: number;  // battery SoC %
+  g2ev: number;         // grid → EV W
+  pv2ev: number;        // PV → EV W
+  b2ev: number;         // battery → EV W
+  ev_charge: number;    // total EV charge power W
+  ev_charge_A: number;  // charge current A (ev_charge / 230 / phases)
+  ev_charge_mode: EvChargeMode;
+  ev_soc_percent: number;  // EV SoC %
 }
 
 /**
@@ -123,4 +155,8 @@ export interface PlanSummary {
   batteryExportTippingPoint_cents_per_kWh: number | null;
   pvExportTippingPoint_cents_per_kWh: number | null;
   rebalanceStatus: 'disabled' | 'scheduled' | 'active';
+  evChargeTotal_kWh: number;
+  evChargeFromGrid_kWh: number;
+  evChargeFromPv_kWh: number;
+  evChargeFromBattery_kWh: number;
 }

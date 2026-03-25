@@ -13,7 +13,7 @@ import { SOLUTION_COLORS } from "./charts.js";
  * @param {HTMLElement}  [opts.targets.tableUnit] - element for the "Units: ..." label
  * @param {boolean}      opts.showKwh             - whether to display kWh instead of W
  */
-export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
+export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow, evSettings }) {
   const { table, tableUnit } = targets || {};
   if (!table || !Array.isArray(rows) || rows.length === 0) return;
 
@@ -24,6 +24,11 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
   const fmtTime = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
   const fmtDate = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit" });
 
+  const departureMs = evSettings?.departureTime ? new Date(evSettings.departureTime).getTime() : null;
+  const departureIdx = departureMs != null
+    ? rows.findIndex(r => r.timestampMs >= departureMs)
+    : -1;
+
   const timesDisp = rows.map((row) => {
     const dt = new Date(row.timestampMs);
     // If minutes and hours are 0, it's midnight -> show Date
@@ -33,8 +38,13 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
     return fmtTime.format(dt);
   });
 
+  const hasEv = rows.some(r => (Number(r.ev_charge) || 0) > 0 || (Number(r.ev_soc_percent) || 0) > 0);
+
   const cols = [
-    { key: "time", headerHtml: "Time", fmt: (_, idx) => timesDisp[idx] },
+    { key: "time", headerHtml: "Time", fmt: (_, idx) => {
+      const label = timesDisp[idx];
+      return label;
+    }},
     { key: "load", headerHtml: "Exp.<br>load", fmt: x => fmtEnergy(x, { dash: false }), tip: "Expected Load" },
     { key: "pv", headerHtml: "Exp.<br>PV", fmt: x => fmtEnergy(x, { dash: false }), tip: "Expected PV" },
     { key: "ic", headerHtml: "Import<br>cost", fmt: dec2Thin },
@@ -49,6 +59,39 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
 
     { key: "g2b", headerHtml: "g2b", fmt: x => fmtEnergy(x), tip: "Grid → Battery" },
     { key: "b2g", headerHtml: "b2g", fmt: x => fmtEnergy(x), tip: "Battery → Grid" },
+
+    ...(hasEv ? [
+      {
+        key: "ev_charge",
+        headerHtml: "EV",
+        fmt: (x, ri) => {
+          const row = rows[ri];
+          const parts = [
+            row.g2ev    > 0 && `Grid→EV: ${fmtEnergy(row.g2ev)}`,
+            row.b2ev    > 0 && `Battery→EV: ${fmtEnergy(row.b2ev)}`,
+            row.pv2ev   > 0 && `PV→EV: ${fmtEnergy(row.pv2ev)}`,
+          ].filter(Boolean);
+          const tip = parts.length ? parts.join(' · ') : null;
+          return { text: fmtEnergy(x), tip };
+        },
+        tip: "EV Charging (hover for breakdown)",
+        cellTip: true,
+      },
+      {
+        key: "ev_soc_percent",
+        headerHtml: "EV<br>SoC",
+        fmt: (x, ri) => {
+          const n = Number(x) || 0;
+          if (n === 0) return "–";
+          const text = `${Math.round(n)}%`;
+          if (ri === departureIdx) {
+            return `<span class="text-emerald-600 dark:text-emerald-400 font-semibold">${text}</span>`;
+          }
+          return text;
+        },
+        tip: "EV Battery SoC",
+      },
+    ] : []),
 
     { key: "imp", headerHtml: "Grid<br>import", fmt: x => fmtEnergy(x), tip: "Grid Import" },
     { key: "exp", headerHtml: "Grid<br>export", fmt: x => fmtEnergy(x), tip: "Grid Export" },
@@ -87,7 +130,7 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
     },
   ];
 
-  const SUMMABLE_KEYS = new Set(["load", "pv", "g2l", "b2l", "pv2l", "pv2b", "pv2g", "g2b", "b2g", "imp", "exp"]);
+  const SUMMABLE_KEYS = new Set(["load", "pv", "g2l", "b2l", "pv2l", "pv2b", "pv2g", "g2b", "b2g", "ev_charge", "imp", "exp"]);
 
   const totals = {};
   for (const key of SUMMABLE_KEYS) {
@@ -151,7 +194,8 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow }) {
 
     const isRebalancing = rebalanceWindow != null && ri >= rebalanceWindow.startIdx && ri <= rebalanceWindow.endIdx;
     const rowBg = isRebalancing ? "bg-sky-100 dark:bg-sky-900/50" : "";
-    return `<tr class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 ${rowBg}">${tds}</tr>`;
+    const isDeparture = ri === departureIdx;
+    return `<tr class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 ${rowBg}${isDeparture ? ' ring-1 ring-inset ring-emerald-200 dark:ring-emerald-800/50' : ''}">${tds}</tr>`;
   }).join("")}
     </tbody>`;
 

@@ -37,6 +37,17 @@ export function snapshotUI(els) {
     haUrl: els.haUrl?.value ?? '',
     haToken: els.haToken?.value ?? '',
 
+    // EV CHARGING
+    evEnabled: !!els.evEnabled?.checked,
+    evMinChargeCurrent_A: num(els.evMinChargeCurrent?.value),
+    evMaxChargeCurrent_A: num(els.evMaxChargeCurrent?.value),
+    evBatteryCapacity_kWh: num(els.evBatteryCapacity?.value),
+    evChargeEfficiency_percent: num(els.evChargeEfficiency?.value),
+    evDepartureTime: els.evDepartureTime?.value ?? '',
+    evTargetSoc_percent: num(els.evTargetSoc?.value),
+    evSocSensor: els.evSocSensor?.value ?? '',
+    evPlugSensor: els.evPlugSensor?.value ?? '',
+
     // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
     // Note: updateDataBeforeRun / pushToVictron are not part of the persisted settings
@@ -85,6 +96,19 @@ export function hydrateUI(els, obj = {}) {
   if (els.haSettingsGroup) {
     els.haSettingsGroup.hidden = !!obj.isAddon;
   }
+
+  // EV CHARGING
+  if (els.evEnabled && obj.evEnabled != null) {
+    els.evEnabled.checked = !!obj.evEnabled;
+  }
+  setIfDef(els.evMinChargeCurrent, obj.evMinChargeCurrent_A);
+  setIfDef(els.evMaxChargeCurrent, obj.evMaxChargeCurrent_A);
+  setIfDef(els.evBatteryCapacity, obj.evBatteryCapacity_kWh);
+  setIfDef(els.evChargeEfficiency, obj.evChargeEfficiency_percent);
+  setIfDef(els.evDepartureTime, obj.evDepartureTime);
+  setIfDef(els.evTargetSoc, obj.evTargetSoc_percent);
+  setIfDef(els.evSocSensor, obj.evSocSensor);
+  setIfDef(els.evPlugSensor, obj.evPlugSensor);
 
   // UI-only
   if (els.tableKwh && obj.tableShowKwh != null) {
@@ -137,6 +161,7 @@ export function updateSummaryUI(els, summary) {
     setText(els.gridChargeTp, "—");
     setText(els.batteryExportTp, "—");
     updateRebalanceStatus(els, null);
+    updateEvSummary(els, null);
 
     // reset mini bars
     const loadSplitBar = document.getElementById("load-split-bar");
@@ -187,6 +212,7 @@ export function updateSummaryUI(els, summary) {
   );
 
   updateRebalanceStatus(els, summary.rebalanceStatus);
+  updateEvSummary(els, summary);
 
   // --- Energy Flow Bar ---
   const g2b = Number(summary.gridToBattery_kWh) || 0;
@@ -194,17 +220,50 @@ export function updateSummaryUI(els, summary) {
   const b2l = Number(loadFromBattery_kWh) || 0;
   const b2g = Number(summary.batteryToGrid_kWh) || 0;
 
-
   const flowTotal = g2b + g2l + b2l + b2g;
 
   updateStackedBarContainer(
     document.getElementById("flow-split-bar"),
     flowTotal,
     [
-      { value: g2b, color: SOLUTION_COLORS.g2b, title: `Grid to Battery: ${formatKWh(g2b)}` }, // Charge
-      { value: g2l, color: SOLUTION_COLORS.g2l, title: `Grid to Load: ${formatKWh(g2l)}` },      // Load (Grid)
-      { value: b2l, color: SOLUTION_COLORS.b2l, title: `Battery to Load: ${formatKWh(b2l)}` },   // Load (Batt)
-      { value: b2g, color: SOLUTION_COLORS.b2g, title: `Battery to Grid: ${formatKWh(b2g)}` },   // Export
+      { value: g2b, color: SOLUTION_COLORS.g2b, title: `Grid to Battery: ${formatKWh(g2b)}` },
+      { value: g2l, color: SOLUTION_COLORS.g2l, title: `Grid to Load: ${formatKWh(g2l)}` },
+      { value: b2l, color: SOLUTION_COLORS.b2l, title: `Battery to Load: ${formatKWh(b2l)}` },
+      { value: b2g, color: SOLUTION_COLORS.b2g, title: `Battery to Grid: ${formatKWh(b2g)}` },
+    ]
+  );
+}
+
+function updateEvSummary(els, summary) {
+  if (!els.evSummaryBlock) return;
+
+  const total = Number(summary?.evChargeTotal_kWh) || 0;
+  if (total <= 0) {
+    els.evSummaryBlock.classList.add("hidden");
+    setText(els.sumEvGrid, "—");
+    setText(els.sumEvPv, "—");
+    setText(els.sumEvBatt, "—");
+    setText(els.sumEvTotal, "—");
+    return;
+  }
+
+  els.evSummaryBlock.classList.remove("hidden");
+  const fromGrid = Number(summary.evChargeFromGrid_kWh) || 0;
+  const fromPv   = Number(summary.evChargeFromPv_kWh) || 0;
+  const fromBatt = Number(summary.evChargeFromBattery_kWh) || 0;
+
+  setText(els.sumEvGrid, formatKWh(fromGrid));
+  setText(els.sumEvPv, formatKWh(fromPv));
+  setText(els.sumEvBatt, formatKWh(fromBatt));
+  setText(els.sumEvTotal, formatKWh(total));
+
+  updateStackedBarContainer(
+    document.getElementById("ev-split-bar"),
+    total,
+    [
+      { value: fromGrid, color: SOLUTION_COLORS.g2ev,  title: `Grid: ${formatKWh(fromGrid)}` },
+      { value: fromBatt, color: SOLUTION_COLORS.b2ev,  title: `Battery: ${formatKWh(fromBatt)}` },
+      { value: fromPv,   color: SOLUTION_COLORS.pv2ev, title: `PV: ${formatKWh(fromPv)}` },
     ]
   );
 }
@@ -234,7 +293,7 @@ export function updateTerminalCustomUI(els) {
 // ---------- Helpers ----------
 
 // Helper to update specific bar elements (legacy support for Load Split if we want, or unified)
-function updateStackedBarContainer(container, total, segments) {
+export function updateStackedBarContainer(container, total, segments) {
   if (!container) return;
   container.innerHTML = ""; // Clear for simplicity (or diff if performance needed, but this is infrequent)
 
@@ -278,7 +337,7 @@ function setText(el, txt) {
   el.textContent = txt;
 }
 
-function formatKWh(v) {
+export function formatKWh(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
   if (Math.abs(n) < 0.005) return "0.00 kWh";

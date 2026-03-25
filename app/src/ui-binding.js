@@ -63,18 +63,62 @@ export function getElements() {
     haUrl: $("#pred-ha-url"),
     haToken: $("#pred-ha-token"),
     haSettingsGroup: $("#pred-ha-settings-group"),
+
+    // EV summary (Optimizer tab)
+    evSummaryBlock: $("#ev-summary-block"),
+    sumEvGrid: $("#sum-ev-grid-kwh"),
+    sumEvPv: $("#sum-ev-pv-kwh"),
+    sumEvBatt: $("#sum-ev-batt-kwh"),
+    sumEvTotal: $("#sum-ev-total-kwh"),
+
+    // EV Charging (Settings tab)
+    evEnabled: $("#ev-enabled"),
+    evMinChargeCurrent: $("#ev-min-charge-current"),
+    evMaxChargeCurrent: $("#ev-max-charge-current"),
+    evBatteryCapacity: $("#ev-battery-capacity"),
+    evChargeEfficiency: $("#ev-charge-efficiency"),
+    evDepartureTime: $("#ev-departure-time"),
+    evDepartureQuickSet: $("#ev-departure-quick-set"),
+    evTargetSoc: $("#ev-target-soc"),
+    evTargetSocQuickSet: $("#ev-target-soc-quick-set"),
+    evSocSensor: $("#ev-soc-sensor"),
+    evPlugSensor: $("#ev-plug-sensor"),
+    evSocValue: $("#ev-soc-value"),
+    evPlugValue: $("#ev-plug-value"),
+
+    // EV tab
+    evNoCharging: $("#ev-no-charging"),
+    evChargingSummary: $("#ev-charging-summary"),
+    evTabCurrentSocRow: $("#ev-tab-current-soc-row"),
+    evTabCurrentSoc: $("#ev-tab-current-soc"),
+    evTabPlugRow: $("#ev-tab-plug-row"),
+    evTabPlugStatus: $("#ev-tab-plug-status"),
+    evTabGridKwh: $("#ev-tab-grid-kwh"),
+    evTabPvKwh: $("#ev-tab-pv-kwh"),
+    evTabBattKwh: $("#ev-tab-batt-kwh"),
+    evTabTotalKwh: $("#ev-tab-total-kwh"),
+    evTabSplitBar: $("#ev-tab-split-bar"),
+    evTabTotalCost: $("#ev-tab-total-cost"),
+    evTabEffectiveRate: $("#ev-tab-effective-rate"),
+    evTabFreeSolar: $("#ev-tab-free-solar"),
+    evTabModeRows: $("#ev-tab-mode-rows"),
+    evPowerChart: $("#ev-power-chart"),
+    evSocChartTab: $("#ev-soc-chart-tab"),
+    evScheduleTable: $("#ev-schedule-table"),
   };
 }
 
-export function wireGlobalInputs(els, { onInput, onRun, updateTerminalCustomUI }) {
-  // Auto-save whenever anything changes (except table toggler and run options)
+export function wireGlobalInputs(els, { onInput, onSave = onInput, onRun, updateTerminalCustomUI }) {
+  // Auto-save whenever anything changes (except table toggler and run options).
+  // Inputs with data-no-autosolve save settings but do not trigger an auto-solve.
   for (const el of document.querySelectorAll("input, select, textarea")) {
     if (el === els.tableKwh) continue;
     if (el === els.updateDataBeforeRun) continue; // Checkbox doesn't trigger auto-save
     if (el === els.pushToVictron) continue; // Checkbox doesn't trigger auto-save
     if (el.dataset.predictionsOnly) continue; // Predictions tab inputs handled separately
-    el.addEventListener("input", onInput);
-    el.addEventListener("change", onInput);
+    const handler = el.hasAttribute('data-no-autosolve') ? onSave : onInput;
+    el.addEventListener("input", handler);
+    el.addEventListener("change", handler);
   }
 
   els.terminal?.addEventListener("change", updateTerminalCustomUI);

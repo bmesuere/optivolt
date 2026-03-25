@@ -41,6 +41,15 @@ export interface Settings {
   rebalanceHoldHours: number;
   haUrl: string;
   haToken: string;
+  evEnabled: boolean;
+  evMinChargeCurrent_A: number;
+  evMaxChargeCurrent_A: number;
+  evBatteryCapacity_kWh: number;
+  evSocSensor: string;
+  evPlugSensor: string;
+  evDepartureTime: string;
+  evTargetSoc_percent: number;
+  evChargeEfficiency_percent: number;
 }
 
 // ----------------------------- Persisted data ---------------------------

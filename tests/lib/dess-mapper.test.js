@@ -12,7 +12,7 @@ describe('mapRowsToDess', () => {
   const baseRow = {
     g2l: 0, g2b: 0, pv2l: 0, pv2b: 0, pv2g: 0, b2l: 0, b2g: 0,
     soc: 500, soc_percent: 50,
-    load: 500, pv: 0,
+    load: 500, pv: 0, ev_charge: 0,
     ic: 10, ec: 5,
   };
 
@@ -396,7 +396,7 @@ describe('mapRowsToDessV2', () => {
     return {
       g2l: 0, g2b: 0, pv2l: 0, pv2b: 0, pv2g: 0, b2l: 0, b2g: 0,
       soc: 500, soc_percent: 50,
-      load: 0, pv: 0,
+      load: 0, pv: 0, ev_charge: 0,
       ic: 20, ec: 5,
       ...overrides,
     };

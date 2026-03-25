@@ -34,15 +34,25 @@ export function buildLP({
   // rebalancing (MILP)
   rebalanceRemainingSlots,
   rebalanceTargetSoc_percent,
+  ev,
 }: SolverConfig): string {
   const T = load_W.length;
   if (pv_W.length !== T || importPrice.length !== T || exportPrice.length !== T) {
     throw new Error("Arrays must have same length");
   }
 
+  // Tiebreak hierarchy (at near-zero prices, zero batteryCost):
+  //   pv→load (0) < pv→ev (2e-6) < pv→battery (3e-6) < pv→grid (4e-6)
+  //   grid→ev tiebreak (1e-6) < pv→ev (2e-6): PV is strictly preferred for EV at real prices.
+  //   At zero prices grid→ev (1e-6) < pv→ev (2e-6), but PV still prefers load because
+  //   routing PV to EV only saves 1e-6 net (grid_to_ev tiebreak - pv_to_ev tiebreak = -1e-6).
   const TIEBREAK = {
-    avoidExport: 2e-6, // stronger nudge: prefer pv used locally over pv→grid
-    pvToLoad: 1e-6,    // weaker nudge: prefer pv→load over pv→battery
+    avoidExport: 4e-6,           // prefer pv used locally over pv→grid
+    pvToLoad: 3e-6,              // prefer pv→load over pv→battery; must exceed pv→ev (2e-6) so pv→battery > pv→ev when batteryCost=0
+    preferPvForEv: 1e-6,         // extra cost on grid→ev and pv→ev; ensures pv→battery+grid→ev (4e-6) > pv→ev (2e-6)
+    pvLoadOverEv: 1e-6,          // extra cost on pv→ev beyond preferPvForEv; prefer pv→load over pv→ev
+    evOnPerSlot: 1e-6,           // escalating per-slot penalty on ev_on_t: breaks symmetry between equivalent charging schedules
+    rebalanceStartPerSlot: 1e-6, // escalating per-window penalty on start_balance_k: breaks symmetry between equivalent rebalance windows
   }
   const softMinSocPenalty_cents_per_Wh = 0.05; // penalty to keep soc above minSoc when possible
 
@@ -71,6 +81,23 @@ export function buildLP({
     ? (safeTargetSoc_percent / 100) * batteryCapacity_Wh
     : 0;
   const startBalance = (k: number) => `start_balance_${k}`;
+
+  // EV variable name helpers
+  const gridToEv    = (t: number) => `grid_to_ev_${t}`;
+  const pvToEv      = (t: number) => `pv_to_ev_${t}`;
+  const batteryToEv = (t: number) => `battery_to_ev_${t}`;
+  const evOn        = (t: number) => `ev_on_${t}`;
+  const evSocVar    = (t: number) => `ev_soc_${t}`;
+
+  // EV derived constants (only used when ev is defined)
+  const evActive        = ev != null;
+  const evCapacityWh    = ev?.evBatteryCapacity_Wh ?? 0;
+  const evInitialWh     = (ev?.evInitialSoc_percent ?? 0) / 100 * evCapacityWh;
+  const evTargetWh      = (ev?.evTargetSoc_percent  ?? 0) / 100 * evCapacityWh;
+  const evMinPow_W      = ev?.evMinChargePower_W ?? 0;
+  const evMaxPow_W      = ev?.evMaxChargePower_W ?? 0;
+  const evDepSlot       = ev?.evDepartureSlot ?? (T + 1);
+  const evChargeWhPerW  = stepHours * ((ev?.evChargeEfficiency_percent ?? 100) / 100);
 
   // Variable name helpers
   const gridToLoad = (t: number) => `grid_to_load_${t}`;
@@ -110,11 +137,25 @@ export function buildLP({
     if (batteryToGridCoeff !== 0) objTerms.push(` + ${toNum(batteryToGridCoeff)} ${batteryToGrid(t)}`);
     if (batteryToLoadCoeff !== 0) objTerms.push(` + ${toNum(batteryToLoadCoeff)} ${batteryToLoad(t)}`);
     if (pvToBatteryCoeff !== 0) objTerms.push(` + ${toNum(pvToBatteryCoeff)} ${pvToBattery(t)}`);
+    if (evActive) {
+      const gridToEvCoeff = importCoeff_cents + TIEBREAK.preferPvForEv;
+      objTerms.push(` + ${toNum(gridToEvCoeff)} ${gridToEv(t)}`);
+      objTerms.push(` + ${toNum(TIEBREAK.preferPvForEv + TIEBREAK.pvLoadOverEv)} ${pvToEv(t)}`);
+      if (batteryCost_cents !== 0) objTerms.push(` + ${toNum(batteryCost_cents)} ${batteryToEv(t)}`);
+      // Symmetry-breaking: escalating penalty prefers earlier charging when slots are cost-equivalent.
+      objTerms.push(` + ${toNum(TIEBREAK.evOnPerSlot * (t + 1))} ${evOn(t)}`);
+    }
     objTerms.push(` + ${toNum(socShortfallCoeff)} ${socShortfall(t)}`);
   }
   // Terminal SOC valuation
   if (terminalPrice_cents_per_Wh > 0) {
     objTerms.push(` - ${toNum(terminalPrice_cents_per_Wh)} ${soc(T - 1)}`);
+  }
+  // Rebalancing symmetry-breaking: escalating penalty prefers earlier windows when cost-equivalent.
+  if (D > 0) {
+    for (let k = 0; k <= T - D; k++) {
+      objTerms.push(` + ${toNum(TIEBREAK.rebalanceStartPerSlot * (k + 1))} ${startBalance(k)}`);
+    }
   }
   lines.push(objTerms.join(""));
   lines.push("");
@@ -132,25 +173,28 @@ export function buildLP({
 
   // PV split
   for (let t = 0; t < T; t++) {
-    lines.push(` c_pv_split_${t}: ${pvToLoad(t)} + ${pvToBattery(t)} + ${pvToGrid(t)} = ${pv_W[t]}`
-    );
+    const pvEvTerm = evActive ? ` + ${pvToEv(t)}` : '';
+    lines.push(` c_pv_split_${t}: ${pvToLoad(t)} + ${pvToBattery(t)} + ${pvToGrid(t)}${pvEvTerm} = ${pv_W[t]}`);
   }
 
   // SOC evolution (includes idle drain: inverter consumes idleDrain_Wh per slot)
-  // soc_0 = initialSoc_Wh - idleDrain_Wh + (ηc * Δh) * (grid_to_battery_0 + pv_to_battery_0) - (Δh / ηd) * (battery_to_load_0 + battery_to_grid_0)
-  lines.push(` c_soc_0: ${soc(0)} - ${toNum(chargeWhPerW)} ${gridToBattery(0)} - ${toNum(chargeWhPerW)} ${pvToBattery(0)} + ${toNum(dischargeWhPerW)} ${batteryToLoad(0)} + ${toNum(dischargeWhPerW)} ${batteryToGrid(0)} = ${toNum(initialSoc_Wh - idleDrain_Wh)}`);
+  // soc_0 = initialSoc_Wh - idleDrain_Wh + (ηc * Δh) * (grid_to_battery_0 + pv_to_battery_0) - (Δh / ηd) * (battery_to_load_0 + battery_to_grid_0 + battery_to_ev_0)
+  const evBatTerm = (t: number) => evActive ? ` + ${toNum(dischargeWhPerW)} ${batteryToEv(t)}` : '';
+  lines.push(` c_soc_0: ${soc(0)} - ${toNum(chargeWhPerW)} ${gridToBattery(0)} - ${toNum(chargeWhPerW)} ${pvToBattery(0)} + ${toNum(dischargeWhPerW)} ${batteryToLoad(0)} + ${toNum(dischargeWhPerW)} ${batteryToGrid(0)}${evBatTerm(0)} = ${toNum(initialSoc_Wh - idleDrain_Wh)}`);
   for (let t = 1; t < T; t++) {
-    lines.push(` c_soc_${t}: ${soc(t)} - ${soc(t - 1)} - ${toNum(chargeWhPerW)} ${gridToBattery(t)} - ${toNum(chargeWhPerW)} ${pvToBattery(t)} + ${toNum(dischargeWhPerW)} ${batteryToLoad(t)} + ${toNum(dischargeWhPerW)} ${batteryToGrid(t)} = ${toNum(-idleDrain_Wh)}`);
+    lines.push(` c_soc_${t}: ${soc(t)} - ${soc(t - 1)} - ${toNum(chargeWhPerW)} ${gridToBattery(t)} - ${toNum(chargeWhPerW)} ${pvToBattery(t)} + ${toNum(dischargeWhPerW)} ${batteryToLoad(t)} + ${toNum(dischargeWhPerW)} ${batteryToGrid(t)}${evBatTerm(t)} = ${toNum(-idleDrain_Wh)}`);
   }
 
   // Limits per slot
   for (let t = 0; t < T; t++) {
     // Charge/discharge limits
     lines.push(` c_charge_cap_${t}: ${gridToBattery(t)} + ${pvToBattery(t)} <= ${maxChargePower_W}`);
-    lines.push(` c_discharge_cap_${t}: ${batteryToLoad(t)} + ${batteryToGrid(t)} <= ${maxDischargePower_W}`);
+    const batEvTerm = evActive ? ` + ${batteryToEv(t)}` : '';
+    lines.push(` c_discharge_cap_${t}: ${batteryToLoad(t)} + ${batteryToGrid(t)}${batEvTerm} <= ${maxDischargePower_W}`);
 
     // Grid import/export limits
-    lines.push(` c_grid_import_cap_${t}: ${gridToLoad(t)} + ${gridToBattery(t)} <= ${maxGridImport_W}`);
+    const gridEvTerm = evActive ? ` + ${gridToEv(t)}` : '';
+    lines.push(` c_grid_import_cap_${t}: ${gridToLoad(t)} + ${gridToBattery(t)}${gridEvTerm} <= ${maxGridImport_W}`);
     lines.push(` c_grid_export_cap_${t}: ${pvToGrid(t)} + ${batteryToGrid(t)} <= ${maxGridExport_W}`);
 
     // Soft min SOC constraint
@@ -178,6 +222,40 @@ export function buildLP({
       lines.push(` c_rebalance_${t}: ${soc(t)}${terms.join('')} >= 0`);
     }
   }
+
+  // EV charging constraints (MILP)
+  if (evActive) {
+    for (let t = 0; t < T; t++) {
+      lines.push(` c_ev_min_${t}: ${gridToEv(t)} + ${pvToEv(t)} + ${batteryToEv(t)} - ${toNum(evMinPow_W)} ${evOn(t)} >= 0`);
+      lines.push(` c_ev_max_${t}: ${gridToEv(t)} + ${pvToEv(t)} + ${batteryToEv(t)} - ${toNum(evMaxPow_W)} ${evOn(t)} <= 0`);
+    }
+
+    lines.push(` c_ev_soc_0: ${evSocVar(0)} - ${toNum(evChargeWhPerW)} ${gridToEv(0)} - ${toNum(evChargeWhPerW)} ${pvToEv(0)} - ${toNum(evChargeWhPerW)} ${batteryToEv(0)} = ${toNum(evInitialWh)}`);
+    for (let t = 1; t < T; t++) {
+      lines.push(` c_ev_soc_${t}: ${evSocVar(t)} - ${evSocVar(t - 1)} - ${toNum(evChargeWhPerW)} ${gridToEv(t)} - ${toNum(evChargeWhPerW)} ${pvToEv(t)} - ${toNum(evChargeWhPerW)} ${batteryToEv(t)} = 0`);
+    }
+
+    if (evDepSlot <= T && evDepSlot > 0) {
+      lines.push(` c_ev_target: ${evSocVar(evDepSlot - 1)} >= ${toNum(evTargetWh)}`);
+    }
+
+    // Cardinality lower bound: tightens the LP relaxation by telling the solver the minimum
+    // number of on-slots needed to meet the target. Without this, each ev_on_t floats freely
+    // in [0,1] during LP relaxation, giving weak bounds and causing excessive MIP branching.
+    const evDeficitWh = Math.max(0, evTargetWh - evInitialWh);
+    const evChargeWhPerSlot = evChargeWhPerW * evMaxPow_W;
+    if (evDeficitWh > 0 && evChargeWhPerSlot > 0) {
+      const kMin = Math.ceil(evDeficitWh / evChargeWhPerSlot);
+      const depLimit = Math.min(evDepSlot, T);
+      if (kMin >= 1 && kMin < depLimit) {
+        const termParts: string[] = [];
+        for (let t = 0; t < depLimit; t++) termParts.push(` ${evOn(t)}`);
+        const terms = termParts.join(' +');
+        lines.push(` c_ev_min_on:${terms} >= ${kMin}`);
+      }
+    }
+  }
+
   lines.push("");
 
   // ===============
@@ -202,13 +280,26 @@ export function buildLP({
     // minSoc handled via soft constraint
     lines.push(` ${soc(t)} <= ${toNum(maxSoc_Wh)}`);
     lines.push(` ${socShortfall(t)} >= 0`);
+    if (evActive) {
+      lines.push(` 0 <= ${gridToEv(t)} <= ${toNum(evMaxPow_W)}`);
+      lines.push(` 0 <= ${pvToEv(t)} <= ${toNum(Math.min(pv_W[t], evMaxPow_W))}`);
+      lines.push(` 0 <= ${batteryToEv(t)} <= ${toNum(Math.min(maxDischargePower_W, evMaxPow_W))}`);
+      lines.push(` 0 <= ${evSocVar(t)} <= ${toNum(evCapacityWh)}`);
+    }
   }
   lines.push("");
 
-  if (D > 0) {
+  if (D > 0 || evActive) {
     lines.push("Binaries");
-    for (let k = 0; k <= T - D; k++) {
-      lines.push(` start_balance_${k}`);
+    if (D > 0) {
+      for (let k = 0; k <= T - D; k++) {
+        lines.push(` start_balance_${k}`);
+      }
+    }
+    if (evActive) {
+      for (let t = 0; t < T; t++) {
+        lines.push(` ${evOn(t)}`);
+      }
     }
     lines.push("");
   }

@@ -93,3 +93,91 @@ describe('buildSolverConfigFromSettings — rebalancing', () => {
     expect(cfg.rebalanceRemainingSlots).toBeGreaterThanOrEqual(1);
   });
 });
+
+// EV settings: 6–16 A @ 230 V, 60 kWh battery, 80% target
+const evSettings = {
+  ...mockSettings,
+  evEnabled: true,
+  evMinChargeCurrent_A: 6,
+  evMaxChargeCurrent_A: 16,
+  evBatteryCapacity_kWh: 60,
+  evDepartureTime: '2024-01-01T14:00:00Z', // 2 h after NOW_MS → 8 slots @ 15 min
+  evTargetSoc_percent: 80,
+  evChargeEfficiency_percent: 100,
+};
+
+describe('buildSolverConfigFromSettings — EV config', () => {
+  it('does not add ev when evEnabled is false', () => {
+    const cfg = buildSolverConfigFromSettings(mockSettings, makeData(), NOW_MS);
+    expect(cfg.ev).toBeUndefined();
+  });
+
+  it('does not add ev when evState is undefined', () => {
+    const cfg = buildSolverConfigFromSettings(evSettings, makeData(), NOW_MS, undefined);
+    expect(cfg.ev).toBeUndefined();
+  });
+
+  it('does not add ev when EV is not plugged in', () => {
+    const cfg = buildSolverConfigFromSettings(
+      evSettings, makeData(), NOW_MS, { pluggedIn: false, soc_percent: 50 },
+    );
+    expect(cfg.ev).toBeUndefined();
+  });
+
+  it('adds ev config when evEnabled and pluggedIn', () => {
+    const cfg = buildSolverConfigFromSettings(
+      evSettings, makeData(), NOW_MS, { pluggedIn: true, soc_percent: 50 },
+    );
+    expect(cfg.ev).toBeDefined();
+    expect(cfg.ev.evMinChargePower_W).toBe(6 * 230);   // 1380
+    expect(cfg.ev.evMaxChargePower_W).toBe(16 * 230);  // 3680
+    expect(cfg.ev.evBatteryCapacity_Wh).toBe(60_000);
+    expect(cfg.ev.evInitialSoc_percent).toBe(50);
+    expect(cfg.ev.evDepartureSlot).toBe(8); // 2h / 15min = 8 slots
+  });
+
+  it('clamps achievable target when max charge falls short of requested target', () => {
+    // 50% initial = 30 000 Wh, 8 slots × 3680 W × 0.25 h = 7 360 Wh reachable
+    // achievable = min(48000, 37360, 60000) = 37360 → 62.267%
+    const cfg = buildSolverConfigFromSettings(
+      evSettings, makeData(), NOW_MS, { pluggedIn: true, soc_percent: 50 },
+    );
+    const expectedPct = (37360 / 60000) * 100;
+    expect(cfg.ev.evTargetSoc_percent).toBeCloseTo(expectedPct, 3);
+  });
+
+  it('reduces achievable target by evChargeEfficiency_percent when clamping', () => {
+    // 90% efficiency: 8 slots × 3680 W × 0.25 h × 0.9 = 6624 Wh reachable
+    // achievable = min(48000, 30000 + 6624, 60000) = 36624 → 61.04%
+    const cfg = buildSolverConfigFromSettings(
+      { ...evSettings, evChargeEfficiency_percent: 90 },
+      makeData(), NOW_MS, { pluggedIn: true, soc_percent: 50 },
+    );
+    const expectedPct = (36624 / 60000) * 100;
+    expect(cfg.ev.evTargetSoc_percent).toBeCloseTo(expectedPct, 3);
+  });
+
+  it('passes evChargeEfficiency_percent through to EvConfig', () => {
+    const cfg = buildSolverConfigFromSettings(
+      { ...evSettings, evChargeEfficiency_percent: 85 },
+      makeData(), NOW_MS, { pluggedIn: true, soc_percent: 50 },
+    );
+    expect(cfg.ev.evChargeEfficiency_percent).toBe(85);
+  });
+
+  it('does not add ev when departure is in the past (D=0)', () => {
+    const pastDeparture = { ...evSettings, evDepartureTime: '2024-01-01T11:00:00Z' };
+    const cfg = buildSolverConfigFromSettings(
+      pastDeparture, makeData(), NOW_MS, { pluggedIn: true, soc_percent: 50 },
+    );
+    expect(cfg.ev).toBeUndefined();
+  });
+
+  it('does not add ev when departure string is not a valid date', () => {
+    const badDeparture = { ...evSettings, evDepartureTime: '07:30' };
+    const cfg = buildSolverConfigFromSettings(
+      badDeparture, makeData(), NOW_MS, { pluggedIn: true, soc_percent: 50 },
+    );
+    expect(cfg.ev).toBeUndefined();
+  });
+});

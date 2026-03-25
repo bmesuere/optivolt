@@ -152,3 +152,105 @@ describe('buildLP — MILP rebalancing', () => {
     expect(lp).not.toContain('12000 start_balance_');
   });
 });
+
+describe('buildLP — EV charging (MILP)', () => {
+  const T = 5;
+  const base = {
+    load_W: Array(T).fill(500),
+    pv_W: Array(T).fill(1000),
+    importPrice: Array(T).fill(10),
+    exportPrice: Array(T).fill(5),
+    batteryCapacity_Wh: 10000,
+    maxDischargePower_W: 4000,
+    maxGridImport_W: 2500,
+  };
+  const evCfg = {
+    evMinChargePower_W: 1380,
+    evMaxChargePower_W: 3680,
+    evBatteryCapacity_Wh: 60000,
+    evInitialSoc_percent: 50,  // → 30 000 Wh
+    evTargetSoc_percent: 80,   // → 48 000 Wh
+    evDepartureSlot: 4,        // deadline at slot index 3 (0-based)
+  };
+
+  it('does not include EV variables or Binaries when ev is not set', () => {
+    const lp = buildLP(base);
+    expect(lp).not.toContain('grid_to_ev_');
+    expect(lp).not.toContain('ev_on_');
+    expect(lp).not.toContain('Binaries');
+  });
+
+  it('includes EV flow variables in Bounds for every slot', () => {
+    const lp = buildLP({ ...base, ev: evCfg });
+    for (let t = 0; t < T; t++) {
+      expect(lp).toContain(`grid_to_ev_${t}`);
+      expect(lp).toContain(`pv_to_ev_${t}`);
+      expect(lp).toContain(`battery_to_ev_${t}`);
+      expect(lp).toContain(`ev_soc_${t}`);
+    }
+  });
+
+  it('includes ev_on binary variables in the Binaries section', () => {
+    const lp = buildLP({ ...base, ev: evCfg });
+    expect(lp).toContain('Binaries');
+    for (let t = 0; t < T; t++) {
+      expect(lp).toContain(`ev_on_${t}`);
+    }
+  });
+
+  it('includes min/max power constraints for each EV slot', () => {
+    const lp = buildLP({ ...base, ev: evCfg });
+    expect(lp).toContain('c_ev_min_0:');
+    expect(lp).toContain('c_ev_max_0:');
+    expect(lp).toContain(`c_ev_min_${T - 1}:`);
+  });
+
+  it('includes EV SoC evolution constraints with correct initial Wh', () => {
+    const lp = buildLP({ ...base, ev: evCfg });
+    // c_ev_soc_0 RHS = initialWh = 50% of 60000 = 30000
+    expect(lp).toContain('c_ev_soc_0:');
+    expect(lp).toMatch(/c_ev_soc_0:.*= 30000\b/);
+    // chained constraints for t >= 1
+    expect(lp).toContain('c_ev_soc_1:');
+    expect(lp).toMatch(/c_ev_soc_1:.*= 0\b/);
+  });
+
+  it('includes target SoC constraint at departure slot - 1', () => {
+    const lp = buildLP({ ...base, ev: evCfg });
+    // evDepartureSlot=4 → constraint on ev_soc_3 >= targetWh = 80% of 60000 = 48000
+    expect(lp).toContain('c_ev_target:');
+    expect(lp).toMatch(/c_ev_target:.*ev_soc_3.*>= 48000\b/);
+  });
+
+  it('adds pv_to_ev term to PV split constraints', () => {
+    const lp = buildLP({ ...base, ev: evCfg });
+    expect(lp).toMatch(/c_pv_split_0:.*pv_to_ev_0/);
+  });
+
+  it('adds battery_to_ev term to discharge cap constraints', () => {
+    const lp = buildLP({ ...base, ev: evCfg });
+    expect(lp).toMatch(/c_discharge_cap_0:.*battery_to_ev_0/);
+  });
+
+  it('adds grid_to_ev term to grid import cap constraints', () => {
+    const lp = buildLP({ ...base, ev: evCfg });
+    expect(lp).toMatch(/c_grid_import_cap_0:.*grid_to_ev_0/);
+  });
+
+  it('omits c_ev_target when evDepartureSlot > T', () => {
+    const lp = buildLP({ ...base, ev: { ...evCfg, evDepartureSlot: T + 5 } });
+    expect(lp).not.toContain('c_ev_target:');
+  });
+
+  it('applies evChargeEfficiency_percent to EV SoC evolution coefficients', () => {
+    // 90% efficiency → evChargeWhPerW = 0.25 * 0.9 = 0.225
+    const lp = buildLP({ ...base, ev: { ...evCfg, evChargeEfficiency_percent: 90 } });
+    expect(lp).toMatch(/c_ev_soc_0:.*0\.225 grid_to_ev_0/);
+    expect(lp).toMatch(/c_ev_soc_1:.*0\.225 grid_to_ev_1/);
+  });
+
+  it('uses bare stepHours (0.25) in EV SoC constraints when efficiency is 100%', () => {
+    const lp = buildLP({ ...base, ev: { ...evCfg, evChargeEfficiency_percent: 100 } });
+    expect(lp).toMatch(/c_ev_soc_0:.*0\.25 grid_to_ev_0/);
+  });
+});

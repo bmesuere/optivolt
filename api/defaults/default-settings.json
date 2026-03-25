@@ -22,5 +22,14 @@
   "rebalanceEnabled": false,
   "rebalanceHoldHours": 3,
   "haUrl": "ws://homeassistant.local:8123/api/websocket",
-  "haToken": ""
+  "haToken": "",
+  "evEnabled": false,
+  "evMinChargeCurrent_A": 6,
+  "evMaxChargeCurrent_A": 16,
+  "evBatteryCapacity_kWh": 60,
+  "evSocSensor": "",
+  "evPlugSensor": "",
+  "evDepartureTime": "",
+  "evTargetSoc_percent": 80,
+  "evChargeEfficiency_percent": 90
 }
