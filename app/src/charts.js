@@ -210,7 +210,7 @@ export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacke
     responsive: true,
     interaction: { mode: "index", intersect: false },
     layout: { padding: { bottom: overrides.layout?.padding?.bottom ?? -6 } },
-    ...(overrides.animation ? { animation: overrides.animation } : {}),
+    ...('animation' in overrides ? { animation: overrides.animation } : {}),
     plugins: {
       legend: legendSquare,
       tooltip: {

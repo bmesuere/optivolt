@@ -201,8 +201,8 @@ function onShowChart(row) {
       labels,
       datasets: [
         {
-          label: 'Actual (Wh)',
-          data: preds.map(p => p.actual),
+          label: 'Actual (kWh)',
+          data: preds.map(p => p.actual / 1000),
           borderColor: 'rgb(14, 165, 233)',
           backgroundColor: 'rgb(14, 165, 233)',
           borderWidth: 1.5,
@@ -211,8 +211,8 @@ function onShowChart(row) {
           fill: false,
         },
         {
-          label: 'Predicted (Wh)',
-          data: preds.map(p => p.predicted),
+          label: 'Predicted (kWh)',
+          data: preds.map(p => p.predicted / 1000),
           borderColor: 'rgb(249, 115, 22)',
           backgroundColor: 'rgb(249, 115, 22)',
           borderWidth: 1.5,
@@ -226,6 +226,7 @@ function onShowChart(row) {
       responsive: true,
       maintainAspectRatio: false,
       ...lineAnims,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { position: 'top' },
         tooltip: {
@@ -235,14 +236,14 @@ function onShowChart(row) {
               const time = tooltip.title?.[0] ?? '';
               let html = ttHeader(time);
               for (const pt of (tooltip.dataPoints ?? [])) {
-                html += ttRow(pt.dataset.borderColor, pt.dataset.label, `${fmtKwh(pt.raw / 1000)} kWh`);
+                html += ttRow(pt.dataset.borderColor, pt.dataset.label, `${fmtKwh(pt.raw)} kWh`);
               }
               return html;
             },
           }),
         },
       },
-      scales: { y: { title: { display: true, text: 'Wh' } } },
+      scales: { y: { title: { display: true, text: 'kWh' } } },
     },
   });
 
@@ -255,7 +256,7 @@ function onShowChart(row) {
         datasets: [
           {
             label: 'Difference (pred − actual)',
-            data: preds.map(p => p.predicted - p.actual),
+            data: preds.map(p => (p.predicted - p.actual) / 1000),
             borderColor: 'rgba(100,116,139,0.6)',
             backgroundColor: 'transparent',
             borderWidth: 1,
@@ -269,6 +270,7 @@ function onShowChart(row) {
         responsive: true,
         maintainAspectRatio: false,
         ...lineAnims,
+        interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -278,7 +280,7 @@ function onShowChart(row) {
                 const time = tooltip.title?.[0] ?? '';
                 const pt = tooltip.dataPoints?.[0];
                 if (!pt) return ttHeader(time);
-                const v = pt.raw / 1000;
+                const v = pt.raw;
                 const color = v >= 0 ? 'rgb(139,201,100)' : 'rgb(233,122,131)';
                 let html = ttHeader(time);
                 html += ttDivider();
@@ -288,7 +290,7 @@ function onShowChart(row) {
             }),
           },
         },
-        scales: { y: { title: { display: true, text: 'Wh diff' } } },
+        scales: { y: { title: { display: true, text: 'kWh diff' } } },
       },
     });
   }
