@@ -11,30 +11,24 @@ export async function loadPredictionConfig(): Promise<PredictionConfig> {
   const defaults = await readJson<PredictionConfig>(DEFAULT_PATH);
   let userConfig: Partial<PredictionConfig> = {};
   try {
-    userConfig = await readJson<Partial<PredictionConfig>>(PREDICTION_CONFIG_PATH);
+    userConfig = await readJson<PredictionConfig>(PREDICTION_CONFIG_PATH);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
 
-  const merged: PredictionConfig = { ...defaults, ...userConfig };
+  const { validationWindow: _vw, ...rest } = { ...defaults, ...userConfig };
 
-  // Dynamic default: validationWindow = last 7 full days (ending at start of today)
-  if (!merged.validationWindow?.start || !merged.validationWindow?.end) {
-    const now = new Date();
-    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
+  // Always recompute validationWindow — never trust a persisted value
+  const now = new Date();
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    merged.validationWindow = {
-      start: start.toISOString(),
-      end: end.toISOString(),
-    };
-  }
-
-  return merged;
+  return {
+    ...rest,
+    validationWindow: { start: start.toISOString(), end: end.toISOString() },
+  };
 }
 
 export async function savePredictionConfig(config: PredictionConfig): Promise<void> {
-  // Never persist validationWindow — it's always computed dynamically from the current date
-  const { validationWindow: _vw, ...rest } = config;
-  await writeJson(PREDICTION_CONFIG_PATH, rest);
+  await writeJson(PREDICTION_CONFIG_PATH, config);
 }
