@@ -229,6 +229,7 @@
       font-size: 0.8125rem;
       font-weight: 500;
       color: #0f172a;
+      transition: opacity 0.15s ease;
     }
 
     :root.dark .stat-value {
@@ -266,6 +267,96 @@
     :root.dark .btn-quick-set:hover:not(:disabled) {
       background-color: #334155;
       color: #e2e8f0;
+    }
+
+    /* === Status text transition === */
+    #status {
+      transition: color 0.3s ease;
+    }
+
+    /* === Summary value fade === */
+    .stat-value.value-updating {
+      opacity: 0;
+    }
+
+    /* === Button loading state === */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes pulse-ring {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.4), 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06); }
+      50% { box-shadow: 0 0 0 4px rgba(56, 189, 248, 0), 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06); }
+    }
+
+    #run.loading {
+      animation: pulse-ring 1.5s ease infinite;
+      pointer-events: none;
+      opacity: 0.85;
+    }
+
+    #run .spinner {
+      display: none;
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      flex-shrink: 0;
+    }
+
+    #run.loading .spinner {
+      display: inline-block;
+    }
+
+    /* === Chart fade-in === */
+    .chart-fade {
+      transition: opacity 0.4s ease;
+    }
+
+    .chart-fade.chart-pending {
+      opacity: 0;
+    }
+
+    /* === Tab panel transitions === */
+    [role="tabpanel"] {
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .panel-hidden {
+      display: none !important;
+    }
+
+    [role="tabpanel"].panel-exit {
+      opacity: 0;
+      transform: translateY(4px);
+      pointer-events: none;
+    }
+
+    [role="tabpanel"].panel-enter {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+
+    /* === Card staggered entrance === */
+    @keyframes card-reveal {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .card:not(.revealed) {
+      opacity: 0;
+    }
+
+    .card.revealed {
+      animation: card-reveal 0.35s ease forwards;
     }
   </style>
 
@@ -431,8 +522,9 @@
           <!-- Recompute -->
           <div class="mt-4">
             <button id="run" title="Recompute (⌘+Enter)"
-              class="w-full rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-sky-400/50 transition-all">
-              Recompute
+              class="w-full rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-sky-400/50 transition-all flex items-center justify-center gap-2">
+              <span class="spinner"></span>
+              <span class="btn-label">Recompute</span>
             </button>
           </div>
 
@@ -566,7 +658,7 @@
 
   <!-- Predictions Panel -->
   <div id="panel-predictions" role="tabpanel" aria-labelledby="tab-predictions"
-    class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3 hidden">
+    class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3 panel-hidden">
 
     <!-- Sidebar -->
     <aside class="lg:col-span-1 min-w-0 space-y-6">
@@ -849,7 +941,7 @@
 
   <!-- Settings Panel -->
   <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings"
-    class="mx-auto w-full max-w-7xl px-4 py-8 hidden">
+    class="mx-auto w-full max-w-7xl px-4 py-8 panel-hidden">
     <div class="grid gap-6 lg:grid-cols-2 lg:items-start">
 
       <!-- Left column: System Settings -->
@@ -1028,7 +1120,7 @@
 
   <!-- EV Panel -->
   <div id="panel-ev" role="tabpanel" aria-labelledby="tab-ev"
-    class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3 hidden">
+    class="mx-auto w-full max-w-7xl px-4 py-8 grid gap-6 lg:grid-cols-3 panel-hidden">
 
     <!-- Sidebar: EV Settings + EV Status -->
     <aside class="lg:col-span-1 min-w-0 space-y-6">
