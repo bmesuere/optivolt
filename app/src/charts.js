@@ -1,4 +1,8 @@
 /* global Chart */
+import {
+  createTooltipHandler, fmtKwh, getChartAnimations,
+  ttHeader, ttRow, ttSection, ttDivider, ttPrices,
+} from './chart-tooltip.js';
 
 export const SOLUTION_COLORS = {
   b2g: "rgb(15, 192, 216)",   // Battery to Grid (teal-ish)
@@ -29,139 +33,40 @@ const FLOWS_TOOLTIP_LABELS = {
   g2b:   "Grid → Battery",
 };
 
-function fmtKwh(v) {
-  if (v >= 10) return v.toFixed(1);
-  if (v >= 1)  return v.toFixed(2);
-  return v.toFixed(3);
-}
-
-function injectFlowsTooltipStyles() {
-  if (document.getElementById("flows-tt-style")) return;
-  const s = document.createElement("style");
-  s.id = "flows-tt-style";
-  s.textContent = `
-    .flows-tt {
-      position:absolute; pointer-events:none; z-index:10;
-      border-radius:8px; padding:10px 12px; font-size:12px;
-      font-family:system-ui,sans-serif; min-width:190px;
-      box-shadow:0 4px 20px rgba(0,0,0,0.18);
-      transition:opacity .1s ease;
-      background:#fff; border:1px solid #e2e8f0; color:#1e293b;
-    }
-    .dark .flows-tt {
-      background:#1e293b; border-color:rgba(255,255,255,0.10); color:#e2e8f0;
-      box-shadow:0 4px 20px rgba(0,0,0,0.35);
-    }
-    .flows-tt-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:7px; }
-    .flows-tt-time { font-weight:700; font-size:13px; color:#64748b; letter-spacing:.03em; }
-    .dark .flows-tt-time { color:#94a3b8; }
-    .flows-tt-soc { font-size:11px; color:#64748b; }
-    .dark .flows-tt-soc { color:#94a3b8; }
-    .flows-tt-soc strong { color:#3b82f6; }
-    .dark .flows-tt-soc strong { color:#93c5fd; }
-    .flows-tt-sec { font-size:10px; text-transform:uppercase; letter-spacing:.08em;
-                    font-weight:600; margin:4px 0 2px; color:#94a3b8; }
-    .dark .flows-tt-sec { color:#64748b; }
-    .flows-tt-row { display:flex; justify-content:space-between; align-items:center;
-                    gap:10px; padding:1.5px 0; }
-    .flows-tt-lbl { display:flex; align-items:center; gap:5px; color:#475569; }
-    .dark .flows-tt-lbl { color:#cbd5e1; }
-    .flows-tt-dot { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
-    .flows-tt-val { font-variant-numeric:tabular-nums; font-weight:500; color:#0f172a; }
-    .dark .flows-tt-val { color:#f1f5f9; }
-    .flows-tt-div { border-top:1px solid #e2e8f0; margin:5px 0; }
-    .dark .flows-tt-div { border-color:rgba(255,255,255,0.08); }
-    .flows-tt-prices { display:flex; justify-content:space-between; align-items:center;
-                       font-size:11px; color:#64748b; padding:1px 0; }
-    .dark .flows-tt-prices { color:#94a3b8; }
-    .flows-tt-badge { display:inline-block; padding:1px 5px; border-radius:4px;
-                      font-size:10px; font-weight:600; letter-spacing:.04em; margin-left:3px; }
-    .flows-tt-buy  { background:rgba(239,68,68,0.15); color:#dc2626; }
-    .flows-tt-sell { background:rgba(34,197,94,0.15); color:#16a34a; }
-    .dark .flows-tt-buy  { background:rgba(239,68,68,0.2); color:#fca5a5; }
-    .dark .flows-tt-sell { background:rgba(34,197,94,0.2); color:#86efac; }
-  `;
-  document.head.appendChild(s);
-}
-
 function makeFlowsTooltip(rows, flowSpecs, h) {
   const W2kWh = (x) => (x || 0) * h / 1000;
-  injectFlowsTooltipStyles();
-  let el = null;
 
-  return function({ chart, tooltip }) {
-    if (!el) {
-      const parent = chart.canvas.parentNode;
-      el = parent.querySelector(".flows-tt") ?? document.createElement("div");
-      if (!el.parentNode) {
-        el.className = "flows-tt";
-        parent.style.position = "relative";
-        parent.appendChild(el);
+  return createTooltipHandler({
+    renderContent: (idx, tooltip) => {
+      const row = rows[idx];
+      const time = tooltip.title?.[0] ?? "";
+
+      const posRows = flowSpecs.filter(s => s.sign === 1  && (row[s.key] || 0) !== 0);
+      const negRows = flowSpecs.filter(s => s.sign === -1 && (row[s.key] || 0) !== 0);
+
+      let html = ttHeader(time, `SoC <strong>${Math.round(row.soc_percent)}%</strong>`);
+
+      if (posRows.length) {
+        html += ttSection("↑ Sources");
+        for (const s of posRows) {
+          html += ttRow(s.color, FLOWS_TOOLTIP_LABELS[s.key] ?? s.label, `${fmtKwh(W2kWh(row[s.key]))} kWh`);
+        }
       }
-    }
 
-    if (tooltip.opacity === 0) { el.style.opacity = "0"; return; }
+      if (posRows.length && negRows.length) html += ttDivider();
 
-    const idx = tooltip.dataPoints?.[0]?.dataIndex;
-    if (idx == null) return;
-
-    const row = rows[idx];
-    const time = tooltip.title?.[0] ?? "";
-
-    const posRows = flowSpecs.filter(s => s.sign === 1  && (row[s.key] || 0) !== 0);
-    const negRows = flowSpecs.filter(s => s.sign === -1 && (row[s.key] || 0) !== 0);
-
-    let html = `
-      <div class="flows-tt-head">
-        <span class="flows-tt-time">${time}</span>
-        <span class="flows-tt-soc">SoC <strong>${Math.round(row.soc_percent)}%</strong></span>
-      </div>`;
-
-    if (posRows.length) {
-      html += `<div class="flows-tt-sec">↑ Sources</div>`;
-      for (const s of posRows) {
-        html += `<div class="flows-tt-row">
-          <span class="flows-tt-lbl"><span class="flows-tt-dot" style="background:${s.color}"></span>${FLOWS_TOOLTIP_LABELS[s.key] ?? s.label}</span>
-          <span class="flows-tt-val">${fmtKwh(W2kWh(row[s.key]))}</span>
-        </div>`;
+      if (negRows.length) {
+        html += ttSection("↓ Draws");
+        for (const s of negRows) {
+          html += ttRow(s.color, FLOWS_TOOLTIP_LABELS[s.key] ?? s.label, `${fmtKwh(W2kWh(row[s.key]))} kWh`);
+        }
       }
-    }
 
-    if (posRows.length && negRows.length) html += `<div class="flows-tt-div"></div>`;
-
-    if (negRows.length) {
-      html += `<div class="flows-tt-sec">↓ Draws</div>`;
-      for (const s of negRows) {
-        html += `<div class="flows-tt-row">
-          <span class="flows-tt-lbl"><span class="flows-tt-dot" style="background:${s.color}"></span>${FLOWS_TOOLTIP_LABELS[s.key] ?? s.label}</span>
-          <span class="flows-tt-val">${fmtKwh(W2kWh(row[s.key]))}</span>
-        </div>`;
-      }
-    }
-
-    html += `<div class="flows-tt-div"></div>
-      <div class="flows-tt-prices">
-        <span>Buy / Sell</span>
-        <span>
-          <span class="flows-tt-badge flows-tt-buy">${row.ic.toFixed(1)}¢</span>
-          <span class="flows-tt-badge flows-tt-sell">${row.ec.toFixed(1)}¢</span>
-        </span>
-      </div>`;
-
-    el.innerHTML = html;
-    el.style.opacity = "1";
-
-    // Position: beside caret, flip left if it would overflow
-    const ttW = el.offsetWidth || 200;
-    const ttH = el.offsetHeight || 150;
-    const cW  = chart.canvas.offsetWidth;
-    let x = tooltip.caretX + 12;
-    if (x + ttW > cW - 8) x = tooltip.caretX - ttW - 12;
-    let y = tooltip.caretY - ttH / 2;
-    if (y < 0) y = 0;
-    el.style.left = `${x}px`;
-    el.style.top  = `${y}px`;
-  };
+      html += ttDivider();
+      html += ttPrices(`${row.ic.toFixed(1)}¢`, `${row.ec.toFixed(1)}¢`);
+      return html;
+    },
+  });
 }
 
 export const toRGBA = (rgb, alpha = 1) => {
@@ -308,6 +213,7 @@ export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacke
     responsive: true,
     interaction: { mode: "index", intersect: false },
     layout: { padding: { bottom: overrides.layout?.padding?.bottom ?? -6 } },
+    ...(overrides.animation ? { animation: overrides.animation } : {}),
     plugins: {
       legend: legendSquare, // default, can be overridden
       tooltip: {
@@ -437,6 +343,7 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, rebalance
     type: "bar",
     data: { labels: axis.labels, datasets },
     options: getBaseOptions({ ...axis, yTitle: "kWh", stacked: true }, {
+      ...getChartAnimations('bar'),
       plugins: {
         tooltip: {
           mode: "index",
@@ -495,7 +402,26 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15, evSettings = null) 
     type: "line",
     data: { labels: axis.labels, datasets },
     options: getBaseOptions({ ...axis, yTitle: "%" }, {
-      plugins: hasEvSoc ? {} : { legend: { display: false } },
+      ...getChartAnimations('line'),
+      plugins: {
+        ...(hasEvSoc ? {} : { legend: { display: false } }),
+        tooltip: {
+          mode: "index",
+          intersect: false,
+          enabled: false,
+          external: createTooltipHandler({
+            renderContent: (_idx, tooltip) => {
+              const time = tooltip.title?.[0] ?? "";
+              let html = ttHeader(time);
+              for (const pt of (tooltip.dataPoints ?? [])) {
+                html += ttRow(pt.dataset.borderColor, pt.dataset.label, `${Math.round(pt.raw)}%`);
+              }
+              return html;
+            },
+          }),
+          callbacks: { title: axis.tooltipTitleCb },
+        },
+      },
       layout: hasEvSoc ? undefined : { padding: { bottom: 0 } },
       scales: { y: { max: 100 } }
     }),
@@ -540,7 +466,27 @@ export function drawPricesStepLines(canvas, rows, _stepSize_m = 15) {
         }
       ]
     },
-    options: getBaseOptions({ ...axis, yTitle: "c€/kWh" })
+    options: getBaseOptions({ ...axis, yTitle: "c€/kWh" }, {
+      ...getChartAnimations('line'),
+      plugins: {
+        tooltip: {
+          mode: "index",
+          intersect: false,
+          enabled: false,
+          external: createTooltipHandler({
+            renderContent: (_idx, tooltip) => {
+              const time = tooltip.title?.[0] ?? "";
+              let html = ttHeader(time);
+              for (const pt of (tooltip.dataPoints ?? [])) {
+                html += ttRow(pt.dataset.borderColor, pt.dataset.label, `${pt.raw.toFixed(1)} c€/kWh`);
+              }
+              return html;
+            },
+          }),
+          callbacks: { title: axis.tooltipTitleCb },
+        },
+      },
+    })
   });
 }
 
@@ -591,7 +537,28 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
         ds("Solar forecast", buckets.map(b => b.pvKWh), SOLUTION_COLORS.pv2g)
       ]
     },
-    options: getBaseOptions({ ...axis, yTitle: "kWh" })
+    options: getBaseOptions({ ...axis, yTitle: "kWh" }, {
+      ...getChartAnimations('bar'),
+      plugins: {
+        tooltip: {
+          mode: "index",
+          intersect: false,
+          enabled: false,
+          external: createTooltipHandler({
+            renderContent: (_idx, tooltip) => {
+              const time = tooltip.title?.[0] ?? "";
+              let html = ttHeader(time);
+              for (const pt of (tooltip.dataPoints ?? [])) {
+                if (pt.raw == null) continue;
+                html += ttRow(pt.dataset.borderColor, pt.dataset.label, `${fmtKwh(pt.raw)} kWh`);
+              }
+              return html;
+            },
+          }),
+          callbacks: { title: axis.tooltipTitleCb },
+        },
+      },
+    })
   });
 }
 
@@ -626,7 +593,41 @@ export function drawEvPowerChart(canvas, rows, stepSize_m = 15, evSettings = {})
     },
   ];
 
-  const options = getBaseOptions({ ...axis, yTitle: "kWh", stacked: true });
+  const evTooltip = createTooltipHandler({
+    renderContent: (idx, tooltip) => {
+      const time = tooltip.title?.[0] ?? "";
+      const row = rows[idx];
+      const sources = [
+        { key: "g2ev", color: SOLUTION_COLORS.g2ev, label: "Grid" },
+        { key: "pv2ev", color: SOLUTION_COLORS.pv2ev, label: "Solar" },
+        { key: "b2ev", color: SOLUTION_COLORS.b2ev, label: "Battery" },
+      ].filter(s => W2kWh(row[s.key]) > 0);
+
+      let html = ttHeader(time);
+      if (sources.length) {
+        html += ttSection("Charging");
+        for (const s of sources) {
+          html += ttRow(s.color, s.label, `${fmtKwh(W2kWh(row[s.key]))} kWh`);
+        }
+      }
+      html += ttDivider();
+      html += `<div class="ov-tt-prices"><span>Buy price</span><span class="ov-tt-badge ov-tt-buy">${(row.ic ?? 0).toFixed(1)}¢</span></div>`;
+      return html;
+    },
+  });
+
+  const options = getBaseOptions({ ...axis, yTitle: "kWh", stacked: true }, {
+    ...getChartAnimations('bar'),
+    plugins: {
+      tooltip: {
+        mode: "index",
+        intersect: false,
+        enabled: false,
+        external: evTooltip,
+        callbacks: { title: axis.tooltipTitleCb },
+      },
+    },
+  });
   options.scales.y2 = {
     type: "linear",
     position: "right",
@@ -676,7 +677,25 @@ export function drawEvSocChartTab(canvas, rows, evSettings = {}) {
       }]
     },
     options: getBaseOptions({ ...axis, yTitle: "%" }, {
-      plugins: { legend: { display: false } },
+      ...getChartAnimations('line'),
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          mode: "index",
+          intersect: false,
+          enabled: false,
+          external: createTooltipHandler({
+            renderContent: (_idx, tooltip) => {
+              const time = tooltip.title?.[0] ?? "";
+              const pt = tooltip.dataPoints?.[0];
+              let html = ttHeader(time);
+              if (pt) html += ttRow(SOLUTION_COLORS.ev_charge, "EV SoC", `${Math.round(pt.raw)}%`);
+              return html;
+            },
+          }),
+          callbacks: { title: axis.tooltipTitleCb },
+        },
+      },
       layout: { padding: { bottom: 0 } },
       scales: { y: { min: 0, max: 100 } },
     }),

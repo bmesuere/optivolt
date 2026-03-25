@@ -1,5 +1,6 @@
 /* global Chart */
 import { runValidation, savePredictionConfig } from './api/api.js';
+import { createTooltipHandler, fmtKwh, getChartAnimations, ttHeader, ttRow, ttDivider } from './chart-tooltip.js';
 
 let validationResults = null;
 let _activeSensor = null;
@@ -191,6 +192,8 @@ function onShowChart(row) {
     diffChart = null;
   }
 
+  const lineAnims = getChartAnimations('line');
+
   // Chart 1: two clean lines, solid legend swatch (backgroundColor = line color, fill: false)
   accuracyChart = new Chart(canvas, {
     type: 'line',
@@ -222,7 +225,23 @@ function onShowChart(row) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { position: 'top' } },
+      ...lineAnims,
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: {
+          enabled: false,
+          external: createTooltipHandler({
+            renderContent: (_idx, tooltip) => {
+              const time = tooltip.title?.[0] ?? '';
+              let html = ttHeader(time);
+              for (const pt of (tooltip.dataPoints ?? [])) {
+                html += ttRow(pt.dataset.borderColor, pt.dataset.label, `${fmtKwh(pt.raw / 1000)} kWh`);
+              }
+              return html;
+            },
+          }),
+        },
+      },
       scales: { y: { title: { display: true, text: 'Wh' } } },
     },
   });
@@ -249,7 +268,26 @@ function onShowChart(row) {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
+        ...lineAnims,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            enabled: false,
+            external: createTooltipHandler({
+              renderContent: (_idx, tooltip) => {
+                const time = tooltip.title?.[0] ?? '';
+                const pt = tooltip.dataPoints?.[0];
+                if (!pt) return ttHeader(time);
+                const v = pt.raw / 1000;
+                const color = v >= 0 ? 'rgb(139,201,100)' : 'rgb(233,122,131)';
+                let html = ttHeader(time);
+                html += ttDivider();
+                html += ttRow(color, 'Pred − Actual', `${v >= 0 ? '+' : ''}${fmtKwh(Math.abs(v))} kWh`);
+                return html;
+              },
+            }),
+          },
+        },
         scales: { y: { title: { display: true, text: 'Wh diff' } } },
       },
     });
