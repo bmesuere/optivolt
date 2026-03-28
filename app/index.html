@@ -366,9 +366,14 @@
     }
 
     /* === Domain color utilities (mirror flow chart palette) === */
-    .color-flow-grid     { color: rgb(233, 122, 131); }
-    .color-flow-battery  { color: rgb(71, 144, 208); }
-    .color-flow-solar    { color: rgb(247, 171, 62); }
+    .color-flow-grid,
+    .color-flow-load    { color: rgb(233, 122, 131); }
+    .color-flow-battery { color: rgb(71, 144, 208); }
+    .color-flow-solar   { color: rgb(247, 171, 62); }
+    :root.dark .color-flow-grid,
+    :root.dark .color-flow-load    { color: rgb(248, 163, 170); }
+    :root.dark .color-flow-battery { color: rgb(111, 174, 228); }
+    :root.dark .color-flow-solar   { color: rgb(255, 196, 102); }
 
 
     /* === Chart empty state === */
@@ -610,7 +615,7 @@
               </div>
               <div class="px-3 py-2.5 border-b border-r border-slate-100 dark:border-white/5">
                 <div class="stat-label mb-0.5">Predicted load</div>
-                <div id="sum-load-kwh" class="stat-value">—</div>
+                <div id="sum-load-kwh" class="stat-value color-flow-load">—</div>
               </div>
               <div class="px-3 py-2.5 border-b border-slate-100 dark:border-white/5">
                 <div class="stat-label mb-0.5">Predicted PV</div>
