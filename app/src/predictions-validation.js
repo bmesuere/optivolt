@@ -161,6 +161,8 @@ async function onUseConfig(row, { readFormValues, renderHistoricalConfig, setCom
 
   try {
     renderHistoricalConfig(historicalPredictor);
+    const activeTypeEl = document.getElementById('pred-active-type');
+    if (activeTypeEl) activeTypeEl.value = 'historical';
     const partial = readFormValues();
     await savePredictionConfig(partial);
     setComparisonStatus(`Active config updated: ${row.sensor} / ${row.lookbackWeeks}w / ${row.dayFilter} / ${row.aggregation}`);

@@ -150,7 +150,8 @@ function readFormValues() {
   } : null;
 
   const fixedLoadW = getVal('pred-fixed-load-w');
-  const fixedPredictor = fixedLoadW !== '' ? { load_W: parseFloat(fixedLoadW) } : null;
+  const fixedLoadWParsed = fixedLoadW !== '' ? parseFloat(fixedLoadW) : NaN;
+  const fixedPredictor = Number.isFinite(fixedLoadWParsed) && fixedLoadWParsed >= 0 ? { load_W: fixedLoadWParsed } : null;
 
   const pvConfig = {
     pvSensor: getVal('pred-pv-sensor') || 'Solar Generation',

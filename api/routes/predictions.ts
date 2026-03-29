@@ -147,6 +147,15 @@ async function executeLoadForecast(config: PredictionRunConfig, logLabel: string
   if (config.activeType === 'historical') {
     assertHaConnection(config);
     assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
+    assertCondition(config.historicalPredictor != null, 400, 'historicalPredictor is required for historical activeType');
+  }
+  if (config.activeType === 'fixed') {
+    assertCondition(config.fixedPredictor != null, 400, 'fixedPredictor is required for fixed activeType');
+    assertCondition(
+      Number.isFinite(config.fixedPredictor!.load_W) && config.fixedPredictor!.load_W >= 0,
+      400,
+      'fixedPredictor.load_W must be a non-negative finite number'
+    );
   }
 
   logPredictionCall(logLabel + ' (load)', { activeType: config.activeType });
