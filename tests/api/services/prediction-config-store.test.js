@@ -56,4 +56,35 @@ describe('prediction-config-store', () => {
       expect(config.validationWindow.end).toBe(expectedEnd.toISOString());
     });
   });
+
+  describe('migration: activeConfig → historicalPredictor', () => {
+    it('migrates old activeConfig format to historicalPredictor + activeType', async () => {
+      await writeFile(
+        path.join(tmpDir, 'prediction-config.json'),
+        JSON.stringify({
+          sensors: [{ id: 'sensor.grid', name: 'Grid Import', unit: 'kWh' }],
+          derived: [],
+          activeConfig: {
+            sensor: 'Total Load',
+            lookbackWeeks: 4,
+            dayFilter: 'weekday-weekend',
+            aggregation: 'mean',
+          },
+        }),
+        'utf8',
+      );
+
+      const { loadPredictionConfig } = await importStore();
+      const config = await loadPredictionConfig();
+
+      expect(config.activeType).toBe('historical');
+      expect(config.historicalPredictor).toEqual({
+        sensor: 'Total Load',
+        lookbackWeeks: 4,
+        dayFilter: 'weekday-weekend',
+        aggregation: 'mean',
+      });
+      expect(config).not.toHaveProperty('activeConfig');
+    });
+  });
 });

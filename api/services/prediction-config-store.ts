@@ -9,14 +9,35 @@ const DEFAULT_PATH = fileURLToPath(new URL('../defaults/default-prediction-confi
 
 export async function loadPredictionConfig(): Promise<PredictionConfig> {
   const defaults = await readJson<PredictionConfig>(DEFAULT_PATH);
-  let userConfig: Partial<PredictionConfig> = {};
+  let userConfig: Record<string, unknown> = {};
   try {
-    userConfig = await readJson<PredictionConfig>(PREDICTION_CONFIG_PATH);
+    userConfig = await readJson<Record<string, unknown>>(PREDICTION_CONFIG_PATH);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
 
-  const { validationWindow: _vw, ...rest } = { ...defaults, ...userConfig };
+  // Migrate old activeConfig format to historicalPredictor + activeType
+  if ('activeConfig' in userConfig && !('historicalPredictor' in userConfig)) {
+    const old = userConfig.activeConfig as {
+      sensor: string;
+      lookbackWeeks: number;
+      dayFilter: string;
+      aggregation: string;
+    };
+    const { activeConfig: _ac, ...rest } = userConfig;
+    userConfig = {
+      ...rest,
+      activeType: 'historical',
+      historicalPredictor: {
+        sensor: old.sensor,
+        lookbackWeeks: old.lookbackWeeks,
+        dayFilter: old.dayFilter,
+        aggregation: old.aggregation,
+      },
+    };
+  }
+
+  const { activeConfig: _defaultAc, validationWindow: _vw, ...rest } = { ...defaults, ...(userConfig as Partial<PredictionConfig>) };
 
   // Always recompute validationWindow — never trust a persisted value
   const now = new Date();
