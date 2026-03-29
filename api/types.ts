@@ -80,12 +80,9 @@ export interface PlanRowWithDess extends PlanRow {
 
 // ----------------------------- Prediction config ------------------------
 
-export interface PredictionActiveConfig {
-  sensor: string;
-  lookbackWeeks: number;
-  dayFilter: DayFilter;
-  aggregation: Aggregation;
-}
+export type LoadPredictor =
+  | { type: 'historical'; sensor: string; lookbackWeeks: number; dayFilter: DayFilter; aggregation: Aggregation }
+  | { type: 'fixed'; load_W: number };
 
 export interface PredictionValidationWindow {
   start: string;
@@ -108,7 +105,9 @@ export interface PvPredictionConfig {
 export interface PredictionConfig {
   sensors: HaSensor[];
   derived: HaDerivedSensor[];
-  activeConfig?: PredictionActiveConfig;
+  activeType: 'historical' | 'fixed';
+  historicalPredictor?: { sensor: string; lookbackWeeks: number; dayFilter: DayFilter; aggregation: Aggregation };
+  fixedPredictor?: { load_W: number };
   validationWindow?: PredictionValidationWindow;
   includeRecent?: boolean;
   pvConfig?: PvPredictionConfig;

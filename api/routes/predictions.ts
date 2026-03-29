@@ -144,10 +144,10 @@ async function buildRunConfig(): Promise<PredictionRunConfig> {
 
 async function executeLoadForecast(config: PredictionRunConfig, logLabel: string): Promise<unknown> {
   assertHaConnection(config);
-  assertCondition(config.activeConfig != null, 400, 'activeConfig is required');
+  assertCondition(config.activeType != null, 400, 'activeType is required');
   assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
 
-  logPredictionCall(logLabel + ' (load)', { activeConfig: config.activeConfig });
+  logPredictionCall(logLabel + ' (load)', { activeType: config.activeType });
 
   try {
     const result = await runForecast(config);

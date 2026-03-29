@@ -96,15 +96,20 @@ export async function runValidation(config: PredictionRunConfig): Promise<Valida
 
 /**
  * Run forecast for tomorrow using the active config.
- * Caller must ensure config.activeConfig is set.
+ * Caller must ensure config.activeType is set.
  */
 export async function runForecast(config: PredictionRunConfig): Promise<ForecastRunResult> {
-  const { haUrl, haToken, sensors, derived, activeConfig } = config;
+  const { activeType, historicalPredictor, haUrl, haToken, sensors, derived } = config;
+
+  if (activeType !== 'historical') {
+    throw new Error(`Unsupported predictor type: ${activeType}`);
+  }
+
   const entityIds = sensors.map(s => s.id);
 
-  // activeConfig is guaranteed by the route's assertCondition check
+  // historicalPredictor is guaranteed by the route's assertCondition check
   const extraWeeks = config.includeRecent !== false ? 1 : 0;
-  const totalWeeks = activeConfig!.lookbackWeeks + extraWeeks;
+  const totalWeeks = historicalPredictor!.lookbackWeeks + extraWeeks;
   const startTime = new Date(Date.now() - totalWeeks * 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const rawData = await fetchHaStats({
@@ -124,7 +129,7 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
   const recentEnd = now.getTime();
 
   const recentTargets = data.filter(d =>
-    d.sensor === activeConfig!.sensor &&
+    d.sensor === historicalPredictor!.sensor &&
     d.time >= recentStart &&
     d.time <= recentEnd
   );
@@ -145,9 +150,7 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
   }
 
   const allTargets: PredictTarget[] = [...recentTargets, ...futureTargets];
-  const predictions = predict(data, activeConfig!, allTargets);
-
-  // time range is computed by getForecastTimeRange
+  const predictions = predict(data, historicalPredictor!, allTargets);
 
   const mappedPoints = predictions.map(p => ({ time: p.time, value: p.predicted ?? 0 }));
   const forecastSeries = buildForecastSeries(mappedPoints, startIso, endIso);
