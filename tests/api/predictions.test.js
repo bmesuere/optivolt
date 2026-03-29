@@ -144,7 +144,7 @@ describe('POST /predictions/forecast (combined)', () => {
     expect(runForecast).toHaveBeenCalled();
   });
 
-  it('returns load=null when activeConfig missing (graceful fallback)', async () => {
+  it('returns load=null when activeType missing (graceful fallback)', async () => {
     loadPredictionConfig.mockResolvedValue({ ...mockConfig, activeType: undefined });
     const res = await request(app).post('/predictions/forecast').send({});
     expect(res.status).toBe(200);
@@ -180,7 +180,7 @@ describe('POST /predictions/load/forecast', () => {
     expect(runForecast).toHaveBeenCalled();
   });
 
-  it('returns 400 when activeConfig missing', async () => {
+  it('returns 400 when activeType missing', async () => {
     loadPredictionConfig.mockResolvedValue({ ...mockConfig, activeType: undefined });
     const res = await request(app).post('/predictions/load/forecast').send({});
     expect(res.status).toBe(400);
