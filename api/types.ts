@@ -1,5 +1,5 @@
 import type { TimeSeries, PlanRow, DessSlot, TerminalSocValuation } from '../lib/types.ts';
-import type { DayFilter, Aggregation } from '../lib/predict-load.ts';
+import type { DayFilter, Aggregation } from '../lib/load-predictor-historical.ts';
 import type { HaSensor, HaDerivedSensor } from '../lib/ha-postprocess.ts';
 
 export type { TimeSeries };

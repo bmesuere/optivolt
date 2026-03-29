@@ -11,8 +11,8 @@ import {
   predict,
   validate,
   generateAllConfigs,
-} from '../../lib/predict-load.ts';
-import type { DayFilter, Aggregation } from '../../lib/predict-load.ts';
+} from '../../lib/load-predictor-historical.ts';
+import type { DayFilter, Aggregation } from '../../lib/load-predictor-historical.ts';
 import type { PredictionRunConfig } from '../types.ts';
 import { getForecastTimeRange, buildForecastSeries, computeErrorMetrics, type ForecastSeries, type PredictionResult } from '../../lib/time-series-utils.ts';
 

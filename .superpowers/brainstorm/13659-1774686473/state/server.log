@@ -1,0 +1,6 @@
+{"type":"server-started","port":49984,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:49984","screen_dir":"/Users/bart/Code/optivolt/.superpowers/brainstorm/13659-1774686473/content","state_dir":"/Users/bart/Code/optivolt/.superpowers/brainstorm/13659-1774686473/state"}
+{"type":"screen-added","file":"/Users/bart/Code/optivolt/.superpowers/brainstorm/13659-1774686473/content/daily-accuracy-options.html"}
+{"type":"screen-added","file":"/Users/bart/Code/optivolt/.superpowers/brainstorm/13659-1774686473/content/option-b-refined.html"}
+{"type":"screen-added","file":"/Users/bart/Code/optivolt/.superpowers/brainstorm/13659-1774686473/content/option-b-v2.html"}
+{"type":"screen-added","file":"/Users/bart/Code/optivolt/.superpowers/brainstorm/13659-1774686473/content/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}

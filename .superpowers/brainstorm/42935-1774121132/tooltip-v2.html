@@ -1,0 +1,97 @@
+<h2>Tooltip Design — Revised</h2>
+<p class="subtitle">A+B hybrid: sectioned layout, compact price tokens, "Load" shorthand. A few sub-choices remain.</p>
+
+<style>
+  .tt-wrap { display: flex; gap: 32px; flex-wrap: wrap; justify-content: center; margin: 24px 0; }
+  .tt { border-radius: 8px; padding: 12px 14px; font-size: 13px; min-width: 210px; max-width: 240px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.22); font-family: system-ui, sans-serif; }
+  .tt-dark { background: #1e293b; color: #e2e8f0; border: 1px solid rgba(255,255,255,0.08); }
+  .tt-title { font-weight: 700; font-size: 13px; color: #94a3b8; margin-bottom: 8px; letter-spacing: 0.03em; }
+  .tt-row { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+            padding: 2px 0; line-height: 1.5; }
+  .tt-label { display: flex; align-items: center; gap: 6px; color: #cbd5e1; font-size: 12px; }
+  .tt-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .tt-val { font-variant-numeric: tabular-nums; font-weight: 500; font-size: 12px; color: #f1f5f9; }
+  .tt-div { border-top: 1px solid rgba(255,255,255,0.08); margin: 6px 0; }
+  .tt-section-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+                      color: #64748b; font-weight: 600; margin: 4px 0 3px; }
+  .tt-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px;
+              font-weight: 600; letter-spacing: 0.04em; }
+  .tt-badge-buy { background: rgba(239,68,68,0.2); color: #fca5a5; }
+  .tt-badge-sell { background: rgba(34,197,94,0.2); color: #86efac; }
+  .tt-price-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #94a3b8; padding: 1px 0; }
+</style>
+
+<div class="tt-wrap">
+
+  <!-- VARIANT 1: SoC in title row -->
+  <div class="option" data-choice="a" onclick="toggleSelect(this)" style="cursor:pointer">
+    <div class="letter">A</div>
+    <div class="content">
+      <div style="font-weight:600;margin-bottom:8px">SoC in title</div>
+      <div class="tt tt-dark">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+          <span class="tt-title" style="margin:0">14:15</span>
+          <span style="font-size:11px;color:#94a3b8">SoC <strong style="color:#93c5fd">62%</strong></span>
+        </div>
+        <div class="tt-section-label">↑ Sources</div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(212,222,95)"></span>Solar → Load</span><span class="tt-val">0.04</span></div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(139,201,100)"></span>Solar → Battery</span><span class="tt-val">0.06</span></div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(247,171,62)"></span>Solar → Grid</span><span class="tt-val">0.01</span></div>
+        <div class="tt-div"></div>
+        <div class="tt-section-label">↓ Draws</div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(71,144,208)"></span>Battery → Load</span><span class="tt-val">0.03</span></div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(233,122,131)"></span>Grid → Load</span><span class="tt-val">0.05</span></div>
+        <div class="tt-div"></div>
+        <div class="tt-price-row"><span>Buy / Sell</span><span><span class="tt-badge tt-badge-buy">28.4¢</span> <span class="tt-badge tt-badge-sell">5.1¢</span></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VARIANT 2: SoC as its own row -->
+  <div class="option" data-choice="b" onclick="toggleSelect(this)" style="cursor:pointer">
+    <div class="letter">B</div>
+    <div class="content">
+      <div style="font-weight:600;margin-bottom:8px">SoC as a row</div>
+      <div class="tt tt-dark">
+        <div class="tt-title">14:15</div>
+        <div class="tt-section-label">↑ Sources</div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(212,222,95)"></span>Solar → Load</span><span class="tt-val">0.04</span></div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(139,201,100)"></span>Solar → Battery</span><span class="tt-val">0.06</span></div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(247,171,62)"></span>Solar → Grid</span><span class="tt-val">0.01</span></div>
+        <div class="tt-div"></div>
+        <div class="tt-section-label">↓ Draws</div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(71,144,208)"></span>Battery → Load</span><span class="tt-val">0.03</span></div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(233,122,131)"></span>Grid → Load</span><span class="tt-val">0.05</span></div>
+        <div class="tt-div"></div>
+        <div class="tt-row" style="margin-bottom:2px"><span class="tt-label"><span class="tt-dot" style="background:rgb(71,144,208)"></span>Battery SoC</span><span class="tt-val" style="color:#93c5fd">62%</span></div>
+        <div class="tt-price-row"><span>Buy / Sell</span><span><span class="tt-badge tt-badge-buy">28.4¢</span> <span class="tt-badge tt-badge-sell">5.1¢</span></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VARIANT 3: No SoC (prices only) -->
+  <div class="option" data-choice="c" onclick="toggleSelect(this)" style="cursor:pointer">
+    <div class="letter">C</div>
+    <div class="content">
+      <div style="font-weight:600;margin-bottom:8px">No SoC here</div>
+      <div class="tt tt-dark">
+        <div class="tt-title">14:15</div>
+        <div class="tt-section-label">↑ Sources</div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(212,222,95)"></span>Solar → Load</span><span class="tt-val">0.04</span></div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(139,201,100)"></span>Solar → Battery</span><span class="tt-val">0.06</span></div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(247,171,62)"></span>Solar → Grid</span><span class="tt-val">0.01</span></div>
+        <div class="tt-div"></div>
+        <div class="tt-section-label">↓ Draws</div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(71,144,208)"></span>Battery → Load</span><span class="tt-val">0.03</span></div>
+        <div class="tt-row"><span class="tt-label"><span class="tt-dot" style="background:rgb(233,122,131)"></span>Grid → Load</span><span class="tt-val">0.05</span></div>
+        <div class="tt-div"></div>
+        <div class="tt-price-row"><span>Buy / Sell</span><span><span class="tt-badge tt-badge-buy">28.4¢</span> <span class="tt-badge tt-badge-sell">5.1¢</span></span></div>
+      </div>
+      <p style="margin-top:8px;font-size:12px;color:#94a3b8">SoC is already visible in the chart below — skip it here.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="text-align:center">All three use "Load" and the compact price tokens. The only question is what to do with SoC.</p>

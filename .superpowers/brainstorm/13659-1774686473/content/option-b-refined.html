@@ -1,0 +1,106 @@
+<h2>Option B — Refined Mockup</h2>
+<p class="subtitle">Day separators on charts + net daily error badges. Does this look right?</p>
+
+<div class="mockup" style="max-width:680px; margin: 0 auto;">
+  <div class="mockup-header">Load Prediction Accuracy</div>
+  <div class="mockup-body" style="padding:16px 0 0;">
+
+    <!-- Overlay chart with day separators -->
+    <div style="position:relative; height:120px; margin: 0 16px; border:1px solid rgba(255,255,255,0.08); border-radius:6px; background:rgba(255,255,255,0.02); overflow:hidden;">
+      <!-- Day separator lines -->
+      <div style="position:absolute; top:0; bottom:0; left:14.28%; border-left:1px dashed rgba(148,163,184,0.3);"></div>
+      <div style="position:absolute; top:0; bottom:0; left:28.57%; border-left:1px dashed rgba(148,163,184,0.3);"></div>
+      <div style="position:absolute; top:0; bottom:0; left:42.85%; border-left:1px dashed rgba(148,163,184,0.3);"></div>
+      <div style="position:absolute; top:0; bottom:0; left:57.14%; border-left:1px dashed rgba(148,163,184,0.3);"></div>
+      <div style="position:absolute; top:0; bottom:0; left:71.42%; border-left:1px dashed rgba(148,163,184,0.3);"></div>
+      <div style="position:absolute; top:0; bottom:0; left:85.71%; border-left:1px dashed rgba(148,163,184,0.3);"></div>
+      <!-- Day labels on top -->
+      <div style="position:absolute; top:4px; left:3%; font-size:9px; color:rgba(148,163,184,0.5); font-family:monospace;">Mon</div>
+      <div style="position:absolute; top:4px; left:17%; font-size:9px; color:rgba(148,163,184,0.5); font-family:monospace;">Tue</div>
+      <div style="position:absolute; top:4px; left:31%; font-size:9px; color:rgba(148,163,184,0.5); font-family:monospace;">Wed</div>
+      <div style="position:absolute; top:4px; left:45%; font-size:9px; color:rgba(148,163,184,0.5); font-family:monospace;">Thu</div>
+      <div style="position:absolute; top:4px; left:59%; font-size:9px; color:rgba(148,163,184,0.5); font-family:monospace;">Fri</div>
+      <div style="position:absolute; top:4px; left:73%; font-size:9px; color:rgba(148,163,184,0.5); font-family:monospace;">Sat</div>
+      <div style="position:absolute; top:4px; left:87%; font-size:9px; color:rgba(148,163,184,0.5); font-family:monospace;">Sun</div>
+      <!-- Fake chart lines -->
+      <svg style="position:absolute;top:0;left:0;width:100%;height:100%" viewBox="0 0 400 80" preserveAspectRatio="none">
+        <!-- Actual line -->
+        <polyline points="0,50 20,45 40,40 60,55 80,35 100,48 120,42 140,60 160,38 180,52 200,44 220,38 240,56 260,40 280,48 300,35 320,52 340,44 360,50 380,42 400,48" fill="none" stroke="rgb(14,165,233)" stroke-width="1.5" opacity="0.8"/>
+        <!-- Predicted line -->
+        <polyline points="0,48 20,42 40,44 60,50 80,38 100,46 120,40 140,56 160,42 180,48 200,40 220,42 240,52 260,44 280,44 300,38 320,48 340,48 360,46 380,46 400,44" fill="none" stroke="rgb(249,115,22)" stroke-width="1.5" opacity="0.8"/>
+      </svg>
+    </div>
+
+    <!-- Diff chart with day separators -->
+    <div style="position:relative; height:80px; margin: 8px 16px 0; border:1px solid rgba(255,255,255,0.08); border-radius:6px; background:rgba(255,255,255,0.02); overflow:hidden;">
+      <div style="position:absolute; top:0; bottom:0; left:14.28%; border-left:1px dashed rgba(148,163,184,0.3);"></div>
+      <div style="position:absolute; top:0; bottom:0; left:28.57%; border-left:1px dashed rgba(148,163,184,0.3);"></div>
+      <div style="position:absolute; top:0; bottom:0; left:42.85%; border-left:1px dashed rgba(148,163,184,0.3);"></div>
+      <div style="position:absolute; top:0; bottom:0; left:57.14%; border-left:1px dashed rgba(148,163,184,0.3);"></div>
+      <div style="position:absolute; top:0; bottom:0; left:71.42%; border-left:1px dashed rgba(148,163,184,0.3);"></div>
+      <div style="position:absolute; top:0; bottom:0; left:85.71%; border-left:1px dashed rgba(148,163,184,0.3);"></div>
+      <svg style="position:absolute;top:0;left:0;width:100%;height:100%" viewBox="0 0 400 50" preserveAspectRatio="none">
+        <!-- zero line -->
+        <line x1="0" y1="25" x2="400" y2="25" stroke="rgba(148,163,184,0.2)" stroke-width="1"/>
+        <!-- diff area: positive (green above zero) -->
+        <path d="M0,25 L0,23 L20,22 L40,26 L60,20 L80,25 L100,22" fill="rgba(139,201,100,0.35)" stroke="none"/>
+        <path d="M0,23 L20,22 L40,26 L60,20 L80,25 L100,22" fill="none" stroke="rgba(100,116,139,0.6)" stroke-width="1"/>
+        <!-- diff area: negative (red below zero) -->
+        <path d="M100,22 L120,26 L140,30 L160,28 L180,24 L200,28" fill="none" stroke="rgba(100,116,139,0.6)" stroke-width="1"/>
+        <path d="M100,25 L100,22 L120,26 L140,30 L160,28 L180,24 L200,28 L200,25" fill="rgba(233,122,131,0.35)" stroke="none"/>
+        <path d="M200,28 L220,22 L240,20 L260,24 L280,22 L300,18 L320,22 L340,24 L360,22 L380,24 L400,22" fill="none" stroke="rgba(100,116,139,0.6)" stroke-width="1"/>
+        <path d="M200,25 L200,28 L220,22 L240,20 L260,24 L280,22 L300,18" fill="rgba(139,201,100,0.35)" stroke="none"/>
+      </svg>
+    </div>
+
+    <!-- Daily net error badge row -->
+    <div style="margin: 12px 16px 16px; padding: 10px 12px; background:rgba(255,255,255,0.025); border-radius:6px; border:1px solid rgba(255,255,255,0.06);">
+      <div style="font-size:10px; font-weight:600; letter-spacing:0.08em; color:rgba(148,163,184,0.6); text-transform:uppercase; margin-bottom:8px;">Net daily error</div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <!-- Green = near zero = good -->
+        <div style="display:flex; flex-direction:column; align-items:center; padding:5px 8px; border-radius:5px; background:rgba(139,201,100,0.12); border:1px solid rgba(139,201,100,0.25);">
+          <span style="font-size:10px; color:rgba(148,163,184,0.7); margin-bottom:2px;">Mon</span>
+          <span style="font-size:12px; font-weight:600; color:rgb(139,201,100);">+0.3 kWh</span>
+        </div>
+        <!-- Orange = moderate over-prediction -->
+        <div style="display:flex; flex-direction:column; align-items:center; padding:5px 8px; border-radius:5px; background:rgba(249,115,22,0.12); border:1px solid rgba(249,115,22,0.25);">
+          <span style="font-size:10px; color:rgba(148,163,184,0.7); margin-bottom:2px;">Tue</span>
+          <span style="font-size:12px; font-weight:600; color:rgb(249,115,22);">+2.1 kWh</span>
+        </div>
+        <!-- Green = near zero -->
+        <div style="display:flex; flex-direction:column; align-items:center; padding:5px 8px; border-radius:5px; background:rgba(139,201,100,0.12); border:1px solid rgba(139,201,100,0.25);">
+          <span style="font-size:10px; color:rgba(148,163,184,0.7); margin-bottom:2px;">Wed</span>
+          <span style="font-size:12px; font-weight:600; color:rgb(139,201,100);">−0.2 kWh</span>
+        </div>
+        <!-- Red = under-prediction -->
+        <div style="display:flex; flex-direction:column; align-items:center; padding:5px 8px; border-radius:5px; background:rgba(233,122,131,0.12); border:1px solid rgba(233,122,131,0.25);">
+          <span style="font-size:10px; color:rgba(148,163,184,0.7); margin-bottom:2px;">Thu</span>
+          <span style="font-size:12px; font-weight:600; color:rgb(233,122,131);">−3.4 kWh</span>
+        </div>
+        <!-- Green -->
+        <div style="display:flex; flex-direction:column; align-items:center; padding:5px 8px; border-radius:5px; background:rgba(139,201,100,0.12); border:1px solid rgba(139,201,100,0.25);">
+          <span style="font-size:10px; color:rgba(148,163,184,0.7); margin-bottom:2px;">Fri</span>
+          <span style="font-size:12px; font-weight:600; color:rgb(139,201,100);">+0.5 kWh</span>
+        </div>
+        <!-- Orange -->
+        <div style="display:flex; flex-direction:column; align-items:center; padding:5px 8px; border-radius:5px; background:rgba(249,115,22,0.12); border:1px solid rgba(249,115,22,0.25);">
+          <span style="font-size:10px; color:rgba(148,163,184,0.7); margin-bottom:2px;">Sat</span>
+          <span style="font-size:12px; font-weight:600; color:rgb(249,115,22);">+1.8 kWh</span>
+        </div>
+        <!-- Green near zero -->
+        <div style="display:flex; flex-direction:column; align-items:center; padding:5px 8px; border-radius:5px; background:rgba(139,201,100,0.12); border:1px solid rgba(139,201,100,0.25);">
+          <span style="font-size:10px; color:rgba(148,163,184,0.7); margin-bottom:2px;">Sun</span>
+          <span style="font-size:12px; font-weight:600; color:rgb(139,201,100);">−0.1 kWh</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:20px; text-align:center; max-width:520px; margin-left:auto; margin-right:auto;">
+  Color coding: <strong style="color:rgb(139,201,100)">green</strong> = near zero (good),
+  <strong style="color:rgb(249,115,22)">orange</strong> = over-predicted,
+  <strong style="color:rgb(233,122,131)">red</strong> = under-predicted.<br>
+  Values show net sum(predicted − actual) per day in kWh.
+</p>
