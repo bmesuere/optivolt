@@ -37,7 +37,9 @@ export async function loadPredictionConfig(): Promise<PredictionConfig> {
     };
   }
 
-  const { activeConfig: _defaultAc, validationWindow: _vw, ...rest } = { ...defaults, ...(userConfig as Partial<PredictionConfig>) };
+  const { activeConfig: _ac, ...cleanUserConfig } = userConfig;
+  const merged = { ...defaults, ...(cleanUserConfig as Partial<PredictionConfig>) };
+  const { validationWindow: _vw, activeConfig: _defaultAc, ...rest } = merged as unknown as PredictionConfig & { activeConfig?: unknown };
 
   // Always recompute validationWindow — never trust a persisted value
   const now = new Date();
