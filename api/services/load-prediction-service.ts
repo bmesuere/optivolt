@@ -99,10 +99,16 @@ export async function runValidation(config: PredictionRunConfig): Promise<Valida
  * Caller must ensure config.activeType is set.
  */
 export async function runForecast(config: PredictionRunConfig): Promise<ForecastRunResult> {
-  const { activeType, historicalPredictor, haUrl, haToken, sensors, derived } = config;
+  const { activeType, historicalPredictor, fixedPredictor, haUrl, haToken, sensors, derived } = config;
 
-  if (activeType !== 'historical') {
-    throw new Error(`Unsupported predictor type: ${activeType}`);
+  if (activeType === 'fixed') {
+    const load_W = fixedPredictor!.load_W;
+    const { startIso, endIso } = getForecastTimeRange();
+    const startMs = new Date(startIso).getTime();
+    const endMs = new Date(endIso).getTime();
+    const nSlots = Math.round((endMs - startMs) / (15 * 60 * 1000));
+    const forecast: ForecastSeries = { start: startIso, step: 15, values: Array(nSlots).fill(load_W) };
+    return { forecast, recent: [], metrics: { mae: NaN, rmse: NaN, mape: NaN, n: 0 } };
   }
 
   const entityIds = sensors.map(s => s.id);
