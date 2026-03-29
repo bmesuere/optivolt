@@ -37,12 +37,10 @@ export async function loadPredictionConfig(): Promise<PredictionConfig> {
     };
   }
 
-  // Strip activeConfig from userConfig first (migration guard for old per-user stored configs)
+  // Strip activeConfig from userConfig (guard for stored configs that have both activeConfig and historicalPredictor)
   const { activeConfig: _ac, ...cleanUserConfig } = userConfig;
   const merged = { ...defaults, ...(cleanUserConfig as Partial<PredictionConfig>) };
-  // Strip activeConfig again from merged: guards against default config still having old activeConfig during transition period.
-  // Cast allows TypeScript to see the activeConfig property for destructuring, even though PredictionConfig correctly excludes it.
-  const { validationWindow: _vw, activeConfig: _defaultAc, ...rest } = merged as unknown as PredictionConfig & { activeConfig?: unknown };
+  const { validationWindow: _vw, ...rest } = merged;
 
   // Always recompute validationWindow — never trust a persisted value
   const now = new Date();

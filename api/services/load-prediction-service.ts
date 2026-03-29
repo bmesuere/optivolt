@@ -103,7 +103,8 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
 
   if (activeType === 'fixed') {
     const load_W = fixedPredictor!.load_W;
-    const { startIso, endIso } = getForecastTimeRange();
+    const nowMs = Date.now();
+    const { startIso, endIso } = getForecastTimeRange(nowMs);
     const startMs = new Date(startIso).getTime();
     const endMs = new Date(endIso).getTime();
     const nSlots = Math.round((endMs - startMs) / (15 * 60 * 1000));
@@ -113,7 +114,6 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
 
   const entityIds = sensors.map(s => s.id);
 
-  // historicalPredictor is guaranteed by the route's assertCondition check
   const extraWeeks = config.includeRecent !== false ? 1 : 0;
   const totalWeeks = historicalPredictor!.lookbackWeeks + extraWeeks;
   const startTime = new Date(Date.now() - totalWeeks * 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -163,10 +163,11 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
 
   let recent: PredictionResult[] = [];
   if (config.includeRecent !== false) {
-    const past7d = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const nowMs = now.getTime();
+    const past7d = nowMs - 7 * 24 * 60 * 60 * 1000;
 
     recent = predictions
-      .filter(p => p.time <= Date.now() && p.time >= past7d)
+      .filter(p => p.time <= nowMs && p.time >= past7d)
       .map(p => ({
         date: p.date,
         time: p.time,

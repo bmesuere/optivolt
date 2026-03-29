@@ -1,6 +1,0 @@
-{"type":"server-started","port":53344,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:53344","screen_dir":"/Users/bart/Code/optivolt/.superpowers/brainstorm/42935-1774121132"}
-{"type":"screen-added","file":"/Users/bart/Code/optivolt/.superpowers/brainstorm/42935-1774121132/tooltip-options.html"}
-{"type":"screen-added","file":"/Users/bart/Code/optivolt/.superpowers/brainstorm/42935-1774121132/tooltip-v2.html"}
-{"source":"user-event","type":"click","text":"A\n    \n      SoC in title\n      \n        \n          14:15\n          SoC 62%\n        \n        ↑ Sources\n        Solar → Load0.04\n        Solar → Battery0.06\n        Solar → Grid0.01\n        \n        ↓ Draws\n        Battery → Load0.03\n        Grid → Load0.05\n        \n        Buy / Sell28.4¢ 5.1¢","choice":"a","id":null,"timestamp":1774121526655}
-{"type":"screen-added","file":"/Users/bart/Code/optivolt/.superpowers/brainstorm/42935-1774121132/waiting.html"}
-{"type":"server-stopped","reason":"idle timeout"}

@@ -80,10 +80,6 @@ export interface PlanRowWithDess extends PlanRow {
 
 // ----------------------------- Prediction config ------------------------
 
-export type LoadPredictor =
-  | { type: 'historical'; sensor: string; lookbackWeeks: number; dayFilter: DayFilter; aggregation: Aggregation }
-  | { type: 'fixed'; load_W: number };
-
 export interface PredictionValidationWindow {
   start: string;
   end: string;
