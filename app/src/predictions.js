@@ -363,7 +363,7 @@ function renderPvAccuracyChart(recentData) {
   );
 }
 
-function buildDayDividersPlugin(timestamps, dayNetW, netErrorContainerId) {
+function buildDayDividersPlugin(timestamps, dayNetWh, netErrorContainerId) {
   const daySpans = new Map();
   for (let i = 0; i < timestamps.length; i++) {
     const dateStr = new Date(timestamps[i]).toLocaleDateString('en-CA');
@@ -371,7 +371,7 @@ function buildDayDividersPlugin(timestamps, dayNetW, netErrorContainerId) {
     else daySpans.get(dateStr).last = i;
   }
   const days = [...daySpans.entries()];
-  let lastChartLeft = null; // skip HTML rebuild when chartArea hasn't changed (e.g. animation frames)
+  let lastChartGeometry = null; // skip HTML rebuild when horizontal geometry hasn't changed
 
   return {
     id: 'dayDividers',
@@ -403,8 +403,9 @@ function buildDayDividersPlugin(timestamps, dayNetW, netErrorContainerId) {
 
       ctx.restore();
 
-      if (!netErrorContainerId || !dayNetW || chartArea.left === lastChartLeft) return;
-      lastChartLeft = chartArea.left;
+      const geometry = `${chartArea.left},${chartArea.right}`;
+      if (!netErrorContainerId || !dayNetWh || geometry === lastChartGeometry) return;
+      lastChartGeometry = geometry;
 
       const container = document.getElementById(netErrorContainerId);
       if (!container) return;
@@ -413,7 +414,7 @@ function buildDayDividersPlugin(timestamps, dayNetW, netErrorContainerId) {
 
       for (const [dateStr, { first, last }] of days) {
         const midX = (scales.x.getPixelForValue(first) + scales.x.getPixelForValue(last)) / 2;
-        const netKwh = (dayNetW.get(dateStr) ?? 0) / 1000;
+        const netKwh = (dayNetWh.get(dateStr) ?? 0) / 1000;
         const color = netKwh >= 0 ? 'rgb(139,201,100)' : 'rgb(233,122,131)';
         const sign = netKwh >= 0 ? '+' : '−';
         html += `<div style="position:absolute;top:16px;left:${midX}px;transform:translateX(-50%);font-size:11px;font-weight:600;color:${color};white-space:nowrap">${sign}${fmtKwh(Math.abs(netKwh))}</div>`;
@@ -437,14 +438,16 @@ function renderAccuracyCharts(overlayCanvasId, diffCanvasId, netErrorContainerId
 
   const timestamps = sorted.map(d => d.time);
 
-  const dayNetW = new Map();
+  const dayNetWh = new Map();
   for (const d of sorted) {
+    const actual = options.valueActual(d);
+    const pred = options.valuePred(d);
+    if (actual == null || pred == null) continue;
     const dateStr = new Date(d.time).toLocaleDateString('en-CA');
-    const diff = options.valuePred(d) - options.valueActual(d);
-    dayNetW.set(dateStr, (dayNetW.get(dateStr) ?? 0) + diff);
+    dayNetWh.set(dateStr, (dayNetWh.get(dateStr) ?? 0) + (pred - actual));
   }
 
-  const dayDividersPlugin = buildDayDividersPlugin(timestamps, dayNetW, netErrorContainerId);
+  const dayDividersPlugin = buildDayDividersPlugin(timestamps, dayNetWh, netErrorContainerId);
   const dayDividersPluginDiff = buildDayDividersPlugin(timestamps, null, null);
 
   // Chart 1: two clean lines, solid legend swatch (backgroundColor = line color, fill: false)
