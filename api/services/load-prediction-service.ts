@@ -1,5 +1,5 @@
 /**
- * prediction-service.ts
+ * load-prediction-service.ts
  *
  * Orchestrates HA data fetch → postprocess → predict/validate.
  */

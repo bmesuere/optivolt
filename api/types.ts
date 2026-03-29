@@ -105,7 +105,7 @@ export interface PvPredictionConfig {
 export interface PredictionConfig {
   sensors: HaSensor[];
   derived: HaDerivedSensor[];
-  activeType: 'historical' | 'fixed';
+  activeType?: 'historical' | 'fixed';
   historicalPredictor?: { sensor: string; lookbackWeeks: number; dayFilter: DayFilter; aggregation: Aggregation };
   fixedPredictor?: { load_W: number };
   validationWindow?: PredictionValidationWindow;
