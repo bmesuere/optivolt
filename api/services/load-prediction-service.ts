@@ -109,7 +109,35 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
     const endMs = new Date(endIso).getTime();
     const nSlots = Math.round((endMs - startMs) / (15 * 60 * 1000));
     const forecast: ForecastSeries = { start: startIso, step: 15, values: Array(nSlots).fill(load_W) };
-    return { forecast, recent: [], metrics: { mae: NaN, rmse: NaN, mape: NaN, n: 0 } };
+
+    const canComputeAccuracy =
+      config.includeRecent !== false &&
+      historicalPredictor?.sensor &&
+      sensors.length > 0 &&
+      (!!process.env.SUPERVISOR_TOKEN || (haUrl.length > 0 && haToken.length > 0));
+
+    if (!canComputeAccuracy) {
+      return { forecast, recent: [], metrics: { mae: NaN, rmse: NaN, mape: NaN, n: 0 } };
+    }
+
+    const past7d = nowMs - 7 * 24 * 60 * 60 * 1000;
+    const matchingSensor = sensors.find(s => (s.name || s.id) === historicalPredictor!.sensor);
+    const entityIds = matchingSensor ? [matchingSensor.id] : sensors.map(s => s.id);
+    const rawData = await fetchHaStats({ haUrl, haToken, entityIds, startTime: new Date(past7d).toISOString() });
+    const data = postprocess(rawData, sensors, derived);
+
+    const recent: PredictionResult[] = data
+      .filter(d => d.sensor === historicalPredictor!.sensor && d.time >= past7d)
+      .map(d => ({
+        date: d.date,
+        time: d.time,
+        hour: d.hour,
+        actual: d.value ?? null,
+        predicted: load_W,
+      }));
+
+    const metrics = computeErrorMetrics(recent, r => r.actual, r => r.predicted);
+    return { forecast, recent, metrics };
   }
 
   const entityIds = sensors.map(s => s.id);
