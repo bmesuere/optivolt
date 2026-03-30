@@ -784,44 +784,48 @@
             </select>
           </label>
 
-          <label class="block text-sm" id="pred-fixed-load-row">
-            <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Fixed Load (W)</span>
-            <input id="pred-fixed-load-w" type="number" min="0" step="10" class="form-input" data-predictions-only="true" />
-          </label>
-
-          <label class="block text-sm">
-            <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Sensor</span>
-            <select id="pred-active-sensor" class="form-select" data-predictions-only="true">
-              <option value="" disabled selected>Select a sensor…</option>
-            </select>
-          </label>
-
-          <div class="grid grid-cols-2 gap-3">
+          <div id="pred-fixed-fields">
             <label class="block text-sm">
-              <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Lookback
-                (weeks)</span>
-              <input id="pred-active-lookback" type="number" min="1" class="form-input" data-predictions-only="true" />
-            </label>
-            <label class="block text-sm">
-              <span
-                class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Aggregation</span>
-              <select id="pred-active-agg" class="form-select" data-predictions-only="true">
-                <option value="mean">Mean</option>
-                <option value="median">Median</option>
-              </select>
+              <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Fixed Load (W)</span>
+              <input id="pred-fixed-load-w" type="number" min="0" step="10" class="form-input" data-predictions-only="true" />
             </label>
           </div>
 
-          <label class="block text-sm">
-            <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Day
-              Filter</span>
-            <select id="pred-active-filter" class="form-select" data-predictions-only="true">
-              <option value="same">Same day of week</option>
-              <option value="weekday-weekend">Weekday / Weekend</option>
-              <option value="weekday-sat-sun">Weekday / Sat / Sun</option>
-              <option value="all">All days</option>
-            </select>
-          </label>
+          <div id="pred-historical-fields" class="space-y-3">
+            <label class="block text-sm">
+              <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Sensor</span>
+              <select id="pred-active-sensor" class="form-select" data-predictions-only="true">
+                <option value="" disabled selected>Select a sensor…</option>
+              </select>
+            </label>
+
+            <div class="grid grid-cols-2 gap-3">
+              <label class="block text-sm">
+                <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Lookback
+                  (weeks)</span>
+                <input id="pred-active-lookback" type="number" min="1" class="form-input" data-predictions-only="true" />
+              </label>
+              <label class="block text-sm">
+                <span
+                  class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Aggregation</span>
+                <select id="pred-active-agg" class="form-select" data-predictions-only="true">
+                  <option value="mean">Mean</option>
+                  <option value="median">Median</option>
+                </select>
+              </label>
+            </div>
+
+            <label class="block text-sm">
+              <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Day
+                Filter</span>
+              <select id="pred-active-filter" class="form-select" data-predictions-only="true">
+                <option value="same">Same day of week</option>
+                <option value="weekday-weekend">Weekday / Weekend</option>
+                <option value="weekday-sat-sun">Weekday / Sat / Sun</option>
+                <option value="all">All days</option>
+              </select>
+            </label>
+          </div>
 
           <div class="mt-4">
             <button id="pred-load-forecast" type="button"

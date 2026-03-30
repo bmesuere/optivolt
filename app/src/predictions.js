@@ -86,6 +86,14 @@ function applyConfigToForm(config) {
   setVal('pred-fixed-load-w', config.fixedPredictor?.load_W ?? '');
   renderHistoricalConfig(config.historicalPredictor ?? null);
   renderPvConfig(config.pvConfig ?? null);
+  updatePredictorFieldVisibility();
+}
+
+function updatePredictorFieldVisibility() {
+  const type = getVal('pred-active-type') || 'historical';
+  const isFixed = type === 'fixed';
+  document.getElementById('pred-fixed-fields')?.classList.toggle('hidden', !isFixed);
+  document.getElementById('pred-historical-fields')?.classList.toggle('hidden', isFixed);
 }
 
 // ---------------------------------------------------------------------------
@@ -99,6 +107,9 @@ function wireForm() {
     el.addEventListener('input', debouncedSave);
     el.addEventListener('change', debouncedSave);
   }
+
+  document.getElementById('pred-active-type')
+    ?.addEventListener('change', updatePredictorFieldVisibility);
 
   initValidation({ readFormValues, renderHistoricalConfig, setComparisonStatus });
 
