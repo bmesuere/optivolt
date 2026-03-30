@@ -265,6 +265,59 @@ describe('generateAllConfigs', () => {
 });
 
 // ---------------------------------------------------------------------------
+// predict — DST boundary
+// ---------------------------------------------------------------------------
+
+describe('predict across DST boundary (CET→CEST)', () => {
+  // 2026 spring-forward: March 29 at 02:00 local (01:00 UTC)
+  // Boiler runs at 04:00 local every day.
+  // Before DST: 04:00 CET  = 03:00 UTC
+  // After DST:  04:00 CEST = 02:00 UTC
+  const dstHistory = [
+    {
+      date: '2026-03-16T03:00:00.000Z', // Mon 04:00 CET
+      time: new Date('2026-03-16T03:00:00.000Z').getTime(),
+      hour: 3,
+      dayOfWeek: 1,
+      sensor: 'Load',
+      value: 500,
+    },
+    {
+      date: '2026-03-23T03:00:00.000Z', // Mon 04:00 CET
+      time: new Date('2026-03-23T03:00:00.000Z').getTime(),
+      hour: 3,
+      dayOfWeek: 1,
+      sensor: 'Load',
+      value: 700,
+    },
+  ];
+
+  // Target: Mon March 30 at 04:00 CEST = 02:00 UTC
+  const dstTarget = {
+    date: '2026-03-30T02:00:00.000Z',
+    time: new Date('2026-03-30T02:00:00.000Z').getTime(),
+    hour: 2,
+    dayOfWeek: 1, // Monday UTC
+    value: null,
+  };
+
+  it('finds historical records at the same local hour across a DST transition', () => {
+    const results = predict(dstHistory, {
+      sensor: 'Load',
+      lookbackWeeks: 3,
+      dayFilter: 'all',
+      aggregation: 'mean',
+    }, [dstTarget]);
+
+    expect(results).toHaveLength(1);
+    // setDate lookback: March 30 04:00 CEST -7d → March 23 04:00 CET = 03:00 UTC ✓
+    //                   March 30 04:00 CEST -14d → March 16 04:00 CET = 03:00 UTC ✓
+    // Mean of 500 and 700 = 600
+    expect(results[0].predicted).toBeCloseTo(600);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // buildForecastSeriesRange
 // ---------------------------------------------------------------------------
 

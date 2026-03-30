@@ -177,8 +177,8 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
     futureTargets.push({
       date: d.toISOString(),
       time: t,
-      hour: d.getHours(),
-      dayOfWeek: d.getDay(),
+      hour: d.getUTCHours(),
+      dayOfWeek: d.getUTCDay(),
       value: null,
     });
   }
