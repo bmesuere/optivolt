@@ -143,11 +143,22 @@ async function buildRunConfig(): Promise<PredictionRunConfig> {
 }
 
 async function executeLoadForecast(config: PredictionRunConfig, logLabel: string): Promise<unknown> {
-  assertHaConnection(config);
-  assertCondition(config.activeConfig != null, 400, 'activeConfig is required');
-  assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
+  assertCondition(config.activeType != null, 400, 'activeType is required');
+  if (config.activeType === 'historical') {
+    assertHaConnection(config);
+    assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
+    assertCondition(config.historicalPredictor != null, 400, 'historicalPredictor is required for historical activeType');
+  }
+  if (config.activeType === 'fixed') {
+    assertCondition(config.fixedPredictor != null, 400, 'fixedPredictor is required for fixed activeType');
+    assertCondition(
+      Number.isFinite(config.fixedPredictor!.load_W) && config.fixedPredictor!.load_W >= 0,
+      400,
+      'fixedPredictor.load_W must be a non-negative finite number'
+    );
+  }
 
-  logPredictionCall(logLabel + ' (load)', { activeConfig: config.activeConfig });
+  logPredictionCall(logLabel + ' (load)', { activeType: config.activeType });
 
   try {
     const result = await runForecast(config);

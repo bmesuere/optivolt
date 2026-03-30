@@ -1,5 +1,5 @@
 import type { TimeSeries, PlanRow, DessSlot, TerminalSocValuation } from '../lib/types.ts';
-import type { DayFilter, Aggregation } from '../lib/predict-load.ts';
+import type { DayFilter, Aggregation } from '../lib/load-predictor-historical.ts';
 import type { HaSensor, HaDerivedSensor } from '../lib/ha-postprocess.ts';
 
 export type { TimeSeries };
@@ -80,13 +80,6 @@ export interface PlanRowWithDess extends PlanRow {
 
 // ----------------------------- Prediction config ------------------------
 
-export interface PredictionActiveConfig {
-  sensor: string;
-  lookbackWeeks: number;
-  dayFilter: DayFilter;
-  aggregation: Aggregation;
-}
-
 export interface PredictionValidationWindow {
   start: string;
   end: string;
@@ -108,7 +101,9 @@ export interface PvPredictionConfig {
 export interface PredictionConfig {
   sensors: HaSensor[];
   derived: HaDerivedSensor[];
-  activeConfig?: PredictionActiveConfig;
+  activeType?: 'historical' | 'fixed';
+  historicalPredictor?: { sensor: string; lookbackWeeks: number; dayFilter: DayFilter; aggregation: Aggregation };
+  fixedPredictor?: { load_W: number };
   validationWindow?: PredictionValidationWindow;
   includeRecent?: boolean;
   pvConfig?: PvPredictionConfig;

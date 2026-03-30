@@ -6,7 +6,7 @@ import {
   predict,
   validate,
   generateAllConfigs,
-} from '../../lib/predict-load.ts';
+} from '../../lib/load-predictor-historical.ts';
 import { buildForecastSeries } from '../../lib/time-series-utils.ts';
 
 // ---------------------------------------------------------------------------

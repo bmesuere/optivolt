@@ -1,5 +1,5 @@
 /**
- * prediction-service.ts
+ * load-prediction-service.ts
  *
  * Orchestrates HA data fetch → postprocess → predict/validate.
  */
@@ -11,8 +11,8 @@ import {
   predict,
   validate,
   generateAllConfigs,
-} from '../../lib/predict-load.ts';
-import type { DayFilter, Aggregation } from '../../lib/predict-load.ts';
+} from '../../lib/load-predictor-historical.ts';
+import type { DayFilter, Aggregation } from '../../lib/load-predictor-historical.ts';
 import type { PredictionRunConfig } from '../types.ts';
 import { getForecastTimeRange, buildForecastSeries, computeErrorMetrics, type ForecastSeries, type PredictionResult } from '../../lib/time-series-utils.ts';
 
@@ -96,15 +96,54 @@ export async function runValidation(config: PredictionRunConfig): Promise<Valida
 
 /**
  * Run forecast for tomorrow using the active config.
- * Caller must ensure config.activeConfig is set.
+ * Caller must ensure config.activeType is set.
  */
 export async function runForecast(config: PredictionRunConfig): Promise<ForecastRunResult> {
-  const { haUrl, haToken, sensors, derived, activeConfig } = config;
+  const { activeType, historicalPredictor, fixedPredictor, haUrl, haToken, sensors, derived } = config;
+
+  if (activeType === 'fixed') {
+    const load_W = fixedPredictor!.load_W;
+    const nowMs = Date.now();
+    const { startIso, endIso } = getForecastTimeRange(nowMs);
+    const startMs = new Date(startIso).getTime();
+    const endMs = new Date(endIso).getTime();
+    const nSlots = Math.round((endMs - startMs) / (15 * 60 * 1000));
+    const forecast: ForecastSeries = { start: startIso, step: 15, values: Array(nSlots).fill(load_W) };
+
+    const canComputeAccuracy =
+      config.includeRecent !== false &&
+      historicalPredictor?.sensor &&
+      sensors.length > 0 &&
+      (!!process.env.SUPERVISOR_TOKEN || (haUrl.length > 0 && haToken.length > 0));
+
+    if (!canComputeAccuracy) {
+      return { forecast, recent: [], metrics: { mae: NaN, rmse: NaN, mape: NaN, n: 0 } };
+    }
+
+    const past7d = nowMs - 7 * 24 * 60 * 60 * 1000;
+    const matchingSensor = sensors.find(s => (s.name || s.id) === historicalPredictor!.sensor);
+    const entityIds = matchingSensor ? [matchingSensor.id] : sensors.map(s => s.id);
+    const rawData = await fetchHaStats({ haUrl, haToken, entityIds, startTime: new Date(past7d).toISOString() });
+    const data = postprocess(rawData, sensors, derived);
+
+    const recent: PredictionResult[] = data
+      .filter(d => d.sensor === historicalPredictor!.sensor && d.time >= past7d)
+      .map(d => ({
+        date: d.date,
+        time: d.time,
+        hour: d.hour,
+        actual: d.value ?? null,
+        predicted: load_W,
+      }));
+
+    const metrics = computeErrorMetrics(recent, r => r.actual, r => r.predicted);
+    return { forecast, recent, metrics };
+  }
+
   const entityIds = sensors.map(s => s.id);
 
-  // activeConfig is guaranteed by the route's assertCondition check
   const extraWeeks = config.includeRecent !== false ? 1 : 0;
-  const totalWeeks = activeConfig!.lookbackWeeks + extraWeeks;
+  const totalWeeks = historicalPredictor!.lookbackWeeks + extraWeeks;
   const startTime = new Date(Date.now() - totalWeeks * 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const rawData = await fetchHaStats({
@@ -124,7 +163,7 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
   const recentEnd = now.getTime();
 
   const recentTargets = data.filter(d =>
-    d.sensor === activeConfig!.sensor &&
+    d.sensor === historicalPredictor!.sensor &&
     d.time >= recentStart &&
     d.time <= recentEnd
   );
@@ -145,19 +184,18 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
   }
 
   const allTargets: PredictTarget[] = [...recentTargets, ...futureTargets];
-  const predictions = predict(data, activeConfig!, allTargets);
-
-  // time range is computed by getForecastTimeRange
+  const predictions = predict(data, historicalPredictor!, allTargets);
 
   const mappedPoints = predictions.map(p => ({ time: p.time, value: p.predicted ?? 0 }));
   const forecastSeries = buildForecastSeries(mappedPoints, startIso, endIso);
 
   let recent: PredictionResult[] = [];
   if (config.includeRecent !== false) {
-    const past7d = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const nowMs = now.getTime();
+    const past7d = nowMs - 7 * 24 * 60 * 60 * 1000;
 
     recent = predictions
-      .filter(p => p.time <= Date.now() && p.time >= past7d)
+      .filter(p => p.time <= nowMs && p.time >= past7d)
       .map(p => ({
         date: p.date,
         time: p.time,

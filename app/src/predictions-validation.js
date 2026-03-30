@@ -7,14 +7,14 @@ let _activeSensor = null;
 let accuracyChart = null;
 let diffChart = null;
 
-export function initValidation({ readFormValues, renderLoadConfig, setComparisonStatus }) {
+export function initValidation({ readFormValues, renderHistoricalConfig, setComparisonStatus }) {
   const runBtn = document.getElementById('pred-run-validation');
   if (runBtn) {
-    runBtn.addEventListener('click', () => onRunValidation({ readFormValues, renderLoadConfig, setComparisonStatus }));
+    runBtn.addEventListener('click', () => onRunValidation({ readFormValues, renderHistoricalConfig, setComparisonStatus }));
   }
 }
 
-async function onRunValidation({ readFormValues, renderLoadConfig, setComparisonStatus }) {
+async function onRunValidation({ readFormValues, renderHistoricalConfig, setComparisonStatus }) {
   const runBtn = document.getElementById('pred-run-validation');
   const originalText = runBtn ? runBtn.textContent : '';
   if (runBtn) {
@@ -44,7 +44,7 @@ async function onRunValidation({ readFormValues, renderLoadConfig, setComparison
     try {
       const result = await runValidation();
       validationResults = result;
-      renderResults(result, { readFormValues, renderLoadConfig, setComparisonStatus });
+      renderResults(result, { readFormValues, renderHistoricalConfig, setComparisonStatus });
       setComparisonStatus(`Validation complete — ${result.results.length} combinations evaluated`);
     } catch (err) {
       setComparisonStatus(`Error: ${err.message}`, true);
@@ -151,8 +151,8 @@ function renderMetricsTable(results, sensorName, deps) {
   }
 }
 
-async function onUseConfig(row, { readFormValues, renderLoadConfig, setComparisonStatus }) {
-  const activeConfig = {
+async function onUseConfig(row, { readFormValues, renderHistoricalConfig, setComparisonStatus }) {
+  const historicalPredictor = {
     sensor: row.sensor,
     lookbackWeeks: row.lookbackWeeks,
     dayFilter: row.dayFilter,
@@ -160,7 +160,9 @@ async function onUseConfig(row, { readFormValues, renderLoadConfig, setCompariso
   };
 
   try {
-    renderLoadConfig(activeConfig);
+    renderHistoricalConfig(historicalPredictor);
+    const activeTypeEl = document.getElementById('pred-active-type');
+    if (activeTypeEl) activeTypeEl.value = 'historical';
     const partial = readFormValues();
     await savePredictionConfig(partial);
     setComparisonStatus(`Active config updated: ${row.sensor} / ${row.lookbackWeeks}w / ${row.dayFilter} / ${row.aggregation}`);

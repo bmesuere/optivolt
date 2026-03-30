@@ -1,5 +1,5 @@
 /**
- * predict-load.ts
+ * load-predictor-historical.ts
  *
  * Pure prediction/validation/forecast logic for load prediction.
  */

@@ -82,8 +82,18 @@ function applyConfigToForm(config) {
     }
   }
 
-  renderLoadConfig(config.activeConfig ?? null);
+  setVal('pred-active-type', config.activeType ?? 'historical');
+  setVal('pred-fixed-load-w', config.fixedPredictor?.load_W ?? '');
+  renderHistoricalConfig(config.historicalPredictor ?? null);
   renderPvConfig(config.pvConfig ?? null);
+  updatePredictorFieldVisibility();
+}
+
+function updatePredictorFieldVisibility() {
+  const type = getVal('pred-active-type') || 'historical';
+  const isFixed = type === 'fixed';
+  document.getElementById('pred-fixed-fields')?.classList.toggle('hidden', !isFixed);
+  document.getElementById('pred-historical-fields')?.classList.toggle('hidden', isFixed);
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +108,10 @@ function wireForm() {
     el.addEventListener('change', debouncedSave);
   }
 
-  initValidation({ readFormValues, renderLoadConfig, setComparisonStatus });
+  document.getElementById('pred-active-type')
+    ?.addEventListener('change', updatePredictorFieldVisibility);
+
+  initValidation({ readFormValues, renderHistoricalConfig, setComparisonStatus });
 
   document.getElementById('pred-load-forecast')
     ?.addEventListener('click', onForecastAll);
@@ -135,15 +148,21 @@ function readFormValues() {
   const sensors = parseSilently(getVal('pred-sensors'));
   const derived = parseSilently(getVal('pred-derived'));
 
+  const activeType = getVal('pred-active-type') || 'historical';
+
   const activeSensor = getVal('pred-active-sensor');
   const activeLookback = getVal('pred-active-lookback');
 
-  const activeConfig = activeSensor ? {
+  const historicalPredictor = activeSensor ? {
     sensor: activeSensor,
     lookbackWeeks: activeLookback ? parseInt(activeLookback, 10) : 4,
     dayFilter: getVal('pred-active-filter') || 'same',
     aggregation: getVal('pred-active-agg') || 'mean',
   } : null;
+
+  const fixedLoadW = getVal('pred-fixed-load-w');
+  const fixedLoadWParsed = fixedLoadW !== '' ? parseFloat(fixedLoadW) : NaN;
+  const fixedPredictor = Number.isFinite(fixedLoadWParsed) && fixedLoadWParsed >= 0 ? { load_W: fixedLoadWParsed } : null;
 
   const pvConfig = {
     pvSensor: getVal('pred-pv-sensor') || 'Solar Generation',
@@ -156,7 +175,9 @@ function readFormValues() {
   return {
     ...(sensors !== null ? { sensors } : {}),
     ...(derived !== null ? { derived } : {}),
-    ...(activeConfig ? { activeConfig } : {}),
+    activeType,
+    ...(historicalPredictor ? { historicalPredictor } : {}),
+    ...(fixedPredictor ? { fixedPredictor } : {}),
     pvConfig,
   };
 }
@@ -554,12 +575,12 @@ function renderAccuracyCharts(overlayCanvasId, diffCanvasId, netErrorContainerId
 // Config display
 // ---------------------------------------------------------------------------
 
-function renderLoadConfig(activeConfig) {
-  if (!activeConfig) return;
-  setVal('pred-active-sensor', activeConfig.sensor ?? '');
-  setVal('pred-active-lookback', activeConfig.lookbackWeeks ?? '');
-  setVal('pred-active-filter', activeConfig.dayFilter ?? '');
-  setVal('pred-active-agg', activeConfig.aggregation ?? '');
+function renderHistoricalConfig(historicalPredictor) {
+  if (!historicalPredictor) return;
+  setVal('pred-active-sensor', historicalPredictor.sensor ?? '');
+  setVal('pred-active-lookback', historicalPredictor.lookbackWeeks ?? '');
+  setVal('pred-active-filter', historicalPredictor.dayFilter ?? '');
+  setVal('pred-active-agg', historicalPredictor.aggregation ?? '');
 }
 
 function renderPvConfig(pvConfig) {
