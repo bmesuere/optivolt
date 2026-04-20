@@ -150,7 +150,7 @@ export async function runPvForecast(config: PredictionRunConfig): Promise<PvFore
     .filter(p => p.time >= recentCutoff && p.time < nowMs && p.actual !== null)
     .map(p => ({
       ...p,
-      predicted: p.predicted / productionScale,
+      predicted: p.predicted !== null ? p.predicted / productionScale : null,
       actual: p.actual !== null ? p.actual / productionScale : null,
     }));
 
