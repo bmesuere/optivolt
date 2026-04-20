@@ -1,5 +1,7 @@
 # Home Assistant passes BUILD_FROM automatically when building from this repo.
-ARG BUILD_FROM
+# Default to the official Home Assistant base image based on architecture.
+ARG BUILD_ARCH=amd64
+ARG BUILD_FROM=ghcr.io/home-assistant/${BUILD_ARCH}-base:latest
 FROM $BUILD_FROM
 
 # Minimal runtime env

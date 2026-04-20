@@ -143,7 +143,16 @@ export async function runPvForecast(config: PredictionRunConfig): Promise<PvFore
   const nowMs = now.getTime();
   const points = futurePoints.filter(p => p.time >= nowMs - 3600000);
   const recentCutoff = nowMs - 7 * 24 * 60 * 60 * 1000;
-  const recent = archivePoints.filter(p => p.time >= recentCutoff && p.time < nowMs && p.actual !== null);
+  // Scale recent points back to Wh/interval (undoing the productionScale applied for the LP solver).
+  // In 15min mode productionScale=4 so values are Wh/hour; dividing by 4 gives Wh/15min so that
+  // summing all 96 intervals per day yields correct daily Wh totals in the accuracy charts.
+  const recent = archivePoints
+    .filter(p => p.time >= recentCutoff && p.time < nowMs && p.actual !== null)
+    .map(p => ({
+      ...p,
+      predicted: p.predicted !== null ? p.predicted / productionScale : null,
+      actual: p.actual !== null ? p.actual / productionScale : null,
+    }));
 
   // 8. Validation metrics
   const metrics = validatePvForecast(recent);

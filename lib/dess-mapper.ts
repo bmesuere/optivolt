@@ -239,8 +239,20 @@ function findLowestGridExportRevenue(rows: PlanRow[], segment: Segment | null): 
  * Within the given segment, we look for pv→grid flows and keep track of the LOWEST export price.
  * (i.e. we were willing to export PV at this low price, so we'd definitely export at higher prices).
  */
-function findLowestPvExportPrice(rows: PlanRow[], segment: Segment | null): number {
-  return aggregateSegmentPrice(rows, segment, r => r.pv2g > FLOW_EPSILON_W, r => r.ec, 'min');
+function findLowestPvExportPrice(rows: PlanRow[], segment: Segment | null, cfg: SolverConfig): number {
+  return aggregateSegmentPrice(
+    rows,
+    segment,
+    r => {
+      if (r.pv2g <= FLOW_EPSILON_W) return false;
+      const chargePower = r.pv2b + r.g2b;
+      const isChargeConstrained = chargePower >= cfg.maxChargePower_W - FLOW_EPSILON_W;
+      const isSocConstrained = r.soc_percent >= cfg.maxSoc_percent - SOC_EPSILON_PERCENT;
+      return !isChargeConstrained && !isSocConstrained;
+    },
+    r => r.ec,
+    'min'
+  );
 }
 
 /**
@@ -303,7 +315,7 @@ function computeDessDiagnostics(rows: PlanRow[], segments: Segment[], cfg: Solve
   const gridBatteryTp = findHighestGridUsageCost(rows, firstSegment, cfg);
   const gridChargeTp = findHighestGridChargeCost(rows, firstSegment);
   const batteryExportTp = findLowestGridExportRevenue(rows, firstSegment);
-  const pvExportTp = findLowestPvExportPrice(rows, firstSegment);
+  const pvExportTp = findLowestPvExportPrice(rows, firstSegment, cfg);
 
   return {
     gridBatteryTippingPoint_cents_per_kWh: gridBatteryTp,
@@ -336,7 +348,7 @@ export function mapRowsToDessV2(rows: PlanRow[], cfg: SolverConfig): DessResult 
       gridChargeTp: findHighestGridChargeCost(rows, seg),
       gridBatteryTp: findHighestGridUsageCost(rows, seg, cfg),
       batteryExportTp: findLowestGridExportRevenue(rows, seg),
-      pvExportTp: findLowestPvExportPrice(rows, seg),
+      pvExportTp: findLowestPvExportPrice(rows, seg, cfg),
     });
   }
 
