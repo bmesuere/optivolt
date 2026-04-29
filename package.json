@@ -31,7 +31,7 @@
     "mqtt": "^5.15.0"
   },
   "devDependencies": {
-    "@eslint/css": "^0.14.1",
+    "@eslint/css": "^1.1.0",
     "@eslint/js": "^10.0.1",
     "@eslint/markdown": "^7.5.1",
     "@types/express": "^5.0.6",
