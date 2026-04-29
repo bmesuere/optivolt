@@ -191,4 +191,65 @@ describe('POST /predictions/load/forecast', () => {
     const res = await request(app).post('/predictions/load/forecast').send({});
     expect(res.status).toBe(502);
   });
+
+  it('persists forecast when dataSources.load is api', async () => {
+    loadSettings.mockResolvedValue({ ...mockSettings, dataSources: { load: 'api', pv: 'vrm' } });
+    const res = await request(app).post('/predictions/load/forecast').send({});
+    expect(res.status).toBe(200);
+    expect(saveData).toHaveBeenCalledTimes(1);
+    expect(saveData.mock.calls[0][0].load.values).toHaveLength(96);
+  });
+
+  it('skips saveData when dataSources.load is vrm', async () => {
+    const res = await request(app).post('/predictions/load/forecast').send({});
+    expect(res.status).toBe(200);
+    expect(saveData).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /predictions/forecast (combined) - persistence', () => {
+  const loadForecast = { start: '2026-02-20T00:00:00.000Z', step: 15, values: new Array(96).fill(200) };
+  const pvForecast = { start: '2026-02-20T00:00:00.000Z', step: 15, values: new Array(96).fill(500) };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    loadPredictionConfig.mockResolvedValue({ ...mockConfig, pvConfig: { latitude: 51.0, longitude: 4.5 } });
+    savePredictionConfig.mockResolvedValue();
+    loadSettings.mockResolvedValue({ ...mockSettings, dataSources: { load: 'api', pv: 'api' } });
+    loadData.mockResolvedValue({ load: {}, pv: {} });
+    saveData.mockResolvedValue();
+    runForecast.mockResolvedValue({ forecast: loadForecast, recent: [] });
+    runPvForecast.mockResolvedValue({ forecast: pvForecast, points: [], recent: [], metrics: {} });
+  });
+
+  it('calls saveData exactly once with both forecasts (race condition fix)', async () => {
+    const res = await request(app).post('/predictions/forecast').send({});
+    expect(res.status).toBe(200);
+    expect(saveData).toHaveBeenCalledTimes(1);
+    expect(saveData.mock.calls[0][0].load).toEqual(loadForecast);
+    expect(saveData.mock.calls[0][0].pv).toEqual(pvForecast);
+  });
+
+  it('saves only load when dataSources.pv is vrm', async () => {
+    loadSettings.mockResolvedValue({ ...mockSettings, dataSources: { load: 'api', pv: 'vrm' } });
+    const res = await request(app).post('/predictions/forecast').send({});
+    expect(res.status).toBe(200);
+    expect(saveData).toHaveBeenCalledTimes(1);
+    expect(saveData.mock.calls[0][0].load).toEqual(loadForecast);
+  });
+
+  it('saves only pv when load branch fails', async () => {
+    runForecast.mockRejectedValue(new Error('HA WebSocket timed out after 30000ms'));
+    const res = await request(app).post('/predictions/forecast').send({});
+    expect(res.status).toBe(200);
+    expect(saveData).toHaveBeenCalledTimes(1);
+    expect(saveData.mock.calls[0][0].pv).toEqual(pvForecast);
+  });
+
+  it('skips saveData when both dataSources are vrm', async () => {
+    loadSettings.mockResolvedValue({ ...mockSettings, dataSources: { load: 'vrm', pv: 'vrm' } });
+    const res = await request(app).post('/predictions/forecast').send({});
+    expect(res.status).toBe(200);
+    expect(saveData).not.toHaveBeenCalled();
+  });
 });

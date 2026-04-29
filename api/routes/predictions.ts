@@ -3,10 +3,12 @@ import type { Request, Response, NextFunction } from 'express';
 import { HttpError, assertCondition, toHttpError } from '../http-errors.ts';
 import { loadPredictionConfig, savePredictionConfig } from '../services/prediction-config-store.ts';
 import { runValidation, runForecast } from '../services/load-prediction-service.ts';
+import type { ForecastRunResult } from '../services/load-prediction-service.ts';
 import { runPvForecast } from '../services/pv-prediction-service.ts';
+import type { PvForecastRunResult } from '../services/pv-prediction-service.ts';
 import { loadData, saveData } from '../services/data-store.ts';
 import { loadSettings } from '../services/settings-store.ts';
-import type { PredictionConfig, PredictionRunConfig } from '../types.ts';
+import type { PredictionConfig, PredictionRunConfig, TimeSeries } from '../types.ts';
 
 const router = express.Router();
 
@@ -79,6 +81,7 @@ router.post('/load/forecast', async (req: Request, res: Response, next: NextFunc
     }
 
     const result = await executeLoadForecast(config, 'load/forecast');
+    await persistForecastData({ load: result.forecast });
     res.json(result);
   } catch (error) {
     next(error instanceof HttpError ? error : toHttpError(error, 500, 'Load forecast failed'));
@@ -92,6 +95,7 @@ router.post('/pv/forecast', async (req: Request, res: Response, next: NextFuncti
     const config = await buildRunConfig();
 
     const result = await executePvForecast(config, 'pv/forecast');
+    await persistForecastData({ pv: result?.forecast });
     res.json(result);
   } catch (error) {
     next(error instanceof HttpError ? error : toHttpError(error, 500, 'PV forecast failed'));
@@ -103,17 +107,8 @@ router.post('/pv/forecast', async (req: Request, res: Response, next: NextFuncti
 router.post('/forecast', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const config = await buildRunConfig();
-
-    if (req.query.recent === 'false') {
-      config.includeRecent = false;
-    }
-
-    const [loadResult, pvResult] = await Promise.all([
-      executeLoadForecast(config, 'forecast').catch(handleCombinedForecastError('load')),
-      executePvForecast(config, 'forecast').catch(handleCombinedForecastError('pv')),
-    ]);
-
-    res.json({ load: loadResult, pv: pvResult });
+    if (req.query.recent === 'false') config.includeRecent = false;
+    res.json(await runCombinedForecast(config, 'forecast'));
   } catch (error) {
     next(error instanceof HttpError ? error : toHttpError(error, 500, 'Forecast failed'));
   }
@@ -123,13 +118,7 @@ router.get('/forecast/now', async (_req: Request, res: Response, next: NextFunct
   try {
     const config = await buildRunConfig();
     config.includeRecent = false;
-
-    const [loadResult, pvResult] = await Promise.all([
-      executeLoadForecast(config, 'forecast/now').catch(handleCombinedForecastError('load', 'forecast/now')),
-      executePvForecast(config, 'forecast/now').catch(handleCombinedForecastError('pv', 'forecast/now')),
-    ]);
-
-    res.json({ load: loadResult, pv: pvResult });
+    res.json(await runCombinedForecast(config, 'forecast/now'));
   } catch (error) {
     next(error instanceof HttpError ? error : toHttpError(error, 500, 'Forecast failed'));
   }
@@ -142,7 +131,16 @@ async function buildRunConfig(): Promise<PredictionRunConfig> {
   return { ...config, haUrl: settings.haUrl, haToken: settings.haToken };
 }
 
-async function executeLoadForecast(config: PredictionRunConfig, logLabel: string): Promise<unknown> {
+async function runCombinedForecast(config: PredictionRunConfig, endpoint: string) {
+  const [loadResult, pvResult] = await Promise.all([
+    executeLoadForecast(config, endpoint).catch(handleCombinedForecastError('load', endpoint)),
+    executePvForecast(config, endpoint).catch(handleCombinedForecastError('pv', endpoint)),
+  ]);
+  await persistForecastData({ load: loadResult?.forecast, pv: pvResult?.forecast });
+  return { load: loadResult, pv: pvResult };
+}
+
+async function executeLoadForecast(config: PredictionRunConfig, logLabel: string): Promise<ForecastRunResult> {
   assertCondition(config.activeType != null, 400, 'activeType is required');
   if (config.activeType === 'historical') {
     assertHaConnection(config);
@@ -162,14 +160,13 @@ async function executeLoadForecast(config: PredictionRunConfig, logLabel: string
 
   try {
     const result = await runForecast(config);
-    await maybeSaveForecastData('load', result?.forecast);
     return result;
   } catch (err) {
     throw mapPredictionError(err, false);
   }
 }
 
-async function executePvForecast(config: PredictionRunConfig, logLabel: string): Promise<unknown> {
+async function executePvForecast(config: PredictionRunConfig, logLabel: string): Promise<PvForecastRunResult | null> {
   if (
     !config.pvConfig ||
     config.pvConfig.latitude == null || Number.isNaN(config.pvConfig.latitude) ||
@@ -185,7 +182,6 @@ async function executePvForecast(config: PredictionRunConfig, logLabel: string):
 
   try {
     const result = await runPvForecast(config);
-    await maybeSaveForecastData('pv', result?.forecast);
     return result;
   } catch (err) {
     throw mapPredictionError(err, true);
@@ -214,14 +210,15 @@ function handleCombinedForecastError(type: string, logLabel: string = 'combined'
   };
 }
 
-async function maybeSaveForecastData(type: 'load' | 'pv', forecast: any) {
-  if (!forecast?.values) return;
+async function persistForecastData(updates: { load?: TimeSeries; pv?: TimeSeries }) {
   const settings = await loadSettings();
-  if (settings.dataSources[type] === 'api') {
-    const currentData = await loadData();
-    currentData[type] = forecast;
-    await saveData(currentData);
-  }
+  const setLoad = !!updates.load?.values && settings.dataSources.load === 'api';
+  const setPv   = !!updates.pv?.values   && settings.dataSources.pv   === 'api';
+  if (!setLoad && !setPv) return;
+  const data = await loadData();
+  if (setLoad) data.load = updates.load!;
+  if (setPv)   data.pv   = updates.pv!;
+  await saveData(data);
 }
 
 function mapPredictionError(err: unknown, isPv: boolean): Error {
