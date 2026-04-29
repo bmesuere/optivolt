@@ -136,7 +136,11 @@ async function runCombinedForecast(config: PredictionRunConfig, endpoint: string
     executeLoadForecast(config, endpoint).catch(handleCombinedForecastError('load', endpoint)),
     executePvForecast(config, endpoint).catch(handleCombinedForecastError('pv', endpoint)),
   ]);
-  await persistForecastData({ load: loadResult?.forecast, pv: pvResult?.forecast });
+  try {
+    await persistForecastData({ load: loadResult?.forecast, pv: pvResult?.forecast });
+  } catch (err) {
+    console.warn('[predict] forecast persistence failed:', err instanceof Error ? err.message : err);
+  }
   return { load: loadResult, pv: pvResult };
 }
 
@@ -211,6 +215,7 @@ function handleCombinedForecastError(type: string, logLabel: string = 'combined'
 }
 
 async function persistForecastData(updates: { load?: TimeSeries; pv?: TimeSeries }) {
+  if (!updates.load?.values && !updates.pv?.values) return;
   const settings = await loadSettings();
   const setLoad = !!updates.load?.values && settings.dataSources.load === 'api';
   const setPv   = !!updates.pv?.values   && settings.dataSources.pv   === 'api';

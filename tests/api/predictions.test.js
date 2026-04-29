@@ -252,4 +252,12 @@ describe('POST /predictions/forecast (combined) - persistence', () => {
     expect(res.status).toBe(200);
     expect(saveData).not.toHaveBeenCalled();
   });
+
+  it('returns 200 with forecast results even when persistence fails', async () => {
+    saveData.mockRejectedValue(new Error('disk full'));
+    const res = await request(app).post('/predictions/forecast').send({});
+    expect(res.status).toBe(200);
+    expect(res.body.load).toBeTruthy();
+    expect(res.body.pv).toBeTruthy();
+  });
 });
