@@ -535,8 +535,6 @@ function makeBuyPriceStripPlugin(rows) {
   if (!rows?.length) return null;
 
   const colors = rows.map(row => getBuyPriceColor(row?.ic));
-  const dark = document.documentElement.classList.contains('dark');
-  const strokeStyle = dark ? 'rgba(15, 23, 42, 0.70)' : 'rgba(255, 255, 255, 0.85)';
 
   return {
     id: 'buyPriceStrip',
@@ -561,7 +559,8 @@ function makeBuyPriceStripPlugin(rows) {
         ctx.fillRect(x0, y, x1 - x0, h);
       }
 
-      ctx.strokeStyle = strokeStyle;
+      const dark = document.documentElement.classList.contains('dark');
+      ctx.strokeStyle = dark ? 'rgba(15, 23, 42, 0.70)' : 'rgba(255, 255, 255, 0.85)';
       ctx.lineWidth = 1;
       ctx.strokeRect(chartArea.left, y, chartArea.right - chartArea.left, h);
       ctx.restore();
