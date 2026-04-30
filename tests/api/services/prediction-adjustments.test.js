@@ -38,12 +38,14 @@ describe('prediction adjustments', () => {
     expect(adjusted.values).toEqual([0, 0, 300, 400, 500]);
   });
 
-  it('uses the latest set adjustment as the baseline and stacks add adjustments', () => {
+  it('uses the most recently updated set adjustment as the baseline and stacks add adjustments', () => {
     const adjusted = applyPredictionAdjustmentsToSeries(series, [
-      adjustment({ id: 'set-1', mode: 'set', value_W: 900, start: '2026-01-01T00:15:00.000Z', end: '2026-01-01T01:00:00.000Z' }),
-      adjustment({ id: 'set-2', mode: 'set', value_W: 700, start: '2026-01-01T00:30:00.000Z', end: '2026-01-01T00:45:00.000Z' }),
+      // set-2 has a later updatedAt so it wins as the baseline at the overlapping slot
+      adjustment({ id: 'set-1', mode: 'set', value_W: 900, start: '2026-01-01T00:15:00.000Z', end: '2026-01-01T01:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }),
+      adjustment({ id: 'set-2', mode: 'set', value_W: 700, start: '2026-01-01T00:30:00.000Z', end: '2026-01-01T00:45:00.000Z', updatedAt: '2026-01-01T00:01:00.000Z' }),
       adjustment({ id: 'add-1', mode: 'add', value_W: 25, start: '2026-01-01T00:30:00.000Z', end: '2026-01-01T00:45:00.000Z' }),
     ], 'load');
+    // slot 1: only set-1 → 900; slot 2: set-2 wins (latest updatedAt) → 700 + 25 = 725; slot 3: only set-1 → 900
     expect(adjusted.values).toEqual([100, 900, 725, 900, 500]);
   });
 

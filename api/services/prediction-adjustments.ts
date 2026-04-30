@@ -130,7 +130,9 @@ export function applyPredictionAdjustmentsToSeries(
       .map(({ adj }) => adj);
     if (!matching.length) return raw;
 
-    const setAdjustment = matching.filter(adj => adj.mode === 'set').at(-1);
+    const setAdjustment = matching
+      .filter(adj => adj.mode === 'set')
+      .reduce<PredictionAdjustment | undefined>((best, adj) => !best || adj.updatedAt > best.updatedAt ? adj : best, undefined);
     const base = setAdjustment ? setAdjustment.value_W : raw;
     const delta = matching
       .filter(adj => adj.mode === 'add')

@@ -78,7 +78,9 @@ export function applyAdjustmentsToForecastSeries(forecast, adjustments, series) 
       const matching = relevant.filter(adj => slotTs >= new Date(adj.start).getTime() && slotTs < new Date(adj.end).getTime());
       if (!matching.length) return raw;
 
-      const setAdjustment = matching.filter(adj => adj.mode === 'set').at(-1);
+      const setAdjustment = matching
+        .filter(adj => adj.mode === 'set')
+        .reduce((best, adj) => !best || adj.updatedAt > best.updatedAt ? adj : best, null);
       const base = setAdjustment ? Number(setAdjustment.value_W) : raw;
       const delta = matching
         .filter(adj => adj.mode === 'add')
