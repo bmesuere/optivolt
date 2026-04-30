@@ -268,6 +268,74 @@
       color: #e2e8f0;
     }
 
+    .quick-setting-source-label {
+      position: relative;
+      display: block;
+    }
+
+    .quick-setting-pin {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 9999px;
+      border: 0;
+      color: #cbd5e1;
+      background: transparent;
+      cursor: pointer;
+      transition: background-color 0.15s, color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .quick-setting-source-label>.quick-setting-pin {
+      position: absolute;
+      top: 0.0625rem;
+      right: 0.125rem;
+      z-index: 1;
+    }
+
+    .quick-setting-toggle-label>.quick-setting-pin {
+      margin-left: -0.25rem;
+    }
+
+    .quick-setting-pin:hover,
+    .quick-setting-pin:focus-visible {
+      color: #0284c7;
+      background: #f0f9ff;
+    }
+
+    .quick-setting-pin[aria-pressed="true"] {
+      color: #0284c7;
+      background: transparent;
+    }
+
+    .quick-setting-pin[aria-pressed="true"]:hover,
+    .quick-setting-pin[aria-pressed="true"]:focus-visible {
+      background: #f0f9ff;
+    }
+
+    .quick-setting-pin:focus-visible {
+      outline: 2px solid #38bdf8;
+      outline-offset: 2px;
+    }
+
+    :root.dark .quick-setting-pin {
+      color: #64748b;
+      background: transparent;
+    }
+
+    :root.dark .quick-setting-pin:hover,
+    :root.dark .quick-setting-pin:focus-visible,
+    :root.dark .quick-setting-pin[aria-pressed="true"] {
+      color: #7dd3fc;
+      background: rgba(14, 165, 233, 0.12);
+    }
+
+    :root.dark .quick-setting-pin[aria-pressed="true"] {
+      background: transparent;
+    }
+
     /* === Status text transition === */
     #status {
       transition: color 0.3s ease;
@@ -568,6 +636,11 @@
               <span class="toggle-knob"></span>
               <span class="text-sm text-slate-600 dark:text-slate-400">Schedule battery rebalancing</span>
             </label>
+          </div>
+
+          <div id="optimizer-quick-settings" class="hidden mt-4 pt-4 border-t border-slate-100 dark:border-white/5">
+            <div id="optimizer-quick-settings-body" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+            <input id="optimizer-quick-settings-selection" type="hidden" value="[]" data-no-autosolve />
           </div>
 
           <!-- Run options as toggles -->

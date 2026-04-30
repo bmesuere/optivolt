@@ -642,9 +642,6 @@ function renderCombinedForecastChart() {
     },
     options: getBaseOptions({ ...axis, yTitle: 'kWh' }, {
       ...getChartAnimations('bar', allTs.length),
-      onHover: (_event, _elements, chart) => {
-        chart.canvas.style.cursor = allTs.length ? 'crosshair' : '';
-      },
       plugins: {
         tooltip: {
           mode: 'index',
@@ -705,6 +702,10 @@ function pickForecastBucket(event, canvas, timestamps, stepMinutes) {
 function wireForecastChartEditing(canvas, timestamps, stepMinutes) {
   if (typeof canvas._forecastEditCleanup === 'function') canvas._forecastEditCleanup();
 
+  const updateCursor = (event) => {
+    canvas.style.cursor = pickForecastBucket(event, canvas, timestamps, stepMinutes) ? 'copy' : '';
+  };
+
   const onPointerDown = (event) => {
     if (event.button !== 0) return;
     const picked = pickForecastBucket(event, canvas, timestamps, stepMinutes);
@@ -723,7 +724,10 @@ function wireForecastChartEditing(canvas, timestamps, stepMinutes) {
   };
 
   const onPointerMove = (event) => {
-    if (!forecastChartDrag) return;
+    if (!forecastChartDrag) {
+      updateCursor(event);
+      return;
+    }
     const picked = pickForecastBucket(event, canvas, timestamps, stepMinutes);
     if (!picked) return;
     const distance = Math.hypot(event.clientX - forecastChartDrag.startX, event.clientY - forecastChartDrag.startY);
@@ -760,18 +764,28 @@ function wireForecastChartEditing(canvas, timestamps, stepMinutes) {
   const onPointerCancel = () => {
     forecastChartDrag = null;
     forecastChartSelection = null;
+    canvas.style.cursor = '';
     canvas._chart?.update('none');
   };
 
+  const onPointerLeave = () => {
+    if (!forecastChartDrag) canvas.style.cursor = '';
+  };
+
+  canvas.addEventListener('pointerenter', updateCursor);
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerCancel);
+  canvas.addEventListener('pointerleave', onPointerLeave);
   canvas._forecastEditCleanup = () => {
+    canvas.style.cursor = '';
+    canvas.removeEventListener('pointerenter', updateCursor);
     canvas.removeEventListener('pointerdown', onPointerDown);
     canvas.removeEventListener('pointermove', onPointerMove);
     canvas.removeEventListener('pointerup', onPointerUp);
     canvas.removeEventListener('pointercancel', onPointerCancel);
+    canvas.removeEventListener('pointerleave', onPointerLeave);
   };
 }
 
@@ -944,7 +958,7 @@ function renderAdjustmentList() {
   const sorted = [...predictionAdjustments].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
   if (count) count.textContent = sorted.length ? `${sorted.length} active` : '';
   if (!sorted.length) {
-    list.innerHTML = '<div class="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">No active adjustments</div>';
+    list.innerHTML = '<div class="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">No active adjustments. Click or drag on the forecast chart to add one.</div>';
     return;
   }
   list.innerHTML = '';

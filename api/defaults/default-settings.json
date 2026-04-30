@@ -14,6 +14,7 @@
   "blockFeedInOnNegativePrices": true,
   "terminalSocValuation": "zero",
   "terminalSocCustomPrice_cents_per_kWh": 0,
+  "optimizerQuickSettings": [],
   "dataSources": {
     "prices": "vrm",
     "load": "vrm",
