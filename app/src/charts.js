@@ -36,6 +36,102 @@ const FLOWS_TOOLTIP_LABELS = {
 const NEGATIVE_INJECTION_EPSILON_W = 1;
 const NEGATIVE_INJECTION_ICON_SIZE = 13;
 const NEGATIVE_INJECTION_DETAIL_LIMIT = 12;
+const BUY_PRICE_STRIP_HEIGHT = 7;
+const BUY_PRICE_STRIP_GAP = 4;
+const BUY_PRICE_STRIP_TICK_PADDING = BUY_PRICE_STRIP_HEIGHT + BUY_PRICE_STRIP_GAP + 5;
+
+const BUY_PRICE_COLOR_NEUTRAL_RGB = [226, 232, 240];
+const BUY_PRICE_COLOR_STOPS = [
+  { value: -10, rgb: [37, 99, 235] },
+  { value: -1,  rgb: [96, 165, 250] },
+  { value: 0,   rgb: BUY_PRICE_COLOR_NEUTRAL_RGB }, // zero / neutral
+  { value: 1,   rgb: [254, 243, 199] },
+  { value: 12,  rgb: [251, 191, 36] },
+  { value: 24,  rgb: [249, 115, 22] },
+  { value: 35,  rgb: [220, 38, 38] },
+];
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function srgbToLinear(channel) {
+  const c = channel / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+function linearToSrgb(channel) {
+  const c = Math.max(0, Math.min(1, channel));
+  const srgb = c <= 0.0031308 ? 12.92 * c : 1.055 * (c ** (1 / 2.4)) - 0.055;
+  return Math.round(srgb * 255);
+}
+
+function rgbToOklab(rgb) {
+  const r = srgbToLinear(rgb[0]);
+  const g = srgbToLinear(rgb[1]);
+  const b = srgbToLinear(rgb[2]);
+
+  const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+  const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+  const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+
+  const lRoot = Math.cbrt(l);
+  const mRoot = Math.cbrt(m);
+  const sRoot = Math.cbrt(s);
+
+  return [
+    0.2104542553 * lRoot + 0.7936177850 * mRoot - 0.0040720468 * sRoot,
+    1.9779984951 * lRoot - 2.4285922050 * mRoot + 0.4505937099 * sRoot,
+    0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.8086757660 * sRoot,
+  ];
+}
+
+function oklabToRgb(oklab) {
+  const lRoot = oklab[0] + 0.3963377774 * oklab[1] + 0.2158037573 * oklab[2];
+  const mRoot = oklab[0] - 0.1055613458 * oklab[1] - 0.0638541728 * oklab[2];
+  const sRoot = oklab[0] - 0.0894841775 * oklab[1] - 1.2914855480 * oklab[2];
+
+  const l = lRoot ** 3;
+  const m = mRoot ** 3;
+  const s = sRoot ** 3;
+
+  return [
+    linearToSrgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+    linearToSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+    linearToSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s),
+  ];
+}
+
+function interpolateOklab(from, to, t) {
+  const fromLab = rgbToOklab(from);
+  const toLab = rgbToOklab(to);
+  return oklabToRgb(fromLab.map((channel, idx) => lerp(channel, toLab[idx], t)));
+}
+
+function rgbString(rgb) {
+  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+}
+
+export function getBuyPriceColor(price_cents_per_kWh) {
+  const price = Number(price_cents_per_kWh);
+  if (!Number.isFinite(price)) return rgbString(BUY_PRICE_COLOR_NEUTRAL_RGB);
+
+  const first = BUY_PRICE_COLOR_STOPS[0];
+  const last = BUY_PRICE_COLOR_STOPS[BUY_PRICE_COLOR_STOPS.length - 1];
+  if (price <= first.value) return rgbString(first.rgb);
+  if (price >= last.value) return rgbString(last.rgb);
+
+  for (let i = 1; i < BUY_PRICE_COLOR_STOPS.length; i++) {
+    const lower = BUY_PRICE_COLOR_STOPS[i - 1];
+    const upper = BUY_PRICE_COLOR_STOPS[i];
+    if (price <= upper.value) {
+      const t = (price - lower.value) / (upper.value - lower.value);
+      return rgbString(interpolateOklab(lower.rgb, upper.rgb, t));
+    }
+  }
+
+  return rgbString(last.rgb);
+}
 
 function exportedPower_W(row) {
   return (Number(row?.pv2g) || 0) + (Number(row?.b2g) || 0);
@@ -435,6 +531,44 @@ function makeNegativePriceInjectionPlugin(rows, h) {
   };
 }
 
+function makeBuyPriceStripPlugin(rows) {
+  if (!rows?.length) return null;
+
+  const colors = rows.map(row => getBuyPriceColor(row?.ic));
+  const dark = document.documentElement.classList.contains('dark');
+  const strokeStyle = dark ? 'rgba(15, 23, 42, 0.70)' : 'rgba(255, 255, 255, 0.85)';
+
+  return {
+    id: 'buyPriceStrip',
+    afterDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+      const xScale = scales.x;
+      const N = chart.data.labels?.length;
+      if (!xScale || !N) return;
+
+      const y = chartArea.bottom + BUY_PRICE_STRIP_GAP;
+      const h = BUY_PRICE_STRIP_HEIGHT;
+      const barW = xScale.width / N;
+      const count = Math.min(colors.length, N);
+
+      ctx.save();
+      for (let i = 0; i < count; i++) {
+        const x0 = Math.max(chartArea.left, xScale.left + i * barW);
+        const x1 = Math.min(chartArea.right, xScale.left + (i + 1) * barW);
+        if (x1 <= x0) continue;
+        ctx.fillStyle = colors[i];
+        ctx.fillRect(x0, y, x1 - x0, h);
+      }
+
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(chartArea.left, y, chartArea.right - chartArea.left, h);
+      ctx.restore();
+    }
+  };
+}
+
 // ---------------------- Chart Configuration Helpers ----------------------
 
 /**
@@ -444,6 +578,7 @@ function makeNegativePriceInjectionPlugin(rows, h) {
 export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacked = false }, overrides = {}) {
   const theme = getChartTheme();
   const fontFamily = getComputedStyle(document.documentElement).fontFamily;
+  const { ticks: xTicks, grid: xGrid, ...xRest } = overrides.scales?.x || {};
 
   const legendSquare = {
     position: "bottom",
@@ -476,14 +611,16 @@ export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacke
     scales: {
       x: {
         stacked,
+        ...xRest,
         ticks: {
           color: theme.axisTickColor,
           callback: ticksCb,
           autoSkip: false,
           maxRotation: 0,
-          minRotation: 0
+          minRotation: 0,
+          ...(xTicks || {})
         },
-        grid: { color: gridCb, drawTicks: true }
+        grid: { color: gridCb, drawTicks: true, ...(xGrid || {}) }
       },
       y: {
         stacked,
@@ -671,6 +808,8 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, rebalance
   const plugins = rebalanceWindow
     ? [makeRebalancingPlugin(rebalanceWindow.startIdx, rebalanceWindow.endIdx)]
     : [];
+  const buyPriceStripPlugin = makeBuyPriceStripPlugin(rows);
+  if (buyPriceStripPlugin) plugins.push(buyPriceStripPlugin);
   const negativeInjectionPlugin = makeNegativePriceInjectionPlugin(rows, h);
   if (negativeInjectionPlugin) plugins.push(negativeInjectionPlugin);
   const depPlugin = evSettings?.departureTime
@@ -691,7 +830,13 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, rebalance
           external: makeFlowsTooltip(rows, flowSpecs, h),
           callbacks: { title: axis.tooltipTitleCb },
         }
-      }
+      },
+      layout: { padding: { bottom: 0 } },
+      scales: {
+        x: {
+          ticks: { padding: BUY_PRICE_STRIP_TICK_PADDING },
+        },
+      },
     }),
     plugins,
   });
