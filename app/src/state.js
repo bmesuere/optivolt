@@ -16,6 +16,7 @@ export function snapshotUI(els) {
     dischargeEfficiency_percent: num(els.etaD?.value),
     batteryCost_cent_per_kWh: num(els.bwear?.value),
     idleDrain_W: num(els.idleDrain?.value),
+    blockFeedInOnNegativePrices: !!els.blockFeedInOnNegativePrices?.checked,
 
     // ALGORITHM
     terminalSocValuation: els.terminal?.value || "zero",
@@ -68,6 +69,9 @@ export function hydrateUI(els, obj = {}) {
   setIfDef(els.etaD, obj.dischargeEfficiency_percent);
   setIfDef(els.bwear, obj.batteryCost_cent_per_kWh);
   setIfDef(els.idleDrain, obj.idleDrain_W);
+  if (els.blockFeedInOnNegativePrices && obj.blockFeedInOnNegativePrices != null) {
+    els.blockFeedInOnNegativePrices.checked = !!obj.blockFeedInOnNegativePrices;
+  }
 
   // DATA (display-only metadata)
   updatePlanMeta(els, obj.initialSoc_percent, obj.tsStart);

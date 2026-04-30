@@ -34,6 +34,7 @@ export interface Settings {
   dischargeEfficiency_percent: number;
   batteryCost_cent_per_kWh: number;
   idleDrain_W: number;
+  blockFeedInOnNegativePrices: boolean;
   terminalSocValuation: TerminalSocValuation;
   terminalSocCustomPrice_cents_per_kWh: number;
   dataSources: DataSources;

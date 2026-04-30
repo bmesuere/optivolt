@@ -123,7 +123,9 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const rows = parseSolution(result, cfg, timing);
 
-  const { perSlot, diagnostics } = mapRowsToDessV2(rows, cfg);
+  const { perSlot, diagnostics } = mapRowsToDessV2(rows, cfg, {
+    blockFeedInOnNegativePrices: settings.blockFeedInOnNegativePrices !== false,
+  });
 
   const rowsWithDess: PlanRowWithDess[] = rows.map((row, i) => ({ ...row, dess: perSlot[i] }));
 

@@ -11,6 +11,7 @@ import { loadData, saveData } from '../../../api/services/data-store.ts';
 import { refreshSeriesFromVrmAndPersist } from '../../../api/services/vrm-refresh.ts';
 import { setDynamicEssSchedule } from '../../../api/services/mqtt-service.ts';
 import { computePlan } from '../../../api/services/planner-service.ts';
+import { FeedIn } from '../../../lib/dess-mapper.ts';
 
 const NOW_STRING = '2024-01-01T00:00:00Z';
 const NOW_MS = new Date(NOW_STRING).getTime();
@@ -101,5 +102,17 @@ describe('computePlan — rebalance bookkeeping', () => {
     expect(saveData).toHaveBeenCalledWith(
       expect.objectContaining({ rebalanceState: { startMs: null } })
     );
+  });
+
+  it('keeps feed-in allowed on negative export prices when blocking is disabled', async () => {
+    loadSettings.mockResolvedValue({ ...baseSettings, blockFeedInOnNegativePrices: false });
+    loadData.mockResolvedValue({
+      ...baseData,
+      exportPrice: { ...baseData.exportPrice, values: [-1, -1, -1, -1, -1] },
+    });
+
+    const result = await computePlan();
+
+    expect(result.rows[0].dess.feedin).toBe(FeedIn.allowed);
   });
 });
