@@ -19,6 +19,7 @@ function applyTheme() {
   const theme = getEffectiveTheme();
   root.classList.toggle('dark', theme === 'dark');
   // color-scheme is handled by CSS: :root / :root.dark above
+  window.dispatchEvent(new CustomEvent('optivolt:themechange', { detail: { theme } }));
 }
 
 // Initial

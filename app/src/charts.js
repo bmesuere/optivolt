@@ -159,7 +159,7 @@ export function buildTimeAxisFromTimestamps(timestampsMs) {
       if (idx == null || !times[idx]) return "transparent";
       const dt = times[idx];
       if (isMidnight(dt)) return getChartTheme().majorGridColor;
-      if (isLabeledHour(dt) && isFullMinute(dt)) return "rgba(0,0,0,0.08)";
+      if (isLabeledHour(dt) && isFullMinute(dt)) return getChartTheme().minorGridColor;
       return "transparent";
     }
   };
@@ -443,6 +443,7 @@ function makeNegativePriceInjectionPlugin(rows, h) {
  */
 export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacked = false }, overrides = {}) {
   const theme = getChartTheme();
+  const fontFamily = getComputedStyle(document.documentElement).fontFamily;
 
   const legendSquare = {
     position: "bottom",
@@ -452,7 +453,7 @@ export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacke
       pointStyle: "rect",
       boxWidth: 10,
       padding: 12,
-      font: { size: 12, family: getComputedStyle(document.documentElement).fontFamily }
+      font: { size: 12, family: fontFamily }
     }
   };
 
@@ -493,7 +494,7 @@ export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacke
           drawTicks: false,
           zeroLineColor: theme.zeroLineColor
         },
-        title: { display: !!yTitle, text: yTitle },
+        title: { display: !!yTitle, text: yTitle, color: theme.axisTickColor },
         // If specific charts need Y overrides (like max: 100), merge them here:
         ...(overrides.scales?.y || {})
       }
@@ -510,6 +511,7 @@ export function getChartTheme() {
       gridColor: 'rgba(148, 163, 184, 0.28)',       // slate-400-ish, soft
       zeroLineColor: 'rgba(148, 163, 184, 0.6)',    // a bit stronger
       majorGridColor: 'rgba(226, 232, 240, 0.32)',
+      minorGridColor: 'rgba(226, 232, 240, 0.10)',
     };
   }
   return {
@@ -517,15 +519,98 @@ export function getChartTheme() {
     gridColor: 'rgba(148, 163, 184, 0.22)',         // light grey grid
     zeroLineColor: 'rgba(148, 163, 184, 0.6)',
     majorGridColor: 'rgba(0, 0, 0, 0.25)',
+    minorGridColor: 'rgba(0, 0, 0, 0.08)',
   };
+}
+
+const chartRegistry = new Set();
+
+function updateLegendTheme(options, theme, fontFamily) {
+  const legend = options.plugins?.legend;
+  if (!legend) return;
+  legend.labels = {
+    ...(legend.labels || {}),
+    color: theme.axisTickColor,
+    font: {
+      ...(legend.labels?.font || {}),
+      family: fontFamily,
+    },
+  };
+}
+
+function updateScaleTheme(scaleOptions, theme, scaleId) {
+  if (!scaleOptions) return;
+
+  if (scaleId !== "y2") {
+    scaleOptions.ticks = {
+      ...(scaleOptions.ticks || {}),
+      color: theme.axisTickColor,
+    };
+  }
+
+  if (scaleOptions.title) {
+    scaleOptions.title = {
+      ...scaleOptions.title,
+      color: theme.axisTickColor,
+    };
+  }
+
+  if (scaleOptions.grid) {
+    scaleOptions.grid = {
+      ...scaleOptions.grid,
+      ...(typeof scaleOptions.grid.color === "function" ? {} : { color: theme.gridColor }),
+      ...(Object.hasOwn(scaleOptions.grid, "zeroLineColor") ? { zeroLineColor: theme.zeroLineColor } : {}),
+    };
+  }
+}
+
+function getRenderedCharts() {
+  const charts = new Set();
+  for (const chart of chartRegistry) {
+    if (chart?.canvas?.isConnected) charts.add(chart);
+    else chartRegistry.delete(chart);
+  }
+
+  if (typeof document !== "undefined") {
+    for (const canvas of document.querySelectorAll("canvas")) {
+      const chart = canvas._chart || Chart.getChart?.(canvas);
+      if (chart) charts.add(chart);
+    }
+  }
+
+  return charts;
+}
+
+export function refreshAllChartThemes() {
+  const theme = getChartTheme();
+  const fontFamily = getComputedStyle(document.documentElement).fontFamily;
+
+  for (const chart of getRenderedCharts()) {
+    const options = chart.options || {};
+    updateLegendTheme(options, theme, fontFamily);
+
+    for (const [scaleId, scaleOptions] of Object.entries(options.scales || {})) {
+      updateScaleTheme(scaleOptions, theme, scaleId);
+    }
+
+    chart.update("none");
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("optivolt:themechange", refreshAllChartThemes);
 }
 
 /**
  * Handles the destruction of old chart instances and creation of new ones.
  */
 export function renderChart(canvas, config) {
-  if (canvas._chart) canvas._chart.destroy();
+  if (canvas._chart) {
+    chartRegistry.delete(canvas._chart);
+    canvas._chart.destroy();
+  }
   canvas._chart = new Chart(canvas.getContext("2d"), config);
+  chartRegistry.add(canvas._chart);
   const overlay = canvas.parentElement?.querySelector('.chart-empty');
   if (overlay) overlay.style.display = 'none';
 }
