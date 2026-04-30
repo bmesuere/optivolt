@@ -142,7 +142,7 @@ export function buildTimeAxisFromTimestamps(timestampsMs) {
       let idx = ctx.index ?? ctx.tick?.index ?? ctx.tick?.value;
       if (idx == null || !times[idx]) return "transparent";
       const dt = times[idx];
-      if (isMidnight(dt)) return "rgba(0,0,0,0.25)";
+      if (isMidnight(dt)) return getChartTheme().majorGridColor;
       if (isLabeledHour(dt) && isFullMinute(dt)) return "rgba(0,0,0,0.08)";
       return "transparent";
     }
@@ -257,12 +257,14 @@ export function getChartTheme() {
       axisTickColor: 'rgba(226, 232, 240, 0.9)',    // slate-200-ish
       gridColor: 'rgba(148, 163, 184, 0.28)',       // slate-400-ish, soft
       zeroLineColor: 'rgba(148, 163, 184, 0.6)',    // a bit stronger
+      majorGridColor: 'rgba(226, 232, 240, 0.32)',
     };
   }
   return {
     axisTickColor: 'rgba(71, 85, 105, 0.95)',       // slate-600-ish
     gridColor: 'rgba(148, 163, 184, 0.22)',         // light grey grid
     zeroLineColor: 'rgba(148, 163, 184, 0.6)',
+    majorGridColor: 'rgba(0, 0, 0, 0.25)',
   };
 }
 
@@ -443,6 +445,29 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15, evSettings = null) 
 // 3) Buy/Sell price chart (stepped line)
 // -----------------------------------------------------------------------------
 
+function makePriceZeroLinePlugin() {
+  return {
+    id: 'priceZeroLine',
+    beforeDatasetsDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      const yScale = scales.y;
+      if (!chartArea || !yScale || yScale.min > 0 || yScale.max < 0) return;
+
+      const y = yScale.getPixelForValue(0);
+      if (y < chartArea.top || y > chartArea.bottom) return;
+
+      ctx.save();
+      ctx.strokeStyle = getChartTheme().majorGridColor;
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, y);
+      ctx.lineTo(chartArea.right, y);
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+}
+
 export function drawPricesStepLines(canvas, rows, _stepSize_m = 15) {
   const timestampsMs = rows.map(r => r.timestampMs);
   const axis = buildTimeAxisFromTimestamps(timestampsMs);
@@ -496,7 +521,8 @@ export function drawPricesStepLines(canvas, rows, _stepSize_m = 15) {
           callbacks: { title: axis.tooltipTitleCb },
         },
       },
-    })
+    }),
+    plugins: [makePriceZeroLinePlugin()]
   });
 }
 
@@ -576,7 +602,7 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
 // EV tab charts
 // -----------------------------------------------------------------------------
 
-export function drawEvPowerChart(canvas, rows, stepSize_m = 15, evSettings = {}) {
+export function drawEvPowerChart(canvas, rows, _stepSize_m = 15, evSettings = {}) {
   const timestampsMs = rows.map(r => r.timestampMs);
   const axis = buildTimeAxisFromTimestamps(timestampsMs);
 
