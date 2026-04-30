@@ -12,6 +12,7 @@ export function getElements() {
     sourceSoc: $("#source-soc"),
     rebalanceEnabled: $("#rebalance-enabled"),
     rebalanceHoldHours: $("#rebalance-hold-hours"),
+    blockFeedInOnNegativePrices: $("#block-feedin-negative-prices"),
 
     // numeric inputs
     step: $("#step"),
@@ -144,4 +145,3 @@ export function wireGlobalInputs(els, { onInput, onSave = onInput, onRun, update
 export function wireVrmSettingInput(els, { onRefresh }) {
   els.vrmFetchSettings?.addEventListener("click", onRefresh);
 }
-

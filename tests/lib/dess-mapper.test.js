@@ -179,6 +179,12 @@ describe('mapRowsToDess', () => {
       expect(perSlot[0].feedin).toBe(FeedIn.blocked);
     });
 
+    it('allows feed-in at negative export prices when blocking is disabled', () => {
+      const rows = [{ ...baseRow, ec: -1 }];
+      const { perSlot } = mapRowsToDess(rows, cfg, { blockFeedInOnNegativePrices: false });
+      expect(perSlot[0].feedin).toBe(FeedIn.allowed);
+    });
+
     it('allows feed-in when export price is positive', () => {
       const rows = [{ ...baseRow, ec: 1 }];
       const { perSlot } = mapRowsToDess(rows, cfg);
@@ -560,6 +566,12 @@ describe('mapRowsToDessV2', () => {
     expect(perSlot[0].feedin).toBe(FeedIn.blocked);
   });
 
+  it('allows feed-in at negative export prices when blocking is disabled', () => {
+    const rows = [makeRow({ ec: -1 })];
+    const { perSlot } = mapRowsToDessV2(rows, cfg, { blockFeedInOnNegativePrices: false });
+    expect(perSlot[0].feedin).toBe(FeedIn.allowed);
+  });
+
   it('allows feed-in when export price is positive', () => {
     const rows = [makeRow({ ec: 5 })];
     const { perSlot } = mapRowsToDessV2(rows, cfg);
@@ -593,4 +605,3 @@ describe('mapRowsToDessV2', () => {
     expect(v2Result.diagnostics.pvExportTippingPoint_cents_per_kWh).toBe(25);
   });
 });
-
