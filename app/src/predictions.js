@@ -5,21 +5,34 @@
  */
 
 import {
+  createPredictionAdjustment,
+  deletePredictionAdjustment,
+  fetchPredictionAdjustments,
   fetchPredictionConfig,
+  fetchStoredData,
   savePredictionConfig,
+  updatePredictionAdjustment,
   runPvForecast,
   runCombinedForecast,
 } from './api/api.js';
-import { debounce } from './utils.js';
+import { debounce, escapeHtml } from './utils.js';
 import { buildTimeAxisFromTimestamps, getBaseOptions, renderChart, toRGBA, SOLUTION_COLORS } from './charts.js';
 import { createTooltipHandler, fmtKwh, getChartAnimations, ttHeader, ttRow, ttDivider } from './chart-tooltip.js';
 import { initValidation } from './predictions-validation.js';
 
 let lastLoadForecast = null;
 let lastPvForecast = null;
+let lastLoadForecastRaw = null;
+let lastPvForecastRaw = null;
+let predictionAdjustments = [];
+let forecastChartSelection = null;
+let forecastChartDrag = null;
+let adjustmentDraft = null;
 
 export async function initPredictionsTab() {
   await hydrateForm();
+  await loadAdjustments();
+  await hydrateForecastsFromStoredData();
   wireForm();
   onForecastAll();
 }
@@ -48,6 +61,143 @@ function aggregateForecastKwh(forecast, stepMinutes = 60) {
   const timestamps = [...timeMap.keys()].sort((a, b) => a - b);
   const aggregatedKwh = timestamps.map(k => timeMap.get(k) / 1000);
   return { timestamps, values: aggregatedKwh };
+}
+
+export function applyAdjustmentsToForecastSeries(forecast, adjustments, series) {
+  if (!forecast || !Array.isArray(forecast.values)) return forecast;
+  const nowMs = Date.now();
+  const relevant = (adjustments || []).filter(adj => adj.series === series && new Date(adj.end).getTime() > nowMs);
+  if (!relevant.length) return forecast;
+
+  const startTs = new Date(forecast.start).getTime();
+  const stepMs = (forecast.step || 15) * 60 * 1000;
+  return {
+    ...forecast,
+    values: forecast.values.map((raw, index) => {
+      const slotTs = startTs + index * stepMs;
+      const matching = relevant.filter(adj => slotTs >= new Date(adj.start).getTime() && slotTs < new Date(adj.end).getTime());
+      if (!matching.length) return raw;
+
+      const setAdjustment = matching.filter(adj => adj.mode === 'set').at(-1);
+      const base = setAdjustment ? Number(setAdjustment.value_W) : raw;
+      const delta = matching
+        .filter(adj => adj.mode === 'add')
+        .reduce((sum, adj) => sum + Number(adj.value_W || 0), 0);
+      return Math.max(0, base + delta);
+    }),
+  };
+}
+
+export function buildForecastSelectionRange(startIndex, endIndex, timestamps, stepMinutes) {
+  if (!timestamps.length) return null;
+  const low = Math.min(startIndex, endIndex);
+  const high = Math.max(startIndex, endIndex);
+  const first = Math.max(0, Math.min(timestamps.length - 1, low));
+  const last = Math.max(0, Math.min(timestamps.length - 1, high));
+  const stepMs = stepMinutes * 60 * 1000;
+  return {
+    startIndex: first,
+    endIndex: last,
+    start: new Date(timestamps[first]).toISOString(),
+    end: new Date(timestamps[last] + stepMs).toISOString(),
+  };
+}
+
+export function forecastSeriesFromCategoryX(x, bounds) {
+  if (!bounds || !Number.isFinite(x)) return 'load';
+  const mid = (bounds.left + bounds.right) / 2;
+  return x >= mid ? 'pv' : 'load';
+}
+
+export function futureForecastSeries(series, nowMs = Date.now()) {
+  if (!series || !Array.isArray(series.values) || !series.values.length) return null;
+  const startMs = new Date(series.start).getTime();
+  if (!Number.isFinite(startMs)) return null;
+  const step = Number(series.step || 15);
+  if (!Number.isFinite(step) || step <= 0) return null;
+
+  const stepMs = step * 60 * 1000;
+  const offset = Math.max(0, Math.floor((nowMs - startMs) / stepMs));
+  if (offset >= series.values.length) return null;
+  return {
+    ...series,
+    start: new Date(startMs + offset * stepMs).toISOString(),
+    step,
+    values: series.values.slice(offset),
+  };
+}
+
+function refreshAdjustedForecastsFromRaw() {
+  lastLoadForecast = lastLoadForecastRaw
+    ? applyAdjustmentsToForecastSeries(lastLoadForecastRaw, predictionAdjustments, 'load')
+    : null;
+  lastPvForecast = lastPvForecastRaw
+    ? applyAdjustmentsToForecastSeries(lastPvForecastRaw, predictionAdjustments, 'pv')
+    : null;
+}
+
+async function loadAdjustments() {
+  try {
+    const result = await fetchPredictionAdjustments();
+    predictionAdjustments = Array.isArray(result?.adjustments) ? result.adjustments : [];
+    renderAdjustmentList();
+  } catch (err) {
+    console.error('Failed to load prediction adjustments:', err);
+  }
+}
+
+async function hydrateForecastsFromStoredData() {
+  try {
+    const data = await fetchStoredData();
+    const load = futureForecastSeries(data?.load);
+    const pv = futureForecastSeries(data?.pv);
+    if (!load && !pv) return;
+
+    lastLoadForecastRaw = load;
+    lastPvForecastRaw = pv;
+    refreshAdjustedForecastsFromRaw();
+    renderCombinedForecastChart();
+    if (load) updateStoredForecastMetrics('load', load, lastLoadForecast);
+    if (pv) updateStoredForecastMetrics('pv', pv, lastPvForecast);
+  } catch (err) {
+    console.error('Failed to load stored forecast data:', err);
+  }
+}
+
+function setAdjustments(nextAdjustments) {
+  predictionAdjustments = Array.isArray(nextAdjustments) ? nextAdjustments : [];
+  refreshAdjustedForecastsFromRaw();
+  renderCombinedForecastChart();
+  renderAdjustmentList();
+}
+
+function formatAdjustmentTime(value) {
+  return new Date(value).toLocaleString([], {
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatRange(start, end) {
+  return `${formatAdjustmentTime(start)} – ${formatAdjustmentTime(end)}`;
+}
+
+function toDatetimeLocalValue(value) {
+  const d = new Date(value);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromDatetimeLocalValue(value) {
+  const ts = new Date(value).getTime();
+  return Number.isFinite(ts) ? new Date(ts).toISOString() : '';
+}
+
+function adjustmentSummary(adj) {
+  const modeText = adj.mode === 'set' ? 'set to' : 'add';
+  const sign = adj.mode === 'add' && adj.value_W > 0 ? '+' : '';
+  return `${adj.series === 'pv' ? 'PV' : 'Load'} ${modeText} ${sign}${Math.round(adj.value_W).toLocaleString()} W`;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +269,8 @@ function wireForm() {
     ?.addEventListener('click', onPvForecast);
   document.getElementById('forecast-chart-15m')
     ?.addEventListener('change', renderCombinedForecastChart);
+
+  wireAdjustmentPopover();
 
   const settingsToggle = document.getElementById('pred-settings-toggle');
   const settingsBody = document.getElementById('pred-settings-body');
@@ -233,12 +385,15 @@ function updateForecastUI(type, result) {
   const label = type === 'load' ? 'Load' : 'PV';
   if (result) {
     if (type === 'load') {
+      lastLoadForecastRaw = result.rawForecast ?? result.forecast ?? null;
       lastLoadForecast = result.forecast ?? null;
       renderLoadAccuracyChart(result.recent);
     } else {
+      lastPvForecastRaw = result.rawForecast ?? result.forecast ?? null;
       lastPvForecast = result.forecast ?? null;
       renderPvAccuracyChart(result.recent);
     }
+    refreshAdjustedForecastsFromRaw();
     renderCombinedForecastChart();
     updateMetrics(type, result);
     updateStatus(type, `${label} forecast updated`);
@@ -280,6 +435,175 @@ function updateMetrics(prefix, resultObject) {
   }
 }
 
+function updateStoredForecastMetrics(prefix, rawForecast, adjustedForecast) {
+  updateMetrics(prefix, { forecast: adjustedForecast ?? rawForecast, metrics: { mae: NaN } });
+  setEl(`${prefix}-summary-error`, '--');
+  updateStatus(prefix, 'Stored data loaded');
+}
+
+function adjustmentOverlapsBucket(adj, bucketStartMs, bucketEndMs) {
+  return new Date(adj.start).getTime() < bucketEndMs && new Date(adj.end).getTime() > bucketStartMs;
+}
+
+function findAdjustmentAtBucket(bucketStartMs, bucketEndMs, series = null) {
+  return predictionAdjustments.findLast(adj => (!series || adj.series === series) && adjustmentOverlapsBucket(adj, bucketStartMs, bucketEndMs)) ?? null;
+}
+
+function findAdjustmentIndexes(adj, timestamps, stepMinutes) {
+  const stepMs = stepMinutes * 60 * 1000;
+  const adjEndMs = new Date(adj.end).getTime();
+  const first = timestamps.findIndex(ts => adjustmentOverlapsBucket(adj, ts, ts + stepMs));
+  if (first < 0) return null;
+  let last = first;
+  for (let i = first + 1; i < timestamps.length; i++) {
+    if (timestamps[i] >= adjEndMs) break;
+    if (adjustmentOverlapsBucket(adj, timestamps[i], timestamps[i] + stepMs)) last = i;
+  }
+  return { first, last };
+}
+
+function categoryBounds(chart, index) {
+  const x = chart.scales.x;
+  const labels = chart.data.labels || [];
+  const center = x.getPixelForValue(index);
+  const prev = index > 0 ? x.getPixelForValue(index - 1) : null;
+  const next = index < labels.length - 1 ? x.getPixelForValue(index + 1) : null;
+  const half = next != null
+    ? Math.abs(next - center) / 2
+    : prev != null
+      ? Math.abs(center - prev) / 2
+      : (chart.chartArea.right - chart.chartArea.left) / 2;
+  return {
+    left: Math.max(chart.chartArea.left, center - half),
+    right: Math.min(chart.chartArea.right, center + half),
+  };
+}
+
+function seriesLaneBounds(bounds, series) {
+  const width = bounds.right - bounds.left;
+  const gap = Math.min(2, width * 0.05);
+  const mid = (bounds.left + bounds.right) / 2;
+  if (series === 'pv') {
+    return {
+      left: Math.min(bounds.right, mid + gap),
+      right: bounds.right,
+    };
+  }
+  return {
+    left: bounds.left,
+    right: Math.max(bounds.left, mid - gap),
+  };
+}
+
+function drawSeriesLane(chart, index, series, draw) {
+  const bounds = seriesLaneBounds(categoryBounds(chart, index), series);
+  const width = bounds.right - bounds.left;
+  if (width <= 0) return;
+  draw(bounds.left, width);
+}
+
+function makeAdjustmentOverlayPlugin(timestamps, stepMinutes) {
+  return {
+    id: 'predictionAdjustmentOverlay',
+    beforeDatasetsDraw(chart) {
+      const { ctx, chartArea } = chart;
+      if (!chartArea || !timestamps.length) return;
+
+      ctx.save();
+      for (const adj of predictionAdjustments) {
+        const range = findAdjustmentIndexes(adj, timestamps, stepMinutes);
+        if (!range) continue;
+        const color = adj.series === 'pv' ? SOLUTION_COLORS.pv2g : SOLUTION_COLORS.g2l;
+        ctx.fillStyle = toRGBA(color, 0.10);
+        for (let i = range.first; i <= range.last; i++) {
+          drawSeriesLane(chart, i, adj.series, (left, width) => {
+            ctx.fillRect(left, chartArea.top, width, chartArea.bottom - chartArea.top);
+          });
+        }
+      }
+
+      if (forecastChartSelection) {
+        ctx.fillStyle = 'rgba(14, 165, 233, 0.10)';
+        ctx.strokeStyle = 'rgba(14, 165, 233, 0.75)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([]);
+        for (let i = forecastChartSelection.startIndex; i <= forecastChartSelection.endIndex; i++) {
+          drawSeriesLane(chart, i, forecastChartSelection.series, (left, width) => {
+            ctx.fillRect(left, chartArea.top, width, chartArea.bottom - chartArea.top);
+            ctx.strokeRect(left, chartArea.top + 1, width, chartArea.bottom - chartArea.top - 2);
+          });
+        }
+      }
+      ctx.restore();
+    },
+  };
+}
+
+function makeForecastOriginalMarkersPlugin(timestamps, rawSeriesMaps) {
+  return {
+    id: 'forecastOriginalMarkers',
+    afterDatasetsDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea || !timestamps.length || !scales.y) return;
+      const isDark = document.documentElement.classList.contains('dark');
+      const markerFill = isDark ? 'rgba(226, 232, 240, 0.96)' : 'rgba(71, 85, 105, 0.92)';
+      const markerStroke = isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(chartArea.left, chartArea.top, chartArea.right - chartArea.left, chartArea.bottom - chartArea.top);
+      ctx.clip();
+
+      for (let datasetIndex = 0; datasetIndex < chart.data.datasets.length; datasetIndex++) {
+        const dataset = chart.data.datasets[datasetIndex];
+        const rawMap = rawSeriesMaps[dataset.series];
+        if (!rawMap) continue;
+
+        const meta = chart.getDatasetMeta(datasetIndex);
+        ctx.setLineDash([]);
+        ctx.lineJoin = 'round';
+
+        for (let i = 0; i < timestamps.length; i++) {
+          const raw = rawMap.get(timestamps[i]);
+          const adjusted = dataset.data[i];
+          const bar = meta.data[i];
+          if (raw == null || adjusted == null || !bar || Math.abs(raw - adjusted) <= 0.001) continue;
+
+          const props = bar.getProps(['x', 'width'], true);
+          const rawY = scales.y.getPixelForValue(raw);
+          const markerSize = Math.max(3.5, Math.min(5, props.width * 0.22));
+          ctx.beginPath();
+          ctx.moveTo(props.x, rawY - markerSize);
+          ctx.lineTo(props.x + markerSize, rawY);
+          ctx.lineTo(props.x, rawY + markerSize);
+          ctx.lineTo(props.x - markerSize, rawY);
+          ctx.closePath();
+          ctx.fillStyle = markerFill;
+          ctx.strokeStyle = markerStroke;
+          ctx.lineWidth = 2;
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    },
+  };
+}
+
+function makeForecastDataset(label, data, color, series) {
+  return {
+    label,
+    data,
+    series,
+    backgroundColor: stripe(color),
+    borderColor: color,
+    borderWidth: 1,
+    hoverBackgroundColor: stripe(toRGBA(color, 0.6)),
+    barPercentage: 0.9,
+    categoryPercentage: 0.8,
+  };
+}
+
 function renderCombinedForecastChart() {
   const canvas = document.getElementById('forecast-chart');
   if (!canvas) return;
@@ -289,38 +613,36 @@ function renderCombinedForecastChart() {
 
   const loadAgg = lastLoadForecast ? aggregateForecastKwh(lastLoadForecast, stepMinutes) : { timestamps: [], values: [] };
   const pvAgg = lastPvForecast ? aggregateForecastKwh(lastPvForecast, stepMinutes) : { timestamps: [], values: [] };
+  const rawLoadAgg = lastLoadForecastRaw ? aggregateForecastKwh(lastLoadForecastRaw, stepMinutes) : { timestamps: [], values: [] };
+  const rawPvAgg = lastPvForecastRaw ? aggregateForecastKwh(lastPvForecastRaw, stepMinutes) : { timestamps: [], values: [] };
 
-  const allTs = [...new Set([...loadAgg.timestamps, ...pvAgg.timestamps])].sort((a, b) => a - b);
+  const allTs = [...new Set([
+    ...loadAgg.timestamps,
+    ...pvAgg.timestamps,
+    ...rawLoadAgg.timestamps,
+    ...rawPvAgg.timestamps,
+  ])].sort((a, b) => a - b);
   const axis = buildTimeAxisFromTimestamps(allTs);
 
   const loadMap = new Map(loadAgg.timestamps.map((t, i) => [t, loadAgg.values[i]]));
   const pvMap = new Map(pvAgg.timestamps.map((t, i) => [t, pvAgg.values[i]]));
+  const rawLoadMap = new Map(rawLoadAgg.timestamps.map((t, i) => [t, rawLoadAgg.values[i]]));
+  const rawPvMap = new Map(rawPvAgg.timestamps.map((t, i) => [t, rawPvAgg.values[i]]));
 
   renderChart(canvas, {
     type: 'bar',
     data: {
       labels: axis.labels,
       datasets: [
-        {
-          label: 'Load',
-          data: allTs.map(t => loadMap.get(t) ?? null),
-          backgroundColor: stripe(SOLUTION_COLORS.g2l),
-          borderColor: SOLUTION_COLORS.g2l,
-          borderWidth: 1,
-          hoverBackgroundColor: stripe(toRGBA(SOLUTION_COLORS.g2l, 0.6)),
-        },
-        {
-          label: 'Solar',
-          data: allTs.map(t => pvMap.get(t) ?? null),
-          backgroundColor: stripe(SOLUTION_COLORS.pv2g),
-          borderColor: SOLUTION_COLORS.pv2g,
-          borderWidth: 1,
-          hoverBackgroundColor: stripe(toRGBA(SOLUTION_COLORS.pv2g, 0.6)),
-        },
+        makeForecastDataset('Load', allTs.map(t => loadMap.get(t) ?? null), SOLUTION_COLORS.g2l, 'load'),
+        makeForecastDataset('Solar', allTs.map(t => pvMap.get(t) ?? null), SOLUTION_COLORS.pv2g, 'pv'),
       ],
     },
     options: getBaseOptions({ ...axis, yTitle: 'kWh' }, {
       ...getChartAnimations('bar', allTs.length),
+      onHover: (_event, _elements, chart) => {
+        chart.canvas.style.cursor = allTs.length ? 'crosshair' : '';
+      },
       plugins: {
         tooltip: {
           mode: 'index',
@@ -333,6 +655,11 @@ function renderCombinedForecastChart() {
               for (const pt of (tooltip.dataPoints ?? [])) {
                 if (pt.raw == null) continue;
                 html += ttRow(pt.dataset.borderColor, pt.dataset.label, `${fmtKwh(pt.raw)} kWh`);
+                const rawMap = pt.dataset.series === 'pv' ? rawPvMap : rawLoadMap;
+                const raw = rawMap.get(allTs[pt.dataIndex]);
+                if (raw != null && Math.abs(raw - pt.raw) > 0.001) {
+                  html += ttRow(toRGBA(pt.dataset.borderColor, 0.45), `Original ${pt.dataset.label.toLowerCase()}`, `${fmtKwh(raw)} kWh`);
+                }
               }
               return html;
             },
@@ -340,8 +667,300 @@ function renderCombinedForecastChart() {
           callbacks: { title: axis.tooltipTitleCb },
         },
       },
+      scales: {
+        x: { stacked: false },
+        y: { stacked: false },
+      },
     }),
+    plugins: [
+      makeAdjustmentOverlayPlugin(allTs, stepMinutes),
+      makeForecastOriginalMarkersPlugin(allTs, { load: rawLoadMap, pv: rawPvMap }),
+    ],
   });
+
+  wireForecastChartEditing(canvas, allTs, stepMinutes);
+}
+
+function pickForecastBucket(event, canvas, timestamps, stepMinutes) {
+  const chart = canvas._chart;
+  if (!chart || !timestamps.length) return null;
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  const area = chart.chartArea;
+  if (!area || x < area.left || x > area.right || y < area.top || y > area.bottom) return null;
+
+  const rawIndex = chart.scales.x.getValueForPixel(x);
+  const index = Math.max(0, Math.min(timestamps.length - 1, Math.round(Number(rawIndex))));
+  const hit = chart.getElementsAtEventForMode(event, 'nearest', { intersect: true }, true)[0];
+  const series = hit
+    ? chart.data.datasets[hit.datasetIndex]?.series || 'load'
+    : forecastSeriesFromCategoryX(x, categoryBounds(chart, index));
+  const range = buildForecastSelectionRange(index, index, timestamps, stepMinutes);
+  return { index, series, range };
+}
+
+function wireForecastChartEditing(canvas, timestamps, stepMinutes) {
+  if (typeof canvas._forecastEditCleanup === 'function') canvas._forecastEditCleanup();
+
+  const onPointerDown = (event) => {
+    if (event.button !== 0) return;
+    const picked = pickForecastBucket(event, canvas, timestamps, stepMinutes);
+    if (!picked) return;
+    forecastChartDrag = {
+      startIndex: picked.index,
+      endIndex: picked.index,
+      series: picked.series,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
+    forecastChartSelection = { ...picked.range, series: picked.series };
+    canvas.setPointerCapture?.(event.pointerId);
+    canvas._chart?.update('none');
+  };
+
+  const onPointerMove = (event) => {
+    if (!forecastChartDrag) return;
+    const picked = pickForecastBucket(event, canvas, timestamps, stepMinutes);
+    if (!picked) return;
+    const distance = Math.hypot(event.clientX - forecastChartDrag.startX, event.clientY - forecastChartDrag.startY);
+    forecastChartDrag.moved = forecastChartDrag.moved || distance > 4 || picked.index !== forecastChartDrag.startIndex;
+    forecastChartDrag.endIndex = picked.index;
+    const range = buildForecastSelectionRange(forecastChartDrag.startIndex, forecastChartDrag.endIndex, timestamps, stepMinutes);
+    forecastChartSelection = range ? { ...range, series: forecastChartDrag.series } : null;
+    canvas._chart?.update('none');
+  };
+
+  const onPointerUp = (event) => {
+    if (!forecastChartDrag) return;
+    const drag = forecastChartDrag;
+    forecastChartDrag = null;
+    canvas.releasePointerCapture?.(event.pointerId);
+
+    const range = buildForecastSelectionRange(drag.startIndex, drag.endIndex, timestamps, stepMinutes);
+    if (!range) return;
+    forecastChartSelection = { ...range, series: drag.series };
+    canvas._chart?.update('none');
+
+    const stepMs = stepMinutes * 60 * 1000;
+    const clickedAdjustment = !drag.moved
+      ? findAdjustmentAtBucket(timestamps[range.startIndex], timestamps[range.startIndex] + stepMs, drag.series)
+      : null;
+
+    if (clickedAdjustment) {
+      openAdjustmentPopover({ adjustment: clickedAdjustment, anchorEvent: event });
+    } else {
+      openAdjustmentPopover({ selection: forecastChartSelection, anchorEvent: event });
+    }
+  };
+
+  const onPointerCancel = () => {
+    forecastChartDrag = null;
+    forecastChartSelection = null;
+    canvas._chart?.update('none');
+  };
+
+  canvas.addEventListener('pointerdown', onPointerDown);
+  canvas.addEventListener('pointermove', onPointerMove);
+  canvas.addEventListener('pointerup', onPointerUp);
+  canvas.addEventListener('pointercancel', onPointerCancel);
+  canvas._forecastEditCleanup = () => {
+    canvas.removeEventListener('pointerdown', onPointerDown);
+    canvas.removeEventListener('pointermove', onPointerMove);
+    canvas.removeEventListener('pointerup', onPointerUp);
+    canvas.removeEventListener('pointercancel', onPointerCancel);
+  };
+}
+
+function activeSegmentClass(isActive) {
+  return isActive
+    ? 'bg-white text-sky-700 shadow-sm dark:bg-slate-700 dark:text-sky-200'
+    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100';
+}
+
+function seriesSegmentClass(series, isActive) {
+  if (!isActive) return 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100';
+  if (series === 'pv') return 'bg-amber-100 text-amber-800 shadow-sm dark:bg-amber-400/20 dark:text-amber-200';
+  return 'bg-rose-100 text-rose-800 shadow-sm dark:bg-rose-400/20 dark:text-rose-200';
+}
+
+function refreshPopoverSegments() {
+  for (const btn of document.querySelectorAll('.forecast-adjustment-series')) {
+    const series = btn.dataset.adjustSeries || 'load';
+    const active = series === adjustmentDraft?.series;
+    btn.className = `forecast-adjustment-series rounded-md px-3 py-1.5 text-sm font-medium ${seriesSegmentClass(series, active)}`;
+  }
+  for (const btn of document.querySelectorAll('.forecast-adjustment-mode')) {
+    const active = btn.dataset.adjustMode === adjustmentDraft?.mode;
+    btn.className = `forecast-adjustment-mode rounded-md px-3 py-2 text-sm font-medium ${activeSegmentClass(active)}`;
+  }
+}
+
+function setPopoverError(message = '') {
+  const el = document.getElementById('forecast-adjustment-error');
+  if (!el) return;
+  el.textContent = message;
+  el.classList.toggle('hidden', !message);
+}
+
+function showAdjustmentEditor() {
+  const popover = document.getElementById('forecast-adjustment-popover');
+  if (!popover) return;
+  popover.classList.remove('hidden');
+  popover.style.left = '';
+  popover.style.top = '';
+  popover.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function openAdjustmentPopover({ selection = null, adjustment = null } = {}) {
+  const popover = document.getElementById('forecast-adjustment-popover');
+  if (!popover) return;
+
+  if (adjustment) {
+    adjustmentDraft = {
+      id: adjustment.id,
+      series: adjustment.series,
+      mode: adjustment.mode,
+      value_W: adjustment.value_W,
+      start: adjustment.start,
+      end: adjustment.end,
+    };
+    forecastChartSelection = null;
+  } else {
+    const series = selection?.series || 'load';
+    adjustmentDraft = {
+      id: null,
+      series,
+      mode: series === 'pv' ? 'set' : 'add',
+      value_W: series === 'pv' ? 0 : '',
+      start: selection?.start || new Date().toISOString(),
+      end: selection?.end || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    };
+  }
+
+  setVal('forecast-adjustment-watts', adjustmentDraft.value_W);
+  setVal('forecast-adjustment-start', toDatetimeLocalValue(adjustmentDraft.start));
+  setVal('forecast-adjustment-end', toDatetimeLocalValue(adjustmentDraft.end));
+  setEl('forecast-adjustment-title', adjustmentDraft.id ? 'Edit adjustment' : 'Manual adjustment');
+  setEl('forecast-adjustment-range', formatRange(adjustmentDraft.start, adjustmentDraft.end));
+  document.getElementById('forecast-adjustment-delete')?.classList.toggle('hidden', !adjustmentDraft.id);
+  setPopoverError('');
+  refreshPopoverSegments();
+  showAdjustmentEditor();
+}
+
+function hideAdjustmentPopover() {
+  document.getElementById('forecast-adjustment-popover')?.classList.add('hidden');
+  adjustmentDraft = null;
+  forecastChartSelection = null;
+  document.getElementById('forecast-chart')?._chart?.update('none');
+}
+
+function readAdjustmentPayload() {
+  if (!adjustmentDraft) return null;
+  const start = fromDatetimeLocalValue(getVal('forecast-adjustment-start'));
+  const end = fromDatetimeLocalValue(getVal('forecast-adjustment-end'));
+  const value_W = Number(getVal('forecast-adjustment-watts'));
+  if (!start || !end) throw new Error('Start and end must be valid.');
+  if (new Date(end).getTime() <= new Date(start).getTime()) throw new Error('End must be after start.');
+  if (!Number.isFinite(value_W)) throw new Error('Watts must be a number.');
+  if (adjustmentDraft.mode === 'set' && value_W < 0) throw new Error('Set values cannot be negative.');
+  return {
+    series: adjustmentDraft.series,
+    mode: adjustmentDraft.mode,
+    value_W,
+    start,
+    end,
+  };
+}
+
+async function saveAdjustmentFromPopover() {
+  try {
+    const payload = readAdjustmentPayload();
+    if (!payload || !adjustmentDraft) return;
+    const result = adjustmentDraft.id
+      ? await updatePredictionAdjustment(adjustmentDraft.id, payload)
+      : await createPredictionAdjustment(payload);
+    setAdjustments(result.adjustments);
+    hideAdjustmentPopover();
+  } catch (err) {
+    setPopoverError(err.message || String(err));
+  }
+}
+
+async function deleteAdjustmentFromPopover() {
+  if (!adjustmentDraft?.id) return;
+  try {
+    const result = await deletePredictionAdjustment(adjustmentDraft.id);
+    setAdjustments(result.adjustments);
+    hideAdjustmentPopover();
+  } catch (err) {
+    setPopoverError(err.message || String(err));
+  }
+}
+
+function wireAdjustmentPopover() {
+  document.getElementById('forecast-adjustment-cancel')?.addEventListener('click', hideAdjustmentPopover);
+  document.getElementById('forecast-adjustment-save')?.addEventListener('click', saveAdjustmentFromPopover);
+  document.getElementById('forecast-adjustment-delete')?.addEventListener('click', deleteAdjustmentFromPopover);
+  for (const btn of document.querySelectorAll('.forecast-adjustment-series')) {
+    btn.addEventListener('click', () => {
+      if (!adjustmentDraft) return;
+      adjustmentDraft.series = btn.dataset.adjustSeries || 'load';
+      if (!adjustmentDraft.id) {
+        adjustmentDraft.mode = adjustmentDraft.series === 'pv' ? 'set' : 'add';
+        setVal('forecast-adjustment-watts', adjustmentDraft.series === 'pv' ? 0 : '');
+      }
+      refreshPopoverSegments();
+    });
+  }
+  for (const btn of document.querySelectorAll('.forecast-adjustment-mode')) {
+    btn.addEventListener('click', () => {
+      if (!adjustmentDraft) return;
+      adjustmentDraft.mode = btn.dataset.adjustMode || 'set';
+      refreshPopoverSegments();
+    });
+  }
+  for (const id of ['forecast-adjustment-start', 'forecast-adjustment-end']) {
+    document.getElementById(id)?.addEventListener('change', () => {
+      if (!adjustmentDraft) return;
+      adjustmentDraft.start = fromDatetimeLocalValue(getVal('forecast-adjustment-start')) || adjustmentDraft.start;
+      adjustmentDraft.end = fromDatetimeLocalValue(getVal('forecast-adjustment-end')) || adjustmentDraft.end;
+      setEl('forecast-adjustment-range', formatRange(adjustmentDraft.start, adjustmentDraft.end));
+    });
+  }
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') hideAdjustmentPopover();
+  });
+}
+
+function renderAdjustmentList() {
+  const list = document.getElementById('prediction-adjustments-list');
+  const count = document.getElementById('prediction-adjustments-count');
+  if (!list) return;
+  const sorted = [...predictionAdjustments].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+  if (count) count.textContent = sorted.length ? `${sorted.length} active` : '';
+  if (!sorted.length) {
+    list.innerHTML = '<div class="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">No active adjustments</div>';
+    return;
+  }
+  list.innerHTML = '';
+  for (const adj of sorted) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800';
+    const colorClass = adj.series === 'pv' ? 'text-amber-600 dark:text-amber-300' : 'text-rose-600 dark:text-rose-300';
+    item.innerHTML = `
+      <span class="min-w-0">
+        <span class="block truncate font-medium ${colorClass}">${escapeHtml(adjustmentSummary(adj))}</span>
+        <span class="block truncate text-xs text-slate-500 dark:text-slate-400">${escapeHtml(formatRange(adj.start, adj.end))}${adj.label ? ` · ${escapeHtml(adj.label)}` : ''}</span>
+      </span>
+      <span class="shrink-0 text-xs font-medium text-slate-400 dark:text-slate-500">Edit</span>
+    `;
+    item.addEventListener('click', (event) => openAdjustmentPopover({ adjustment: adj, anchorEvent: event }));
+    list.appendChild(item);
+  }
 }
 
 function renderLoadAccuracyChart(recentData) {

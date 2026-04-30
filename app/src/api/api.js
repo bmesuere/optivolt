@@ -18,6 +18,11 @@ export function requestRemoteSolve(body = {}) {
   return postJson("/calculate", body);
 }
 
+// --- Data ---
+export function fetchStoredData() {
+  return getJson("/data");
+}
+
 // --- VRM ---
 export function refreshVrmSettings() {
   return postJson("/vrm/refresh-settings", {});
@@ -40,3 +45,7 @@ export const runLoadForecast = () => postJson('/predictions/load/forecast', {});
 export const runPvForecast = () => postJson('/predictions/pv/forecast', {});
 export const runCombinedForecast = () => postJson('/predictions/forecast', {});
 export const fetchForecast = runCombinedForecast;
+export const fetchPredictionAdjustments = () => getJson('/predictions/adjustments');
+export const createPredictionAdjustment = (adjustment) => postJson('/predictions/adjustments', adjustment);
+export const updatePredictionAdjustment = (id, adjustment) => postJson(`/predictions/adjustments/${encodeURIComponent(id)}`, adjustment, { method: 'PATCH' });
+export const deletePredictionAdjustment = (id) => postJson(`/predictions/adjustments/${encodeURIComponent(id)}`, {}, { method: 'DELETE' });

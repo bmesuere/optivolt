@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getBuyPriceColor } from '../../app/src/charts.js';
+import { aggregateLoadPvBuckets, getBuyPriceColor } from '../../app/src/charts.js';
 
 describe('getBuyPriceColor', () => {
   it('uses fixed colors at scale stops', () => {
@@ -33,5 +33,44 @@ describe('getBuyPriceColor', () => {
   it('treats invalid prices as neutral zero', () => {
     expect(getBuyPriceColor(null)).toBe('rgb(226, 232, 240)');
     expect(getBuyPriceColor(Number.NaN)).toBe('rgb(226, 232, 240)');
+  });
+});
+
+describe('aggregateLoadPvBuckets', () => {
+  it('keeps original hourly load and pv totals when adjusted slots are present', () => {
+    const buckets = aggregateLoadPvBuckets([
+      {
+        timestampMs: Date.parse('2099-01-01T10:00:00.000Z'),
+        load: 150,
+        originalLoad: 100,
+        pv: 20,
+      },
+      {
+        timestampMs: Date.parse('2099-01-01T10:15:00.000Z'),
+        load: 100,
+        pv: 0,
+        originalPv: 30,
+      },
+      {
+        timestampMs: Date.parse('2099-01-01T10:30:00.000Z'),
+        load: 100,
+        pv: 10,
+      },
+      {
+        timestampMs: Date.parse('2099-01-01T10:45:00.000Z'),
+        load: 100,
+        pv: 10,
+      },
+    ], 15);
+
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0]).toMatchObject({
+      hasOriginalLoad: true,
+      hasOriginalPv: true,
+    });
+    expect(buckets[0].loadKWh).toBeCloseTo(0.1125);
+    expect(buckets[0].originalLoadKWh).toBeCloseTo(0.1);
+    expect(buckets[0].pvKWh).toBeCloseTo(0.01);
+    expect(buckets[0].originalPvKWh).toBeCloseTo(0.0175);
   });
 });

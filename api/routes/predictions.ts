@@ -8,7 +8,14 @@ import { runPvForecast } from '../services/pv-prediction-service.ts';
 import type { PvForecastRunResult } from '../services/pv-prediction-service.ts';
 import { loadData, saveData } from '../services/data-store.ts';
 import { loadSettings } from '../services/settings-store.ts';
-import type { PredictionConfig, PredictionRunConfig, TimeSeries } from '../types.ts';
+import type { PredictionAdjustmentSeries, PredictionConfig, PredictionRunConfig, TimeSeries } from '../types.ts';
+import type { PredictionAdjustmentInput } from '../services/prediction-adjustments.ts';
+import {
+  applyPredictionAdjustmentsToSeries,
+  createPredictionAdjustment,
+  pruneExpiredPredictionAdjustments,
+  updatePredictionAdjustment,
+} from '../services/prediction-adjustments.ts';
 
 const router = express.Router();
 
@@ -42,6 +49,77 @@ router.post('/config', async (req: Request, res: Response, next: NextFunction) =
     res.json({ message: 'Prediction config saved.', config: merged });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to save prediction config'));
+  }
+});
+
+// ----------------------------- Manual adjustments ------------------------
+
+router.get('/adjustments', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { adjustments } = await loadActiveAdjustmentsAndPrune();
+    res.json({ adjustments });
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to read prediction adjustments'));
+  }
+});
+
+router.post('/adjustments', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    assertCondition(
+      req.body && typeof req.body === 'object' && !Array.isArray(req.body),
+      400,
+      'prediction adjustment payload must be an object',
+    );
+
+    const data = await loadData();
+    const { data: pruned } = pruneExpiredPredictionAdjustments(data);
+    const adjustment = createPredictionAdjustment(req.body as PredictionAdjustmentInput);
+    const adjustments = [...(pruned.predictionAdjustments ?? []), adjustment];
+    const nextData = { ...pruned, predictionAdjustments: adjustments };
+    await saveData(nextData);
+    res.status(201).json({ adjustment, adjustments });
+  } catch (error) {
+    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Failed to create prediction adjustment'));
+  }
+});
+
+router.patch('/adjustments/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    assertCondition(
+      req.body && typeof req.body === 'object' && !Array.isArray(req.body),
+      400,
+      'prediction adjustment payload must be an object',
+    );
+
+    const data = await loadData();
+    const { data: pruned } = pruneExpiredPredictionAdjustments(data);
+    const adjustments = pruned.predictionAdjustments ?? [];
+    const index = adjustments.findIndex(adj => adj.id === req.params.id);
+    assertCondition(index >= 0, 404, 'Prediction adjustment not found');
+
+    const updated = updatePredictionAdjustment(adjustments[index], req.body as PredictionAdjustmentInput);
+    const nextAdjustments = adjustments.map((adj, i) => i === index ? updated : adj);
+    const nextData = { ...pruned, predictionAdjustments: nextAdjustments };
+    await saveData(nextData);
+    res.json({ adjustment: updated, adjustments: nextAdjustments });
+  } catch (error) {
+    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Failed to update prediction adjustment'));
+  }
+});
+
+router.delete('/adjustments/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await loadData();
+    const { data: pruned } = pruneExpiredPredictionAdjustments(data);
+    const adjustments = pruned.predictionAdjustments ?? [];
+    const nextAdjustments = adjustments.filter(adj => adj.id !== req.params.id);
+    assertCondition(nextAdjustments.length !== adjustments.length, 404, 'Prediction adjustment not found');
+
+    const nextData = { ...pruned, predictionAdjustments: nextAdjustments };
+    await saveData(nextData);
+    res.json({ adjustments: nextAdjustments });
+  } catch (error) {
+    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Failed to delete prediction adjustment'));
   }
 });
 
@@ -82,7 +160,7 @@ router.post('/load/forecast', async (req: Request, res: Response, next: NextFunc
 
     const result = await executeLoadForecast(config, 'load/forecast');
     await persistForecastData({ load: result.forecast });
-    res.json(result);
+    res.json(await withAdjustedForecast(result, 'load'));
   } catch (error) {
     next(error instanceof HttpError ? error : toHttpError(error, 500, 'Load forecast failed'));
   }
@@ -96,7 +174,7 @@ router.post('/pv/forecast', async (req: Request, res: Response, next: NextFuncti
 
     const result = await executePvForecast(config, 'pv/forecast');
     await persistForecastData({ pv: result?.forecast });
-    res.json(result);
+    res.json(await withAdjustedForecast(result, 'pv'));
   } catch (error) {
     next(error instanceof HttpError ? error : toHttpError(error, 500, 'PV forecast failed'));
   }
@@ -141,7 +219,11 @@ async function runCombinedForecast(config: PredictionRunConfig, endpoint: string
   } catch (err) {
     console.warn('[predict] forecast persistence failed:', err instanceof Error ? err.message : err);
   }
-  return { load: loadResult, pv: pvResult };
+  const { adjustments } = await loadActiveAdjustmentsAndPrune();
+  return {
+    load: applyForecastAdjustments(loadResult, 'load', adjustments),
+    pv: applyForecastAdjustments(pvResult, 'pv', adjustments),
+  };
 }
 
 async function executeLoadForecast(config: PredictionRunConfig, logLabel: string): Promise<ForecastRunResult> {
@@ -224,6 +306,35 @@ async function persistForecastData(updates: { load?: TimeSeries; pv?: TimeSeries
   if (setLoad) data.load = updates.load!;
   if (setPv)   data.pv   = updates.pv!;
   await saveData(data);
+}
+
+async function loadActiveAdjustmentsAndPrune() {
+  const data = await loadData();
+  const pruned = pruneExpiredPredictionAdjustments(data);
+  if (pruned.changed) await saveData(pruned.data);
+  return { data: pruned.data, adjustments: pruned.adjustments };
+}
+
+function applyForecastAdjustments<T extends { forecast?: TimeSeries } | null>(
+  result: T,
+  series: PredictionAdjustmentSeries,
+  adjustments: ReturnType<typeof pruneExpiredPredictionAdjustments>['adjustments'],
+): (T & { rawForecast?: TimeSeries }) | T {
+  if (!result?.forecast) return result;
+  const rawForecast = result.forecast;
+  return {
+    ...result,
+    rawForecast,
+    forecast: applyPredictionAdjustmentsToSeries(rawForecast, adjustments, series),
+  };
+}
+
+async function withAdjustedForecast<T extends { forecast?: TimeSeries } | null>(
+  result: T,
+  series: PredictionAdjustmentSeries,
+): Promise<(T & { rawForecast?: TimeSeries }) | T> {
+  const { adjustments } = await loadActiveAdjustmentsAndPrune();
+  return applyForecastAdjustments(result, series, adjustments);
 }
 
 function mapPredictionError(err: unknown, isPv: boolean): Error {

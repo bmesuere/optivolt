@@ -68,6 +68,73 @@ describe('POST /predictions/config', () => {
   });
 });
 
+describe('/predictions/adjustments', () => {
+  const baseData = {
+    load: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [100, 100] },
+    pv: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [200, 200] },
+    importPrice: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [10, 10] },
+    exportPrice: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [5, 5] },
+    soc: { timestamp: '2099-01-01T00:00:00.000Z', value: 50 },
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    loadData.mockResolvedValue(baseData);
+    saveData.mockResolvedValue();
+  });
+
+  it('creates a prediction adjustment', async () => {
+    const res = await request(app)
+      .post('/predictions/adjustments')
+      .send({
+        series: 'pv',
+        mode: 'set',
+        value_W: 0,
+        start: '2099-01-01T00:00:00.000Z',
+        end: '2099-01-01T01:00:00.000Z',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.adjustment.series).toBe('pv');
+    expect(saveData).toHaveBeenCalledWith(expect.objectContaining({
+      predictionAdjustments: [expect.objectContaining({ series: 'pv', mode: 'set', value_W: 0 })],
+    }));
+  });
+
+  it('returns active adjustments and prunes expired ones', async () => {
+    loadData.mockResolvedValue({
+      ...baseData,
+      predictionAdjustments: [
+        { id: 'expired', series: 'load', mode: 'add', value_W: 50, start: '2024-01-01T00:00:00.000Z', end: '2024-01-01T01:00:00.000Z', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' },
+        { id: 'future', series: 'load', mode: 'add', value_W: 50, start: '2099-01-01T00:00:00.000Z', end: '2099-01-01T01:00:00.000Z', createdAt: '2099-01-01T00:00:00.000Z', updatedAt: '2099-01-01T00:00:00.000Z' },
+      ],
+    });
+
+    const res = await request(app).get('/predictions/adjustments');
+
+    expect(res.status).toBe(200);
+    expect(res.body.adjustments.map(adj => adj.id)).toEqual(['future']);
+    expect(saveData).toHaveBeenCalledWith(expect.objectContaining({
+      predictionAdjustments: [expect.objectContaining({ id: 'future' })],
+    }));
+  });
+
+  it('updates and deletes prediction adjustments', async () => {
+    const existing = { id: 'adj-1', series: 'load', mode: 'add', value_W: 50, start: '2099-01-01T00:00:00.000Z', end: '2099-01-01T01:00:00.000Z', createdAt: '2099-01-01T00:00:00.000Z', updatedAt: '2099-01-01T00:00:00.000Z' };
+    loadData.mockResolvedValue({ ...baseData, predictionAdjustments: [existing] });
+
+    const patch = await request(app)
+      .patch('/predictions/adjustments/adj-1')
+      .send({ value_W: 125 });
+    expect(patch.status).toBe(200);
+    expect(patch.body.adjustment.value_W).toBe(125);
+
+    const del = await request(app).delete('/predictions/adjustments/adj-1').send({});
+    expect(del.status).toBe(200);
+    expect(del.body.adjustments).toEqual([]);
+  });
+});
+
 describe('POST /predictions/validate', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -228,6 +295,37 @@ describe('POST /predictions/forecast (combined) - persistence', () => {
     expect(saveData).toHaveBeenCalledTimes(1);
     expect(saveData.mock.calls[0][0].load).toEqual(loadForecast);
     expect(saveData.mock.calls[0][0].pv).toEqual(pvForecast);
+  });
+
+  it('returns adjusted forecasts while persisting raw forecasts', async () => {
+    const futureLoadForecast = { start: '2099-01-01T00:00:00.000Z', step: 15, values: [100, 100, 100, 100] };
+    const adjustment = {
+      id: 'adj-1',
+      series: 'load',
+      mode: 'add',
+      value_W: 50,
+      start: '2099-01-01T00:15:00.000Z',
+      end: '2099-01-01T00:45:00.000Z',
+      createdAt: '2099-01-01T00:00:00.000Z',
+      updatedAt: '2099-01-01T00:00:00.000Z',
+    };
+    runForecast.mockResolvedValue({ forecast: futureLoadForecast, recent: [] });
+    runPvForecast.mockResolvedValue(null);
+    loadData.mockResolvedValue({
+      load: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [] },
+      pv: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [] },
+      importPrice: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [] },
+      exportPrice: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [] },
+      soc: { timestamp: '2099-01-01T00:00:00.000Z', value: 50 },
+      predictionAdjustments: [adjustment],
+    });
+
+    const res = await request(app).post('/predictions/forecast').send({});
+
+    expect(res.status).toBe(200);
+    expect(saveData.mock.calls[0][0].load).toEqual(futureLoadForecast);
+    expect(res.body.load.rawForecast.values).toEqual([100, 100, 100, 100]);
+    expect(res.body.load.forecast.values).toEqual([100, 150, 150, 100]);
   });
 
   it('saves only load when dataSources.pv is vrm', async () => {
