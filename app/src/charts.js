@@ -33,6 +33,118 @@ const FLOWS_TOOLTIP_LABELS = {
   g2b:   "Grid → Battery",
 };
 
+const NEGATIVE_INJECTION_EPSILON_W = 1;
+const NEGATIVE_INJECTION_ICON_SIZE = 13;
+const NEGATIVE_INJECTION_DETAIL_LIMIT = 12;
+const BUY_PRICE_STRIP_HEIGHT = 7;
+const BUY_PRICE_STRIP_GAP = 4;
+const BUY_PRICE_STRIP_TICK_PADDING = BUY_PRICE_STRIP_HEIGHT + BUY_PRICE_STRIP_GAP + 5;
+
+const BUY_PRICE_COLOR_NEUTRAL_RGB = [226, 232, 240];
+const BUY_PRICE_COLOR_STOPS = [
+  { value: -10, rgb: [37, 99, 235] },
+  { value: -1,  rgb: [96, 165, 250] },
+  { value: 0,   rgb: BUY_PRICE_COLOR_NEUTRAL_RGB }, // zero / neutral
+  { value: 1,   rgb: [254, 243, 199] },
+  { value: 12,  rgb: [251, 191, 36] },
+  { value: 24,  rgb: [249, 115, 22] },
+  { value: 35,  rgb: [220, 38, 38] },
+];
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function srgbToLinear(channel) {
+  const c = channel / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+function linearToSrgb(channel) {
+  const c = Math.max(0, Math.min(1, channel));
+  const srgb = c <= 0.0031308 ? 12.92 * c : 1.055 * (c ** (1 / 2.4)) - 0.055;
+  return Math.round(srgb * 255);
+}
+
+function rgbToOklab(rgb) {
+  const r = srgbToLinear(rgb[0]);
+  const g = srgbToLinear(rgb[1]);
+  const b = srgbToLinear(rgb[2]);
+
+  const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+  const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+  const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+
+  const lRoot = Math.cbrt(l);
+  const mRoot = Math.cbrt(m);
+  const sRoot = Math.cbrt(s);
+
+  return [
+    0.2104542553 * lRoot + 0.7936177850 * mRoot - 0.0040720468 * sRoot,
+    1.9779984951 * lRoot - 2.4285922050 * mRoot + 0.4505937099 * sRoot,
+    0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.8086757660 * sRoot,
+  ];
+}
+
+function oklabToRgb(oklab) {
+  const lRoot = oklab[0] + 0.3963377774 * oklab[1] + 0.2158037573 * oklab[2];
+  const mRoot = oklab[0] - 0.1055613458 * oklab[1] - 0.0638541728 * oklab[2];
+  const sRoot = oklab[0] - 0.0894841775 * oklab[1] - 1.2914855480 * oklab[2];
+
+  const l = lRoot ** 3;
+  const m = mRoot ** 3;
+  const s = sRoot ** 3;
+
+  return [
+    linearToSrgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+    linearToSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+    linearToSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s),
+  ];
+}
+
+function interpolateOklab(from, to, t) {
+  const fromLab = rgbToOklab(from);
+  const toLab = rgbToOklab(to);
+  return oklabToRgb(fromLab.map((channel, idx) => lerp(channel, toLab[idx], t)));
+}
+
+function rgbString(rgb) {
+  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+}
+
+export function getBuyPriceColor(price_cents_per_kWh) {
+  const price = Number(price_cents_per_kWh);
+  if (!Number.isFinite(price)) return rgbString(BUY_PRICE_COLOR_NEUTRAL_RGB);
+
+  const first = BUY_PRICE_COLOR_STOPS[0];
+  const last = BUY_PRICE_COLOR_STOPS[BUY_PRICE_COLOR_STOPS.length - 1];
+  if (price <= first.value) return rgbString(first.rgb);
+  if (price >= last.value) return rgbString(last.rgb);
+
+  for (let i = 1; i < BUY_PRICE_COLOR_STOPS.length; i++) {
+    const lower = BUY_PRICE_COLOR_STOPS[i - 1];
+    const upper = BUY_PRICE_COLOR_STOPS[i];
+    if (price <= upper.value) {
+      const t = (price - lower.value) / (upper.value - lower.value);
+      return rgbString(interpolateOklab(lower.rgb, upper.rgb, t));
+    }
+  }
+
+  return rgbString(last.rgb);
+}
+
+function exportedPower_W(row) {
+  return (Number(row?.pv2g) || 0) + (Number(row?.b2g) || 0);
+}
+
+function isNegativePriceInjection(row) {
+  return (Number(row?.ec) || 0) < 0 && exportedPower_W(row) > NEGATIVE_INJECTION_EPSILON_W;
+}
+
+function fmtCostCents(v) {
+  return `${v.toFixed(1)}¢`;
+}
+
 function makeFlowsTooltip(rows, flowSpecs, h) {
   const W2kWh = (x) => (x || 0) * h / 1000;
 
@@ -142,8 +254,8 @@ export function buildTimeAxisFromTimestamps(timestampsMs) {
       let idx = ctx.index ?? ctx.tick?.index ?? ctx.tick?.value;
       if (idx == null || !times[idx]) return "transparent";
       const dt = times[idx];
-      if (isMidnight(dt)) return "rgba(0,0,0,0.25)";
-      if (isLabeledHour(dt) && isFullMinute(dt)) return "rgba(0,0,0,0.08)";
+      if (isMidnight(dt)) return getChartTheme().majorGridColor;
+      if (isLabeledHour(dt) && isFullMinute(dt)) return getChartTheme().minorGridColor;
       return "transparent";
     }
   };
@@ -183,6 +295,279 @@ function makeRebalancingPlugin(startIdx, endIdx) {
   };
 }
 
+function getNegativeInjectionRanges(rows, h) {
+  const ranges = [];
+  let startIdx = null;
+
+  function addRange(endIdx) {
+    const start = rows[startIdx];
+    const end = rows[endIdx];
+    const endMs = (Number(end?.timestampMs) || 0) + h * 3600_000;
+    let totalExport_kWh = 0;
+    let totalCost_cents = 0;
+    const slots = [];
+    for (let i = startIdx; i <= endIdx; i++) {
+      const row = rows[i];
+      const export_kWh = exportedPower_W(row) * h / 1000;
+      const sellPrice = Number(row?.ec) || 0;
+      totalExport_kWh += export_kWh;
+      totalCost_cents += Math.max(0, -sellPrice * export_kWh);
+      slots.push({
+        timeLabel: fmtHHMM(new Date(row.timestampMs)),
+        exportLabel: fmtKwh(export_kWh),
+        priceLabel: sellPrice.toFixed(1),
+        costLabel: fmtCostCents(Math.max(0, -sellPrice * export_kWh)),
+      });
+    }
+
+    ranges.push({
+      startIdx,
+      endIdx,
+      timeLabel: `${fmtHHMM(new Date(start.timestampMs))}-${fmtHHMM(new Date(endMs))}`,
+      exportLabel: `${fmtKwh(totalExport_kWh)} kWh`,
+      costLabel: fmtCostCents(totalCost_cents),
+      slots,
+    });
+  }
+
+  rows.forEach((row, idx) => {
+    if (isNegativePriceInjection(row)) {
+      if (startIdx == null) startIdx = idx;
+      return;
+    }
+
+    if (startIdx != null) {
+      addRange(idx - 1);
+      startIdx = null;
+    }
+  });
+
+  if (startIdx != null) addRange(rows.length - 1);
+  return ranges;
+}
+
+function drawNegativeInjectionIcon(ctx, x, y, dark) {
+  const radius = NEGATIVE_INJECTION_ICON_SIZE / 2;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fillStyle = dark ? 'rgba(251, 191, 36, 0.10)' : 'rgba(245, 158, 11, 0.10)';
+  ctx.strokeStyle = dark ? 'rgba(251, 191, 36, 0.35)' : 'rgba(180, 83, 9, 0.30)';
+  ctx.lineWidth = 1;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = dark ? 'rgba(251, 191, 36, 0.60)' : 'rgba(180, 83, 9, 0.55)';
+  ctx.font = '500 9px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('i', x, y + 0.5);
+  ctx.restore();
+}
+
+function ensureIconTooltip(chart) {
+  const parent = chart.canvas.parentNode;
+  if (!parent) return null;
+
+  let el = parent.querySelector('.ov-icon-tt');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'ov-icon-tt';
+    parent.style.position = 'relative';
+    parent.appendChild(el);
+  }
+  return el;
+}
+
+function showNegativeInjectionTooltip(chart, hit, event) {
+  const el = ensureIconTooltip(chart);
+  if (!el) return;
+
+  el.replaceChildren();
+
+  const title = document.createElement('div');
+  title.className = 'ov-icon-tt-title';
+  title.textContent = 'Export at negative sell price';
+
+  const summary = document.createElement('div');
+  summary.className = 'ov-icon-tt-summary';
+  for (const [label, value] of [
+    ['Window', hit.timeLabel],
+    ['Export', hit.exportLabel],
+    ['Cost', hit.costLabel],
+  ]) {
+    const labelEl = document.createElement('span');
+    labelEl.textContent = label;
+    const valueEl = document.createElement('strong');
+    valueEl.textContent = value;
+    summary.append(labelEl, valueEl);
+  }
+
+  el.append(title, summary);
+
+  if (hit.slots.length <= NEGATIVE_INJECTION_DETAIL_LIMIT) {
+    const table = document.createElement('table');
+    table.className = 'ov-icon-tt-table';
+
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    for (const label of ['Time', 'Sell', 'Export', 'Cost']) {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headerRow.appendChild(th);
+    }
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    for (const slot of hit.slots) {
+      const tr = document.createElement('tr');
+      for (const value of [slot.timeLabel, `${slot.priceLabel}¢`, slot.exportLabel, slot.costLabel]) {
+        const td = document.createElement('td');
+        td.textContent = value;
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    el.appendChild(table);
+  }
+
+  el.style.opacity = '1';
+
+  const ttW = el.offsetWidth || 260;
+  const ttH = el.offsetHeight || 120;
+  const cW = chart.canvas.offsetWidth;
+  const cH = chart.canvas.offsetHeight;
+  let x = event.x + 12;
+  if (x + ttW > cW - 8) x = event.x - ttW - 12;
+  let y = event.y - ttH / 2;
+  if (y < 0) y = 0;
+  if (y + ttH > cH) y = Math.max(0, cH - ttH);
+
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+}
+
+function hideNegativeInjectionTooltip(chart) {
+  const el = chart.canvas.parentNode?.querySelector('.ov-icon-tt');
+  if (el) el.style.opacity = '0';
+}
+
+function makeNegativePriceInjectionPlugin(rows, h) {
+  const ranges = getNegativeInjectionRanges(rows, h);
+  if (!ranges.length) return null;
+
+  const iconHits = [];
+
+  return {
+    id: 'negativePriceInjectionShading',
+    beforeDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+      const xScale = scales.x;
+      const N = chart.data.labels?.length;
+      if (!N) return;
+
+      const barW = xScale.width / N;
+      const dark = document.documentElement.classList.contains('dark');
+      const fillStyle = dark ? 'rgba(245, 158, 11, 0.10)' : 'rgba(245, 158, 11, 0.08)';
+      const iconY = chartArea.top + 13;
+
+      ctx.save();
+      iconHits.length = 0;
+
+      for (const range of ranges) {
+        const { startIdx, endIdx } = range;
+        const x0 = Math.max(chartArea.left, xScale.left + startIdx * barW);
+        const x1 = Math.min(chartArea.right, xScale.left + (endIdx + 1) * barW);
+        if (x1 <= x0) continue;
+
+        ctx.fillStyle = fillStyle;
+        ctx.fillRect(x0, chartArea.top, x1 - x0, chartArea.height);
+
+        const iconX = Math.min(
+          Math.max(x0 + 13, chartArea.left + NEGATIVE_INJECTION_ICON_SIZE),
+          x1 - NEGATIVE_INJECTION_ICON_SIZE / 2,
+          chartArea.right - NEGATIVE_INJECTION_ICON_SIZE
+        );
+        drawNegativeInjectionIcon(ctx, iconX, iconY, dark);
+        iconHits.push({
+          ...range,
+          left: iconX - NEGATIVE_INJECTION_ICON_SIZE,
+          right: iconX + NEGATIVE_INJECTION_ICON_SIZE,
+          top: iconY - NEGATIVE_INJECTION_ICON_SIZE,
+          bottom: iconY + NEGATIVE_INJECTION_ICON_SIZE,
+        });
+      }
+
+      ctx.restore();
+    },
+    afterEvent(chart, args) {
+      const event = args.event;
+      if (!event || event.type === 'mouseout') {
+        hideNegativeInjectionTooltip(chart);
+        chart.canvas.style.cursor = '';
+        return;
+      }
+
+      const hit = iconHits.find(box =>
+        event.x >= box.left &&
+        event.x <= box.right &&
+        event.y >= box.top &&
+        event.y <= box.bottom
+      );
+
+      if (!hit) {
+        hideNegativeInjectionTooltip(chart);
+        chart.canvas.style.cursor = '';
+        return;
+      }
+
+      chart.canvas.style.cursor = 'help';
+      showNegativeInjectionTooltip(chart, hit, event);
+    }
+  };
+}
+
+function makeBuyPriceStripPlugin(rows) {
+  if (!rows?.length) return null;
+
+  const colors = rows.map(row => getBuyPriceColor(row?.ic));
+
+  return {
+    id: 'buyPriceStrip',
+    afterDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+      const xScale = scales.x;
+      const N = chart.data.labels?.length;
+      if (!xScale || !N) return;
+
+      const y = chartArea.bottom + BUY_PRICE_STRIP_GAP;
+      const h = BUY_PRICE_STRIP_HEIGHT;
+      const barW = xScale.width / N;
+      const count = Math.min(colors.length, N);
+
+      ctx.save();
+      for (let i = 0; i < count; i++) {
+        const x0 = Math.max(chartArea.left, xScale.left + i * barW);
+        const x1 = Math.min(chartArea.right, xScale.left + (i + 1) * barW);
+        if (x1 <= x0) continue;
+        ctx.fillStyle = colors[i];
+        ctx.fillRect(x0, y, x1 - x0, h);
+      }
+
+      const dark = document.documentElement.classList.contains('dark');
+      ctx.strokeStyle = dark ? 'rgba(15, 23, 42, 0.70)' : 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(chartArea.left, y, chartArea.right - chartArea.left, h);
+      ctx.restore();
+    }
+  };
+}
+
 // ---------------------- Chart Configuration Helpers ----------------------
 
 /**
@@ -191,6 +576,8 @@ function makeRebalancingPlugin(startIdx, endIdx) {
  */
 export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacked = false }, overrides = {}) {
   const theme = getChartTheme();
+  const fontFamily = getComputedStyle(document.documentElement).fontFamily;
+  const { ticks: xTicks, grid: xGrid, ...xRest } = overrides.scales?.x || {};
 
   const legendSquare = {
     position: "bottom",
@@ -200,7 +587,7 @@ export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacke
       pointStyle: "rect",
       boxWidth: 10,
       padding: 12,
-      font: { size: 12, family: getComputedStyle(document.documentElement).fontFamily }
+      font: { size: 12, family: fontFamily }
     }
   };
 
@@ -223,14 +610,16 @@ export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacke
     scales: {
       x: {
         stacked,
+        ...xRest,
         ticks: {
           color: theme.axisTickColor,
           callback: ticksCb,
           autoSkip: false,
           maxRotation: 0,
-          minRotation: 0
+          minRotation: 0,
+          ...(xTicks || {})
         },
-        grid: { color: gridCb, drawTicks: true }
+        grid: { color: gridCb, drawTicks: true, ...(xGrid || {}) }
       },
       y: {
         stacked,
@@ -241,7 +630,7 @@ export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacke
           drawTicks: false,
           zeroLineColor: theme.zeroLineColor
         },
-        title: { display: !!yTitle, text: yTitle },
+        title: { display: !!yTitle, text: yTitle, color: theme.axisTickColor },
         // If specific charts need Y overrides (like max: 100), merge them here:
         ...(overrides.scales?.y || {})
       }
@@ -257,21 +646,107 @@ export function getChartTheme() {
       axisTickColor: 'rgba(226, 232, 240, 0.9)',    // slate-200-ish
       gridColor: 'rgba(148, 163, 184, 0.28)',       // slate-400-ish, soft
       zeroLineColor: 'rgba(148, 163, 184, 0.6)',    // a bit stronger
+      majorGridColor: 'rgba(226, 232, 240, 0.32)',
+      minorGridColor: 'rgba(226, 232, 240, 0.10)',
     };
   }
   return {
     axisTickColor: 'rgba(71, 85, 105, 0.95)',       // slate-600-ish
     gridColor: 'rgba(148, 163, 184, 0.22)',         // light grey grid
     zeroLineColor: 'rgba(148, 163, 184, 0.6)',
+    majorGridColor: 'rgba(0, 0, 0, 0.25)',
+    minorGridColor: 'rgba(0, 0, 0, 0.08)',
   };
+}
+
+const chartRegistry = new Set();
+
+function updateLegendTheme(options, theme, fontFamily) {
+  const legend = options.plugins?.legend;
+  if (!legend) return;
+  legend.labels = {
+    ...(legend.labels || {}),
+    color: theme.axisTickColor,
+    font: {
+      ...(legend.labels?.font || {}),
+      family: fontFamily,
+    },
+  };
+}
+
+function updateScaleTheme(scaleOptions, theme, scaleId) {
+  if (!scaleOptions) return;
+
+  if (scaleId !== "y2") {
+    scaleOptions.ticks = {
+      ...(scaleOptions.ticks || {}),
+      color: theme.axisTickColor,
+    };
+  }
+
+  if (scaleOptions.title) {
+    scaleOptions.title = {
+      ...scaleOptions.title,
+      color: theme.axisTickColor,
+    };
+  }
+
+  if (scaleOptions.grid) {
+    scaleOptions.grid = {
+      ...scaleOptions.grid,
+      ...(typeof scaleOptions.grid.color === "function" ? {} : { color: theme.gridColor }),
+      ...(Object.hasOwn(scaleOptions.grid, "zeroLineColor") ? { zeroLineColor: theme.zeroLineColor } : {}),
+    };
+  }
+}
+
+function getRenderedCharts() {
+  const charts = new Set();
+  for (const chart of chartRegistry) {
+    if (chart?.canvas?.isConnected) charts.add(chart);
+    else chartRegistry.delete(chart);
+  }
+
+  if (typeof document !== "undefined") {
+    for (const canvas of document.querySelectorAll("canvas")) {
+      const chart = canvas._chart || Chart.getChart?.(canvas);
+      if (chart) charts.add(chart);
+    }
+  }
+
+  return charts;
+}
+
+export function refreshAllChartThemes() {
+  const theme = getChartTheme();
+  const fontFamily = getComputedStyle(document.documentElement).fontFamily;
+
+  for (const chart of getRenderedCharts()) {
+    const options = chart.options || {};
+    updateLegendTheme(options, theme, fontFamily);
+
+    for (const [scaleId, scaleOptions] of Object.entries(options.scales || {})) {
+      updateScaleTheme(scaleOptions, theme, scaleId);
+    }
+
+    chart.update("none");
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("optivolt:themechange", refreshAllChartThemes);
 }
 
 /**
  * Handles the destruction of old chart instances and creation of new ones.
  */
 export function renderChart(canvas, config) {
-  if (canvas._chart) canvas._chart.destroy();
+  if (canvas._chart) {
+    chartRegistry.delete(canvas._chart);
+    canvas._chart.destroy();
+  }
   canvas._chart = new Chart(canvas.getContext("2d"), config);
+  chartRegistry.add(canvas._chart);
   const overlay = canvas.parentElement?.querySelector('.chart-empty');
   if (overlay) overlay.style.display = 'none';
 }
@@ -332,6 +807,10 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, rebalance
   const plugins = rebalanceWindow
     ? [makeRebalancingPlugin(rebalanceWindow.startIdx, rebalanceWindow.endIdx)]
     : [];
+  const buyPriceStripPlugin = makeBuyPriceStripPlugin(rows);
+  if (buyPriceStripPlugin) plugins.push(buyPriceStripPlugin);
+  const negativeInjectionPlugin = makeNegativePriceInjectionPlugin(rows, h);
+  if (negativeInjectionPlugin) plugins.push(negativeInjectionPlugin);
   const depPlugin = evSettings?.departureTime
     ? makeEvDeparturePlugin(rows, evSettings.departureTime)
     : null;
@@ -350,7 +829,13 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, rebalance
           external: makeFlowsTooltip(rows, flowSpecs, h),
           callbacks: { title: axis.tooltipTitleCb },
         }
-      }
+      },
+      layout: { padding: { bottom: 0 } },
+      scales: {
+        x: {
+          ticks: { padding: BUY_PRICE_STRIP_TICK_PADDING },
+        },
+      },
     }),
     plugins,
   });
@@ -443,6 +928,29 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15, evSettings = null) 
 // 3) Buy/Sell price chart (stepped line)
 // -----------------------------------------------------------------------------
 
+function makePriceZeroLinePlugin() {
+  return {
+    id: 'priceZeroLine',
+    beforeDatasetsDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      const yScale = scales.y;
+      if (!chartArea || !yScale || yScale.min > 0 || yScale.max < 0) return;
+
+      const y = yScale.getPixelForValue(0);
+      if (y < chartArea.top || y > chartArea.bottom) return;
+
+      ctx.save();
+      ctx.strokeStyle = getChartTheme().majorGridColor;
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, y);
+      ctx.lineTo(chartArea.right, y);
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+}
+
 export function drawPricesStepLines(canvas, rows, _stepSize_m = 15) {
   const timestampsMs = rows.map(r => r.timestampMs);
   const axis = buildTimeAxisFromTimestamps(timestampsMs);
@@ -496,7 +1004,8 @@ export function drawPricesStepLines(canvas, rows, _stepSize_m = 15) {
           callbacks: { title: axis.tooltipTitleCb },
         },
       },
-    })
+    }),
+    plugins: [makePriceZeroLinePlugin()]
   });
 }
 
@@ -576,7 +1085,7 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
 // EV tab charts
 // -----------------------------------------------------------------------------
 
-export function drawEvPowerChart(canvas, rows, stepSize_m = 15, evSettings = {}) {
+export function drawEvPowerChart(canvas, rows, _stepSize_m = 15, evSettings = {}) {
   const timestampsMs = rows.map(r => r.timestampMs);
   const axis = buildTimeAxisFromTimestamps(timestampsMs);
 

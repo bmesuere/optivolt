@@ -58,6 +58,31 @@ export function injectTooltipStyles() {
     .ov-tt-sell { background:rgba(34,197,94,0.15); color:#16a34a; }
     .dark .ov-tt-buy  { background:rgba(239,68,68,0.2); color:#fca5a5; }
     .dark .ov-tt-sell { background:rgba(34,197,94,0.2); color:#86efac; }
+    .ov-icon-tt {
+      position:absolute; pointer-events:none; z-index:11; opacity:0;
+      border-radius:8px; padding:8px 10px; font-size:11px; max-width:300px;
+      font-family:system-ui,sans-serif; box-shadow:0 4px 20px rgba(0,0,0,0.18);
+      transition:opacity .08s ease; background:#fff; border:1px solid #e2e8f0; color:#334155;
+    }
+    .dark .ov-icon-tt {
+      background:#1e293b; border-color:rgba(255,255,255,0.10); color:#cbd5e1;
+      box-shadow:0 4px 20px rgba(0,0,0,0.35);
+    }
+    .ov-icon-tt-title { font-weight:600; color:#92400e; margin-bottom:2px; }
+    .dark .ov-icon-tt-title { color:#d97706; }
+    .ov-icon-tt-summary { display:grid; grid-template-columns:auto auto; gap:2px 12px;
+                          margin-top:5px; color:#64748b; font-variant-numeric:tabular-nums; }
+    .dark .ov-icon-tt-summary { color:#94a3b8; }
+    .ov-icon-tt-summary strong { color:#0f172a; font-weight:600; }
+    .dark .ov-icon-tt-summary strong { color:#f8fafc; }
+    .ov-icon-tt-table { border-collapse:collapse; width:100%; margin-top:7px; font-variant-numeric:tabular-nums; }
+    .ov-icon-tt-table th { color:#94a3b8; font-size:10px; font-weight:600; text-align:right;
+                           border-bottom:1px solid #e2e8f0; padding:2px 3px; }
+    .dark .ov-icon-tt-table th { color:#64748b; border-color:rgba(255,255,255,0.08); }
+    .ov-icon-tt-table td { text-align:right; padding:2px 3px; color:#334155; white-space:nowrap; }
+    .dark .ov-icon-tt-table td { color:#cbd5e1; }
+    .ov-icon-tt-table th:first-child,
+    .ov-icon-tt-table td:first-child { text-align:left; }
   `;
   document.head.appendChild(s);
 }
