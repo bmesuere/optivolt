@@ -33,6 +33,22 @@ const FLOWS_TOOLTIP_LABELS = {
   g2b:   "Grid → Battery",
 };
 
+const NEGATIVE_INJECTION_EPSILON_W = 1;
+const NEGATIVE_INJECTION_ICON_SIZE = 13;
+const NEGATIVE_INJECTION_DETAIL_LIMIT = 12;
+
+function exportedPower_W(row) {
+  return (Number(row?.pv2g) || 0) + (Number(row?.b2g) || 0);
+}
+
+function isNegativePriceInjection(row) {
+  return (Number(row?.ec) || 0) < 0 && exportedPower_W(row) > NEGATIVE_INJECTION_EPSILON_W;
+}
+
+function fmtCostCents(v) {
+  return `${v.toFixed(1)}¢`;
+}
+
 function makeFlowsTooltip(rows, flowSpecs, h) {
   const W2kWh = (x) => (x || 0) * h / 1000;
 
@@ -179,6 +195,242 @@ function makeRebalancingPlugin(startIdx, endIdx) {
       ctx.textAlign = 'center';
       ctx.fillText('Rebalancing', (x0 + x1) / 2, chartArea.bottom - 8);
       ctx.restore();
+    }
+  };
+}
+
+function getNegativeInjectionRanges(rows, h) {
+  const ranges = [];
+  let startIdx = null;
+
+  function addRange(endIdx) {
+    const start = rows[startIdx];
+    const end = rows[endIdx];
+    const endMs = (Number(end?.timestampMs) || 0) + h * 3600_000;
+    let totalExport_kWh = 0;
+    let totalCost_cents = 0;
+    const slots = [];
+    for (let i = startIdx; i <= endIdx; i++) {
+      const row = rows[i];
+      const export_kWh = exportedPower_W(row) * h / 1000;
+      const sellPrice = Number(row?.ec) || 0;
+      totalExport_kWh += export_kWh;
+      totalCost_cents += Math.max(0, -sellPrice * export_kWh);
+      slots.push({
+        timeLabel: fmtHHMM(new Date(row.timestampMs)),
+        exportLabel: fmtKwh(export_kWh),
+        priceLabel: sellPrice.toFixed(1),
+        costLabel: fmtCostCents(Math.max(0, -sellPrice * export_kWh)),
+      });
+    }
+
+    ranges.push({
+      startIdx,
+      endIdx,
+      timeLabel: `${fmtHHMM(new Date(start.timestampMs))}-${fmtHHMM(new Date(endMs))}`,
+      exportLabel: `${fmtKwh(totalExport_kWh)} kWh`,
+      costLabel: fmtCostCents(totalCost_cents),
+      slots,
+    });
+  }
+
+  rows.forEach((row, idx) => {
+    if (isNegativePriceInjection(row)) {
+      if (startIdx == null) startIdx = idx;
+      return;
+    }
+
+    if (startIdx != null) {
+      addRange(idx - 1);
+      startIdx = null;
+    }
+  });
+
+  if (startIdx != null) addRange(rows.length - 1);
+  return ranges;
+}
+
+function drawNegativeInjectionIcon(ctx, x, y, dark) {
+  const radius = NEGATIVE_INJECTION_ICON_SIZE / 2;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fillStyle = dark ? 'rgba(251, 191, 36, 0.10)' : 'rgba(245, 158, 11, 0.10)';
+  ctx.strokeStyle = dark ? 'rgba(251, 191, 36, 0.35)' : 'rgba(180, 83, 9, 0.30)';
+  ctx.lineWidth = 1;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = dark ? 'rgba(251, 191, 36, 0.60)' : 'rgba(180, 83, 9, 0.55)';
+  ctx.font = '500 9px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('i', x, y + 0.5);
+  ctx.restore();
+}
+
+function ensureIconTooltip(chart) {
+  const parent = chart.canvas.parentNode;
+  if (!parent) return null;
+
+  let el = parent.querySelector('.ov-icon-tt');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'ov-icon-tt';
+    parent.style.position = 'relative';
+    parent.appendChild(el);
+  }
+  return el;
+}
+
+function showNegativeInjectionTooltip(chart, hit, event) {
+  const el = ensureIconTooltip(chart);
+  if (!el) return;
+
+  el.replaceChildren();
+
+  const title = document.createElement('div');
+  title.className = 'ov-icon-tt-title';
+  title.textContent = 'Export at negative sell price';
+
+  const summary = document.createElement('div');
+  summary.className = 'ov-icon-tt-summary';
+  for (const [label, value] of [
+    ['Window', hit.timeLabel],
+    ['Export', hit.exportLabel],
+    ['Cost', hit.costLabel],
+  ]) {
+    const labelEl = document.createElement('span');
+    labelEl.textContent = label;
+    const valueEl = document.createElement('strong');
+    valueEl.textContent = value;
+    summary.append(labelEl, valueEl);
+  }
+
+  el.append(title, summary);
+
+  if (hit.slots.length <= NEGATIVE_INJECTION_DETAIL_LIMIT) {
+    const table = document.createElement('table');
+    table.className = 'ov-icon-tt-table';
+
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    for (const label of ['Time', 'Sell', 'Export', 'Cost']) {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headerRow.appendChild(th);
+    }
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    for (const slot of hit.slots) {
+      const tr = document.createElement('tr');
+      for (const value of [slot.timeLabel, `${slot.priceLabel}¢`, slot.exportLabel, slot.costLabel]) {
+        const td = document.createElement('td');
+        td.textContent = value;
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    el.appendChild(table);
+  }
+
+  el.style.opacity = '1';
+
+  const ttW = el.offsetWidth || 260;
+  const ttH = el.offsetHeight || 120;
+  const cW = chart.canvas.offsetWidth;
+  const cH = chart.canvas.offsetHeight;
+  let x = event.x + 12;
+  if (x + ttW > cW - 8) x = event.x - ttW - 12;
+  let y = event.y - ttH / 2;
+  if (y < 0) y = 0;
+  if (y + ttH > cH) y = Math.max(0, cH - ttH);
+
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+}
+
+function hideNegativeInjectionTooltip(chart) {
+  const el = chart.canvas.parentNode?.querySelector('.ov-icon-tt');
+  if (el) el.style.opacity = '0';
+}
+
+function makeNegativePriceInjectionPlugin(rows, h) {
+  const ranges = getNegativeInjectionRanges(rows, h);
+  if (!ranges.length) return null;
+
+  const iconHits = [];
+
+  return {
+    id: 'negativePriceInjectionShading',
+    beforeDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+      const xScale = scales.x;
+      const N = chart.data.labels?.length;
+      if (!N) return;
+
+      const barW = xScale.width / N;
+      const dark = document.documentElement.classList.contains('dark');
+      const fillStyle = dark ? 'rgba(245, 158, 11, 0.10)' : 'rgba(245, 158, 11, 0.08)';
+      const iconY = chartArea.top + 13;
+
+      ctx.save();
+      iconHits.length = 0;
+
+      for (const range of ranges) {
+        const { startIdx, endIdx } = range;
+        const x0 = Math.max(chartArea.left, xScale.left + startIdx * barW);
+        const x1 = Math.min(chartArea.right, xScale.left + (endIdx + 1) * barW);
+        if (x1 <= x0) continue;
+
+        ctx.fillStyle = fillStyle;
+        ctx.fillRect(x0, chartArea.top, x1 - x0, chartArea.height);
+
+        const iconX = Math.min(
+          Math.max(x0 + 13, chartArea.left + NEGATIVE_INJECTION_ICON_SIZE),
+          x1 - NEGATIVE_INJECTION_ICON_SIZE / 2,
+          chartArea.right - NEGATIVE_INJECTION_ICON_SIZE
+        );
+        drawNegativeInjectionIcon(ctx, iconX, iconY, dark);
+        iconHits.push({
+          ...range,
+          left: iconX - NEGATIVE_INJECTION_ICON_SIZE,
+          right: iconX + NEGATIVE_INJECTION_ICON_SIZE,
+          top: iconY - NEGATIVE_INJECTION_ICON_SIZE,
+          bottom: iconY + NEGATIVE_INJECTION_ICON_SIZE,
+        });
+      }
+
+      ctx.restore();
+    },
+    afterEvent(chart, args) {
+      const event = args.event;
+      if (!event || event.type === 'mouseout') {
+        hideNegativeInjectionTooltip(chart);
+        chart.canvas.style.cursor = '';
+        return;
+      }
+
+      const hit = iconHits.find(box =>
+        event.x >= box.left &&
+        event.x <= box.right &&
+        event.y >= box.top &&
+        event.y <= box.bottom
+      );
+
+      if (!hit) {
+        hideNegativeInjectionTooltip(chart);
+        chart.canvas.style.cursor = '';
+        return;
+      }
+
+      chart.canvas.style.cursor = 'help';
+      showNegativeInjectionTooltip(chart, hit, event);
     }
   };
 }
@@ -334,6 +586,8 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, rebalance
   const plugins = rebalanceWindow
     ? [makeRebalancingPlugin(rebalanceWindow.startIdx, rebalanceWindow.endIdx)]
     : [];
+  const negativeInjectionPlugin = makeNegativePriceInjectionPlugin(rows, h);
+  if (negativeInjectionPlugin) plugins.push(negativeInjectionPlugin);
   const depPlugin = evSettings?.departureTime
     ? makeEvDeparturePlugin(rows, evSettings.departureTime)
     : null;
