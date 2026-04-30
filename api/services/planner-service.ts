@@ -4,10 +4,11 @@ import { mapRowsToDessV2 } from '../../lib/dess-mapper.ts';
 import { buildLP } from '../../lib/build-lp.ts';
 import { parseSolution, type HighsSolution } from '../../lib/parse-solution.ts';
 import { buildPlanSummary } from '../../lib/plan-summary.ts';
-import type { SolverConfig, PlanSummary } from '../../lib/types.ts';
+import type { SolverConfig, PlanSummary, PlanRow, TimeSeries } from '../../lib/types.ts';
 import { getSolverInputs, buildSolverConfigFromSettings } from './config-builder.ts';
 import { saveSettings } from './settings-store.ts';
 import { saveData } from './data-store.ts';
+import { applyPredictionAdjustmentsToData } from './prediction-adjustments.ts';
 import { refreshSeriesFromVrmAndPersist } from './vrm-refresh.ts';
 import { setDynamicEssSchedule } from './mqtt-service.ts';
 import type { PlanRowWithDess, Data } from '../types.ts';
@@ -64,6 +65,38 @@ function extractRebalanceWindow(
   return undefined;
 }
 
+function roundPower(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function valueAtTimestampPrecomputed(series: TimeSeries, timestampMs: number, startMs: number, stepMs: number): number | null {
+  if (!Number.isFinite(startMs) || !Number.isFinite(stepMs) || stepMs <= 0) return null;
+  const index = Math.floor((timestampMs - startMs) / stepMs);
+  if (index < 0 || index >= series.values.length) return null;
+  const value = Number(series.values[index]);
+  return Number.isFinite(value) ? roundPower(value) : null;
+}
+
+function attachOriginalPredictionValues(rows: PlanRow[], data: Data): PlanRow[] {
+  const loadStartMs = new Date(data.load.start).getTime();
+  const loadStepMs = (data.load.step ?? 15) * 60_000;
+  const pvStartMs = new Date(data.pv.start).getTime();
+  const pvStepMs = (data.pv.step ?? 15) * 60_000;
+
+  return rows.map(row => {
+    const originalLoad = valueAtTimestampPrecomputed(data.load, row.timestampMs, loadStartMs, loadStepMs);
+    const originalPv = valueAtTimestampPrecomputed(data.pv, row.timestampMs, pvStartMs, pvStepMs);
+    const hasLoad = originalLoad != null && Math.abs(originalLoad - row.load) > 0.001;
+    const hasPv = originalPv != null && Math.abs(originalPv - row.pv) > 0.001;
+    if (!hasLoad && !hasPv) return row;
+    return {
+      ...row,
+      ...(hasLoad ? { originalLoad } : {}),
+      ...(hasPv ? { originalPv } : {}),
+    };
+  });
+}
+
 // Cache of the last computed plan, used by /ev/* endpoints
 let lastPlan: ComputePlanResult | undefined;
 
@@ -91,7 +124,7 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
     settings = { ...settings, rebalanceEnabled: false };
     await Promise.all([saveSettings(settings), saveData(data)]);
     // Rebuild cfg without rebalance constraints
-    cfg = buildSolverConfigFromSettings(settings, data, timing.startMs);
+    cfg = buildSolverConfigFromSettings(settings, applyPredictionAdjustmentsToData(data), timing.startMs);
   }
 
   const lpText = buildLP(cfg);
@@ -121,7 +154,7 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
     solveMs: Math.round(solveMs),
   });
 
-  const rows = parseSolution(result, cfg, timing);
+  const rows = attachOriginalPredictionValues(parseSolution(result, cfg, timing), data);
 
   const { perSlot, diagnostics } = mapRowsToDessV2(rows, cfg, {
     blockFeedInOnNegativePrices: settings.blockFeedInOnNegativePrices !== false,

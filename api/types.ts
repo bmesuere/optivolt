@@ -64,6 +64,21 @@ export interface RebalanceState {
   startMs: number | null;
 }
 
+export type PredictionAdjustmentSeries = 'load' | 'pv';
+export type PredictionAdjustmentMode = 'set' | 'add';
+
+export interface PredictionAdjustment {
+  id: string;
+  series: PredictionAdjustmentSeries;
+  mode: PredictionAdjustmentMode;
+  value_W: number;
+  start: string;
+  end: string;
+  label?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Data {
   load: TimeSeries;
   pv: TimeSeries;
@@ -71,6 +86,7 @@ export interface Data {
   exportPrice: TimeSeries;
   soc: SocData;
   rebalanceState?: RebalanceState;
+  predictionAdjustments?: PredictionAdjustment[];
 }
 
 // ----------------------------- Plan rows with DESS ----------------------

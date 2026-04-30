@@ -1,6 +1,7 @@
 import { HttpError } from '../http-errors.ts';
 import { loadSettings } from './settings-store.ts';
-import { loadData } from './data-store.ts';
+import { loadData, saveData } from './data-store.ts';
+import { applyPredictionAdjustmentsToData, pruneExpiredPredictionAdjustments } from './prediction-adjustments.ts';
 import { extractWindow, getQuarterStart } from '../../lib/time-series-utils.ts';
 import { fetchHaEntityState } from './ha-client.ts';
 import type { SolverConfig, TimeSeries, EvConfig } from '../../lib/types.ts';
@@ -131,8 +132,11 @@ export function buildSolverConfigFromSettings(
 }
 
 export async function getSolverInputs(): Promise<{ cfg: SolverConfig; timing: { startMs: number; stepMin: number }; data: Data; settings: Settings }> {
-  const [settings, data] = await Promise.all([loadSettings(), loadData()]);
+  const [settings, loadedData] = await Promise.all([loadSettings(), loadData()]);
   const startMs = getQuarterStart(new Date(), settings.stepSize_m);
+  const pruned = pruneExpiredPredictionAdjustments(loadedData, startMs);
+  if (pruned.changed) await saveData(pruned.data);
+  const data = pruned.data;
 
   let evState: { pluggedIn: boolean; soc_percent: number } | undefined;
   if (settings.evEnabled && settings.evSocSensor && settings.evPlugSensor) {
@@ -154,6 +158,7 @@ export async function getSolverInputs(): Promise<{ cfg: SolverConfig; timing: { 
     }
   }
 
-  const cfg = buildSolverConfigFromSettings(settings, data, startMs, evState);
+  const adjustedData = applyPredictionAdjustmentsToData(data);
+  const cfg = buildSolverConfigFromSettings(settings, adjustedData, startMs, evState);
   return { cfg, timing: { startMs, stepMin: settings.stepSize_m }, data, settings };
 }

@@ -590,6 +590,7 @@ export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacke
       font: { size: 12, family: fontFamily }
     }
   };
+  const { legend: legendOverrides, tooltip: tooltipOverrides, ...pluginOverrides } = overrides.plugins || {};
 
   // Deep merge for plugins/scales is often needed, but simple spread works for this specific file structure
   const options = {
@@ -599,13 +600,21 @@ export function getBaseOptions({ ticksCb, tooltipTitleCb, gridCb, yTitle, stacke
     layout: { padding: { bottom: overrides.layout?.padding?.bottom ?? -6 } },
     ...('animation' in overrides ? { animation: overrides.animation } : {}),
     plugins: {
-      legend: legendSquare,
+      legend: {
+        ...legendSquare,
+        ...(legendOverrides || {}),
+        labels: {
+          ...legendSquare.labels,
+          ...(legendOverrides?.labels || {}),
+        },
+      },
       tooltip: {
         mode: "index",
         intersect: false,
-        callbacks: { title: tooltipTitleCb }
+        callbacks: { title: tooltipTitleCb },
+        ...(tooltipOverrides || {}),
       },
-      ...overrides.plugins
+      ...pluginOverrides
     },
     scales: {
       x: {
@@ -1009,15 +1018,10 @@ export function drawPricesStepLines(canvas, rows, _stepSize_m = 15) {
   });
 }
 
-// -----------------------------------------------------------------------------
-// 4) Forecast grouped bars (hourly aggregation)
-// -----------------------------------------------------------------------------
-
-export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
+export function aggregateLoadPvBuckets(rows, stepSize_m = 15) {
   const stepHours = Math.max(0.000001, Number(stepSize_m) / 60);
   const W2kWh = (x) => (x || 0) * stepHours / 1000;
 
-  // Aggregate 15min slots into hourly buckets
   const hourMap = new Map();
 
   for (const row of rows) {
@@ -1026,21 +1030,42 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
     const hourMs = dt.getTime();
 
     if (!hourMap.has(hourMs)) {
-      hourMap.set(hourMs, { dtHour: dt, loadKWh: 0, pvKWh: 0 });
+      hourMap.set(hourMs, {
+        dtHour: dt,
+        loadKWh: 0,
+        pvKWh: 0,
+        originalLoadKWh: 0,
+        originalPvKWh: 0,
+        hasOriginalLoad: false,
+        hasOriginalPv: false,
+      });
     }
     const bucket = hourMap.get(hourMs);
     bucket.loadKWh += W2kWh(row.load);
     bucket.pvKWh += W2kWh(row.pv);
+    bucket.originalLoadKWh += W2kWh(row.originalLoad ?? row.load);
+    bucket.originalPvKWh += W2kWh(row.originalPv ?? row.pv);
+    bucket.hasOriginalLoad ||= row.originalLoad != null;
+    bucket.hasOriginalPv ||= row.originalPv != null;
   }
 
-  const buckets = [...hourMap.values()].sort((a, b) => a.dtHour - b.dtHour);
+  return [...hourMap.values()].sort((a, b) => a.dtHour - b.dtHour);
+}
+
+// -----------------------------------------------------------------------------
+// 4) Forecast grouped bars (hourly aggregation)
+// -----------------------------------------------------------------------------
+
+export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
+  const buckets = aggregateLoadPvBuckets(rows, stepSize_m);
 
   // Build axis based on aggregated timestamps
   const axis = buildTimeAxisFromTimestamps(buckets.map(b => b.dtHour.getTime()));
 
   const stripe = (c) => window.pattern?.draw("diagonal", c) || c;
-  const ds = (label, data, color) => ({
+  const ds = (label, data, color, series) => ({
     label, data,
+    series,
     backgroundColor: stripe(color),
     borderColor: color,
     borderWidth: 1,
@@ -1052,8 +1077,8 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
     data: {
       labels: axis.labels,
       datasets: [
-        ds("Consumption forecast", buckets.map(b => b.loadKWh), SOLUTION_COLORS.g2l),
-        ds("Solar forecast", buckets.map(b => b.pvKWh), SOLUTION_COLORS.pv2g)
+        ds("Consumption forecast", buckets.map(b => b.loadKWh), SOLUTION_COLORS.g2l, "load"),
+        ds("Solar forecast", buckets.map(b => b.pvKWh), SOLUTION_COLORS.pv2g, "pv")
       ]
     },
     options: getBaseOptions({ ...axis, yTitle: "kWh" }, {
@@ -1070,6 +1095,16 @@ export function drawLoadPvGrouped(canvas, rows, stepSize_m = 15) {
               for (const pt of (tooltip.dataPoints ?? [])) {
                 if (pt.raw == null) continue;
                 html += ttRow(pt.dataset.borderColor, pt.dataset.label, `${fmtKwh(pt.raw)} kWh`);
+                const bucket = buckets[pt.dataIndex];
+                const original = pt.dataset.series === "pv" ? bucket?.originalPvKWh : bucket?.originalLoadKWh;
+                const hasOriginal = pt.dataset.series === "pv" ? bucket?.hasOriginalPv : bucket?.hasOriginalLoad;
+                if (hasOriginal && original != null && Math.abs(original - pt.raw) > 0.001) {
+                  html += ttRow(
+                    toRGBA(pt.dataset.borderColor, 0.45),
+                    `Original ${pt.dataset.label.toLowerCase()}`,
+                    `${fmtKwh(original)} kWh`,
+                  );
+                }
               }
               return html;
             },

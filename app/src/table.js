@@ -1,4 +1,5 @@
 import { SOLUTION_COLORS } from "./charts.js";
+import { escapeHtml } from "./utils.js";
 
 /**
  * Render the results table and unit label.
@@ -280,13 +281,4 @@ export function renderTable({ rows, cfg, targets, showKwh, rebalanceWindow, evSe
     return parts.length > 1 ? `${neg}${intPart}.${parts[1]}` : `${neg}${intPart}`;
   }
 
-  function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, m => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      "\"": "&quot;",
-      "'": "&#039;"
-    }[m]));
-  }
 }

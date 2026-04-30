@@ -115,4 +115,45 @@ describe('computePlan — rebalance bookkeeping', () => {
 
     expect(result.rows[0].dess.feedin).toBe(FeedIn.allowed);
   });
+
+  it('includes original prediction values on rows when manual adjustments changed them', async () => {
+    loadSettings.mockResolvedValue(baseSettings);
+    loadData.mockResolvedValue({
+      ...baseData,
+      pv: { start: NOW_STRING, step: 60, values: [100, 0, 0, 0, 0] },
+      predictionAdjustments: [
+        {
+          id: 'load-add',
+          series: 'load',
+          mode: 'add',
+          value_W: 100,
+          start: NOW_STRING,
+          end: '2024-01-01T01:00:00.000Z',
+          createdAt: NOW_STRING,
+          updatedAt: NOW_STRING,
+        },
+        {
+          id: 'pv-off',
+          series: 'pv',
+          mode: 'set',
+          value_W: 0,
+          start: NOW_STRING,
+          end: '2024-01-01T01:00:00.000Z',
+          createdAt: NOW_STRING,
+          updatedAt: NOW_STRING,
+        },
+      ],
+    });
+
+    const result = await computePlan();
+
+    expect(result.rows[0]).toMatchObject({
+      load: 600,
+      originalLoad: 500,
+      pv: 0,
+      originalPv: 100,
+    });
+    expect(result.rows[1].originalLoad).toBeUndefined();
+    expect(result.rows[1].originalPv).toBeUndefined();
+  });
 });

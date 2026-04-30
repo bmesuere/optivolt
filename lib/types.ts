@@ -85,6 +85,8 @@ export interface PlanRow {
   timestampMs: number;
   load: number;       // expected load W
   pv: number;         // expected PV W
+  originalLoad?: number; // unadjusted prediction W when a manual adjustment changed the slot
+  originalPv?: number;   // unadjusted prediction W when a manual adjustment changed the slot
   ic: number;  // import price c€/kWh
   ec: number;  // export price c€/kWh
   g2l: number;   // grid → load W
