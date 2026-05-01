@@ -52,15 +52,15 @@ describe('renderTable', () => {
     expect(table.innerHTML).toContain('Import<br>price');
     expect(table.innerHTML).toContain('Export<br>price');
     expect(table.innerHTML).toContain('Import<br>cost');
-    expect(table.innerHTML).toContain('Export<br>cost');
+    expect(table.innerHTML).toContain('Export<br>value');
 
     const firstBodyCells = table.querySelector('tbody tr').children;
-    expect(firstBodyCells[14].textContent).toBe('20.00 c€');
-    expect(firstBodyCells[15].textContent).toBe('5.00 c€');
+    expect(firstBodyCells[14].textContent).toBe('20.00');
+    expect(firstBodyCells[15].textContent).toBe('5.00');
 
     const totalCells = table.querySelectorAll('thead tr')[1].children;
-    expect(totalCells[14].textContent).toBe('30.00 c€');
-    expect(totalCells[15].textContent).toBe('3.00 c€');
+    expect(totalCells[14].textContent).toBe('30.00');
+    expect(totalCells[15].textContent).toBe('3.00');
   });
 
   it('hides DESS detail columns by default', () => {

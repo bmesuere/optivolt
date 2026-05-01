@@ -98,7 +98,7 @@ export function renderTable({ rows, cfg, targets, showKwh, showDess = false, reb
     { key: "imp", headerHtml: "Grid<br>import", fmt: x => fmtEnergy(x), tip: "Grid Import" },
     { key: "exp", headerHtml: "Grid<br>export", fmt: x => fmtEnergy(x), tip: "Grid Export" },
     { key: "importCost_cents", headerHtml: "Import<br>cost", fmt: fmtCost, tip: "Import cost for this slot" },
-    { key: "exportCost_cents", headerHtml: "Export<br>cost", fmt: fmtCost, tip: "Export value for this slot" },
+    { key: "exportCost_cents", headerHtml: "Export<br>value", fmt: fmtCost, tip: "Export value for this slot" },
 
     ...(showDess ? [
       {
@@ -267,7 +267,7 @@ export function renderTable({ rows, cfg, targets, showKwh, showDess = false, reb
   function fmtCost(x, { dash = true } = {}) {
     const n = Number(x) || 0;
     if (dash && Math.abs(n) < 0.005) return "–";
-    return `${dec2Thin(n)} c€`;
+    return dec2Thin(n);
   }
 
   // rgb(…, …, …) → rgba(…, …, …, a)
