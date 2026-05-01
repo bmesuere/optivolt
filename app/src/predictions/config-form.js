@@ -110,6 +110,7 @@ export function readPredictionFormValues() {
     longitude: parseFloat(getVal('pred-pv-lon')) || 0,
     historyDays: parseInt(getVal('pred-pv-history'), 10) || 14,
     pvMode: getVal('pred-pv-mode') || 'hourly',
+    pvModel: getVal('pred-pv-model') || 'clearSkyRatio',
   };
 
   return {
@@ -145,6 +146,7 @@ function renderPvConfig(pvConfig) {
   setVal('pred-pv-history', pvConfig.historyDays ?? 14);
   const pvMode = pvConfig.pvMode ?? (pvConfig.forecastResolution === 15 ? 'hybrid' : 'hourly'); // fall back for legacy forecastResolution field
   setVal('pred-pv-mode', pvMode);
+  setVal('pred-pv-model', pvConfig.pvModel ?? 'clearSkyRatio');
 }
 
 function setComparisonStatus(msg, isError = false) {

@@ -9,6 +9,8 @@ import type { IrradianceRecord } from './predict-pv.ts';
 
 // ----------------------------- URL Builders --------------------------------
 
+const RADIATION_VARIABLES = 'shortwave_radiation,direct_radiation,diffuse_radiation';
+
 interface ArchiveUrlParams {
   latitude: number;
   longitude: number;
@@ -18,14 +20,14 @@ interface ArchiveUrlParams {
 
 /**
  * Build URL for the Open-Meteo Archive API.
- * Requests hourly shortwave_radiation in UTC (timezone=GMT).
+ * Requests hourly radiation variables in UTC (timezone=GMT).
  */
 export function buildArchiveUrl({ latitude, longitude, startDate, endDate }: ArchiveUrlParams): string {
   return (
     `https://archive-api.open-meteo.com/v1/archive`
     + `?latitude=${latitude}&longitude=${longitude}`
     + `&start_date=${startDate}&end_date=${endDate}`
-    + `&hourly=shortwave_radiation&timezone=GMT`
+    + `&hourly=${RADIATION_VARIABLES}&timezone=GMT`
   );
 }
 
@@ -41,7 +43,7 @@ interface ForecastUrlParams {
 /**
  * Build URL for the Open-Meteo Forecast API.
  * Uses the ICON D2 model by default (good European coverage).
- * Requests shortwave_radiation in UTC (timezone=GMT).
+ * Requests radiation variables in UTC (timezone=GMT).
  * When resolution=15, uses minutely_15 data; otherwise uses hourly.
  */
 export function buildForecastUrl({
@@ -53,8 +55,8 @@ export function buildForecastUrl({
   resolution = 60,
 }: ForecastUrlParams): string {
   const radiationParam = resolution === 15
-    ? `&minutely_15=shortwave_radiation`
-    : `&hourly=shortwave_radiation`;
+    ? `&minutely_15=${RADIATION_VARIABLES}`
+    : `&hourly=${RADIATION_VARIABLES}`;
   return (
     `https://api.open-meteo.com/v1/forecast`
     + `?latitude=${latitude}&longitude=${longitude}`
@@ -72,7 +74,13 @@ interface OpenMeteoHourlyResponse {
   hourly: {
     time: string[];
     shortwave_radiation: (number | null)[];
+    direct_radiation?: (number | null)[];
+    diffuse_radiation?: (number | null)[];
   };
+}
+
+function radiationValue(values: (number | null)[] | undefined, index: number): number {
+  return Math.max(0, values?.[index] ?? 0);
 }
 
 /**
@@ -89,7 +97,7 @@ interface OpenMeteoHourlyResponse {
 export function parseIrradianceResponse(data: OpenMeteoHourlyResponse): IrradianceRecord[] {
   const records: IrradianceRecord[] = [];
 
-  const { time, shortwave_radiation } = data.hourly;
+  const { time, shortwave_radiation, direct_radiation, diffuse_radiation } = data.hourly;
 
   for (let i = 0; i < time.length; i++) {
     const omDate = new Date(time[i] + 'Z');  // Append Z since timezone=GMT
@@ -99,12 +107,12 @@ export function parseIrradianceResponse(data: OpenMeteoHourlyResponse): Irradian
     const intervalStartHour = (omHour + 23) % 24;
     const intervalStartTime = omDate.getTime() - 3600000; // shift back 1 hour
 
-    const ghi = shortwave_radiation[i] ?? 0;
-
     records.push({
       time: intervalStartTime,
       hour: intervalStartHour,
-      ghi_W_per_m2: Math.max(0, ghi),
+      ghi_W_per_m2: radiationValue(shortwave_radiation, i),
+      directRadiation_W_per_m2: radiationValue(direct_radiation, i),
+      diffuseRadiation_W_per_m2: radiationValue(diffuse_radiation, i),
       intervalMinutes: 60,
     });
   }
@@ -118,6 +126,8 @@ interface OpenMeteoMinutely15Response {
   minutely_15: {
     time: string[];
     shortwave_radiation: (number | null)[];
+    direct_radiation?: (number | null)[];
+    diffuse_radiation?: (number | null)[];
   };
 }
 
@@ -132,17 +142,17 @@ interface OpenMeteoMinutely15Response {
 export function parseMinutely15Response(data: OpenMeteoMinutely15Response): IrradianceRecord[] {
   const records: IrradianceRecord[] = [];
 
-  const { time, shortwave_radiation } = data.minutely_15;
+  const { time, shortwave_radiation, direct_radiation, diffuse_radiation } = data.minutely_15;
 
   for (let i = 0; i < time.length; i++) {
     const date = new Date(time[i] + 'Z');  // Append Z since timezone=GMT
     const hour = date.getUTCHours();
-    const ghi = shortwave_radiation[i] ?? 0;
-
     records.push({
       time: date.getTime(),
       hour,
-      ghi_W_per_m2: Math.max(0, ghi),
+      ghi_W_per_m2: radiationValue(shortwave_radiation, i),
+      directRadiation_W_per_m2: radiationValue(direct_radiation, i),
+      diffuseRadiation_W_per_m2: radiationValue(diffuse_radiation, i),
       intervalMinutes: 15,
     });
   }
@@ -167,6 +177,8 @@ export function expandHourlyTo15Min(records: IrradianceRecord[]): IrradianceReco
         time: slotMs,
         hour: new Date(slotMs).getUTCHours(),
         ghi_W_per_m2: rec.ghi_W_per_m2,
+        directRadiation_W_per_m2: rec.directRadiation_W_per_m2,
+        diffuseRadiation_W_per_m2: rec.diffuseRadiation_W_per_m2,
         intervalMinutes: 15,
       });
     }

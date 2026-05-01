@@ -15,13 +15,15 @@ import {
   calculateMaxRatioPerHour,
   estimateHourlyCapacity,
   estimateSlotCapacity,
+  estimateRobustLinearPvModels,
   forecastPv,
+  forecastPvLinear,
   forecastPvSlot,
   slotOfDay,
   validatePvForecast,
 } from '../../lib/predict-pv.ts';
 import type { PvProductionRecord, PvForecastPoint } from '../../lib/predict-pv.ts';
-import type { PredictionRunConfig, PvMode } from '../types.ts';
+import type { PredictionRunConfig, PvMode, PvModel } from '../types.ts';
 import { getForecastTimeRange, buildForecastSeries, type ForecastSeries } from '../../lib/time-series-utils.ts';
 
 export interface PvForecastRunResult {
@@ -29,6 +31,7 @@ export interface PvForecastRunResult {
   points: PvForecastPoint[];
   recent: PvForecastPoint[];
   metrics: { mae: number; rmse: number; n: number };
+  model: PvModel;
 }
 
 /**
@@ -47,6 +50,7 @@ export async function runPvForecast(config: PredictionRunConfig): Promise<PvFore
   // @deprecated fallback: forecastResolution === 15 → 'hybrid', else 'hourly'
   const pvMode: PvMode = pvConfig.pvMode
     ?? (pvConfig.forecastResolution === 15 ? 'hybrid' : 'hourly');
+  const pvModel: PvModel = pvConfig.pvModel ?? 'clearSkyRatio';
 
   const is15MinMode = pvMode === '15min';
   const forecastResolution = pvMode === 'hourly' ? 60 : 15;
@@ -87,15 +91,18 @@ export async function runPvForecast(config: PredictionRunConfig): Promise<PvFore
   // Wh/hour. 15-min HA data gives Wh/15min, so we scale ×4 to get Wh/hour = W.
   const productionScale = is15MinMode ? 4 : 1;
 
-  // Filter to the PV sensor and convert to PvProductionRecord[]
-  const pvRecords: PvProductionRecord[] = data
-    .filter(d => d.sensor === pvSensor && d.value > 0)
+  // Filter to the PV sensor and convert to PvProductionRecord[]. The robust
+  // model drops exact zero samples internally because daylight zeroes usually
+  // mean missing data, inverter-off, or curtailment rather than weather.
+  const pvTrainingRecords: PvProductionRecord[] = data
+    .filter(d => d.sensor === pvSensor && d.value >= 0)
     .map(d => ({
       time: d.time,
       hour: d.hour,
       ...(is15MinMode ? { slot: slotOfDay(d.time) } : {}),
       production_Wh: d.value * productionScale,
     }));
+  const pvRecords = pvTrainingRecords.filter(d => d.production_Wh > 0);
 
   // Build actual production map for validation (timestamp → scaled Wh)
   // Scale matches pvRecords so error metrics are in consistent units.
@@ -108,25 +115,41 @@ export async function runPvForecast(config: PredictionRunConfig): Promise<PvFore
 
   const maxRatio = calculateMaxRatioPerHour(archiveIrradiance, latitude, longitude);
 
-  // 4. Generate forecast and validation points, branching on mode
-  let futurePoints: PvForecastPoint[];
-  let archivePoints: PvForecastPoint[];
+  // 4. Generate the existing clear-sky ratio forecast first. The robust
+  // linear model uses it as a per-bucket fallback when data is sparse.
+  let clearSkyFuturePoints: PvForecastPoint[];
+  let clearSkyArchivePoints: PvForecastPoint[];
+  // In 15min mode this is expanded to 15-min resolution; otherwise it's the original hourly archive.
+  let trainingArchiveIrradiance = archiveIrradiance;
 
   if (is15MinMode) {
     const maxProd96 = calculateMaxProductionPerSlot(pvRecords);
     const slotCapacity = estimateSlotCapacity(maxProd96, maxRatio);
 
-    futurePoints = forecastPvSlot(slotCapacity, forecastIrradiance, latitude, longitude, actualsMap);
+    clearSkyFuturePoints = forecastPvSlot(slotCapacity, forecastIrradiance, latitude, longitude, actualsMap);
 
     // Expand hourly archive to 15-min for slot-level validation
-    const archiveIrradiance15 = expandHourlyTo15Min(archiveIrradiance);
-    archivePoints = forecastPvSlot(slotCapacity, archiveIrradiance15, latitude, longitude, actualsMap);
+    trainingArchiveIrradiance = expandHourlyTo15Min(archiveIrradiance);
+    clearSkyArchivePoints = forecastPvSlot(slotCapacity, trainingArchiveIrradiance, latitude, longitude, actualsMap);
   } else {
     const maxProd = calculateMaxProductionPerHour(pvRecords);
     const capacity = estimateHourlyCapacity(maxProd, maxRatio);
 
-    futurePoints = forecastPv(capacity, forecastIrradiance, latitude, longitude, actualsMap);
-    archivePoints = forecastPv(capacity, archiveIrradiance, latitude, longitude, actualsMap);
+    clearSkyFuturePoints = forecastPv(capacity, forecastIrradiance, latitude, longitude, actualsMap);
+    clearSkyArchivePoints = forecastPv(capacity, archiveIrradiance, latitude, longitude, actualsMap);
+  }
+
+  let futurePoints = clearSkyFuturePoints;
+  let archivePoints = clearSkyArchivePoints;
+
+  if (pvModel === 'robustLinear') {
+    const bucketCount = is15MinMode ? 96 : 24;
+    const futureFallback = new Map(clearSkyFuturePoints.map(point => [point.time, point]));
+    const archiveFallback = new Map(clearSkyArchivePoints.map(point => [point.time, point]));
+    const models = estimateRobustLinearPvModels(pvTrainingRecords, trainingArchiveIrradiance, bucketCount, archiveFallback);
+
+    futurePoints = forecastPvLinear(models, forecastIrradiance, latitude, longitude, actualsMap, futureFallback);
+    archivePoints = forecastPvLinear(models, trainingArchiveIrradiance, latitude, longitude, actualsMap, archiveFallback);
   }
 
   // 6. Build 15-min series for the solver (from future points only)
@@ -157,5 +180,5 @@ export async function runPvForecast(config: PredictionRunConfig): Promise<PvFore
   // 8. Validation metrics
   const metrics = validatePvForecast(recent);
 
-  return { forecast, points, recent, metrics };
+  return { forecast, points, recent, metrics, model: pvModel };
 }

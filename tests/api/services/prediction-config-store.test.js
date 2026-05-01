@@ -55,6 +55,30 @@ describe('prediction-config-store', () => {
       expect(config.validationWindow.start).toBe(expectedStart.toISOString());
       expect(config.validationWindow.end).toBe(expectedEnd.toISOString());
     });
+
+    it('defaults missing pvModel to clearSkyRatio', async () => {
+      await writeFile(
+        path.join(tmpDir, 'prediction-config.json'),
+        JSON.stringify({
+          sensors: [],
+          derived: [],
+          pvConfig: {
+            latitude: 51.1,
+            longitude: 3.7,
+            historyDays: 7,
+            pvSensor: 'Solar Generation',
+            pvMode: '15min',
+          },
+        }),
+        'utf8',
+      );
+
+      const { loadPredictionConfig } = await importStore();
+      const config = await loadPredictionConfig();
+
+      expect(config.pvConfig.pvModel).toBe('clearSkyRatio');
+      expect(config.pvConfig.pvMode).toBe('15min');
+    });
   });
 
   describe('migration: activeConfig → historicalPredictor', () => {

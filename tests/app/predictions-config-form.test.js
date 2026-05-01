@@ -48,6 +48,10 @@ function setupDom() {
       <option value="hourly">hourly</option>
       <option value="hybrid">hybrid</option>
     </select>
+    <select id="pred-pv-model" data-predictions-only="true">
+      <option value="clearSkyRatio">clearSkyRatio</option>
+      <option value="robustLinear">robustLinear</option>
+    </select>
     <button id="pred-load-forecast" type="button"></button>
     <button id="pred-pv-forecast" type="button"></button>
     <input id="forecast-chart-15m" type="checkbox" />
@@ -78,7 +82,7 @@ describe('prediction config form', () => {
       activeType: 'fixed',
       fixedPredictor: { load_W: 420 },
       historicalPredictor: { sensor: 'Grid Import', lookbackWeeks: 3, dayFilter: 'same', aggregation: 'median' },
-      pvConfig: { pvSensor: 'Total Load', latitude: 51.1, longitude: 3.7, historyDays: 9, forecastResolution: 15 },
+      pvConfig: { pvSensor: 'Total Load', latitude: 51.1, longitude: 3.7, historyDays: 9, forecastResolution: 15, pvModel: 'robustLinear' },
     });
 
     await hydratePredictionForm();
@@ -88,6 +92,7 @@ describe('prediction config form', () => {
     expect([...document.getElementById('pred-active-sensor').options].map(opt => opt.value)).toContain('Grid Import');
     expect(document.getElementById('pred-pv-sensor').value).toBe('Total Load');
     expect(document.getElementById('pred-pv-mode').value).toBe('hybrid');
+    expect(document.getElementById('pred-pv-model').value).toBe('robustLinear');
     expect(document.getElementById('pred-fixed-fields').classList.contains('hidden')).toBe(false);
     expect(document.getElementById('pred-historical-fields').classList.contains('hidden')).toBe(true);
   });
@@ -105,6 +110,7 @@ describe('prediction config form', () => {
     document.getElementById('pred-pv-lon').value = '3.7';
     document.getElementById('pred-pv-history').value = '10';
     document.getElementById('pred-pv-mode').value = 'hybrid';
+    document.getElementById('pred-pv-model').value = 'robustLinear';
     savePredictionConfig.mockResolvedValue({});
 
     const values = readPredictionFormValues();
@@ -124,6 +130,7 @@ describe('prediction config form', () => {
         longitude: 3.7,
         historyDays: 10,
         pvMode: 'hybrid',
+        pvModel: 'robustLinear',
       },
     });
     expect(values).not.toHaveProperty('derived');
