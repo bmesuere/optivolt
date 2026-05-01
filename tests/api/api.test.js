@@ -98,6 +98,12 @@ describe('Integration: API', () => {
     expect(res.status).toBe(200);
     expect(res.body.solverStatus).toBe('Optimal');
     expect(res.body.rows).toHaveLength(5);
+    expect(res.body.rebalanceNudge).toEqual({
+      lastFullSocAt: null,
+      daysSinceLastFullSoc: null,
+      rebalanceRecommended: false,
+      thresholdDays: 10,
+    });
     expect(loadSettings).toHaveBeenCalled();
     expect(loadData).toHaveBeenCalled();
   });

@@ -13,6 +13,7 @@ import { updateEvDepartureQuickSet } from "./ev-settings.js";
 import {
   snapshotUI,
   updatePlanMeta,
+  updateRebalanceNudgeUI,
   updateSummaryUI,
 } from "./state.js";
 
@@ -30,6 +31,7 @@ export function createOptimizerController({ els, services = {} }) {
     updateEvDepartureQuickSet,
     updateEvPanel,
     updatePlanMeta,
+    updateRebalanceNudgeUI,
     updateSummaryUI,
     ...services,
   };
@@ -71,6 +73,7 @@ export function createOptimizerController({ els, services = {} }) {
 
       deps.updatePlanMeta(els, result.initialSoc_percent, result.tsStart);
       deps.updateSummaryUI(els, result.summary);
+      deps.updateRebalanceNudgeUI(els, result.rebalanceNudge);
       updateRunStatus(solverStatus, writeToVictron);
 
       const cfgForViz = getVizConfig();

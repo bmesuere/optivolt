@@ -58,5 +58,6 @@
   "soc": {
     "timestamp": "2024-01-01T00:00:00.000Z",
     "value": 72
-  }
+  },
+  "lastFullSocAt": null
 }

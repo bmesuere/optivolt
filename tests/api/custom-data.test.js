@@ -85,6 +85,18 @@ describe('Custom Data Injection', () => {
     }));
   });
 
+  it('POST /data records lastFullSocAt when API SoC reaches 100%', async () => {
+    const res = await request(app)
+      .post('/data')
+      .send({ soc: { value: 100, timestamp: '2024-02-01T12:00:00.000Z' } });
+
+    expect(res.status).toBe(200);
+    expect(saveData).toHaveBeenCalledWith(expect.objectContaining({
+      soc: { value: 100, timestamp: '2024-02-01T12:00:00.000Z' },
+      lastFullSocAt: '2024-02-01T12:00:00.000Z',
+    }));
+  });
+
   it('POST /data should reject invalid keys', async () => {
     const res = await request(app)
       .post('/data')

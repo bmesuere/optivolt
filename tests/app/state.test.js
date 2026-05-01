@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { hydrateUI, snapshotUI, updateSummaryUI } from '../../app/src/state.js';
+import { hydrateUI, snapshotUI, updateRebalanceNudgeUI, updateSummaryUI } from '../../app/src/state.js';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -91,5 +91,51 @@ describe('settings state', () => {
     vi.runAllTimers();
 
     expect(els.netCost.textContent).toBe('—');
+  });
+
+  it('shows tooltip text when the last full SoC timestamp is unknown', () => {
+    const els = {
+      rebalanceToggleLabel: document.createElement('label'),
+      rebalanceEnabled: document.createElement('input'),
+      rebalanceNudge: document.createElement('p'),
+    };
+    els.rebalanceEnabled.type = 'checkbox';
+
+    updateRebalanceNudgeUI(els, null);
+
+    expect(els.rebalanceToggleLabel.title).toContain('Last 100% SoC: not recorded yet');
+    expect(els.rebalanceNudge.classList.contains('hidden')).toBe(true);
+  });
+
+  it('shows the inline rebalance nudge only when recommended and not already enabled', () => {
+    const els = {
+      rebalanceToggleLabel: document.createElement('label'),
+      rebalanceEnabled: document.createElement('input'),
+      rebalanceNudge: document.createElement('p'),
+    };
+    els.rebalanceEnabled.type = 'checkbox';
+    els.rebalanceNudge.className = 'hidden';
+
+    updateRebalanceNudgeUI(els, {
+      lastFullSocAt: '2024-01-01T00:00:00.000Z',
+      daysSinceLastFullSoc: 12,
+      rebalanceRecommended: true,
+      thresholdDays: 10,
+    });
+
+    expect(els.rebalanceToggleLabel.title).toContain('Last 100% SoC:');
+    expect(els.rebalanceToggleLabel.title).not.toContain('not recorded yet');
+    expect(els.rebalanceNudge.classList.contains('hidden')).toBe(false);
+    expect(els.rebalanceNudge.textContent).toContain('12 days ago');
+
+    els.rebalanceEnabled.checked = true;
+    updateRebalanceNudgeUI(els, {
+      lastFullSocAt: '2024-01-01T00:00:00.000Z',
+      daysSinceLastFullSoc: 12,
+      rebalanceRecommended: true,
+      thresholdDays: 10,
+    });
+
+    expect(els.rebalanceNudge.classList.contains('hidden')).toBe(true);
   });
 });

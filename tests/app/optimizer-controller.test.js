@@ -64,6 +64,7 @@ function setupController() {
     updateEvDepartureQuickSet: vi.fn(),
     updateEvPanel: vi.fn(),
     updatePlanMeta: vi.fn(),
+    updateRebalanceNudgeUI: vi.fn(),
     updateSummaryUI: vi.fn(),
   };
 
@@ -99,6 +100,7 @@ describe('optimizer controller', () => {
       '2026-05-01T12:00:00.000Z',
     );
     expect(services.updateSummaryUI).toHaveBeenCalledWith(els, summary);
+    expect(services.updateRebalanceNudgeUI).toHaveBeenCalledWith(els, undefined);
 
     const tableArgs = services.renderTable.mock.calls[0][0];
     expect(tableArgs.rows).toBe(rows);

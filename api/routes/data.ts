@@ -2,6 +2,7 @@ import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { loadData, saveData, validateData } from '../services/data-store.ts';
 import { loadSettings } from '../services/settings-store.ts';
+import { recordFullSocObservation } from '../services/rebalance-nudge.ts';
 import { assertCondition, toHttpError } from '../http-errors.ts';
 import type { TimeSeries, SocData, Data } from '../types.ts';
 
@@ -46,7 +47,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       'No valid data keys provided or settings are not set to API',
     );
 
-    const nextData: Data = { ...currentData };
+    let nextData: Data = { ...currentData };
 
     for (const key of keysToUpdate) {
       const value = payload[key];
@@ -57,6 +58,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       );
       if (key === 'soc') {
         nextData.soc = value as SocData;
+        nextData = recordFullSocObservation(nextData);
       } else if (key === 'load' || key === 'pv' || key === 'importPrice' || key === 'exportPrice') {
         nextData[key] = value as TimeSeries;
       }

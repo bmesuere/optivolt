@@ -11,6 +11,7 @@ import { saveData } from './data-store.ts';
 import { applyPredictionAdjustmentsToData } from './prediction-adjustments.ts';
 import { refreshSeriesFromVrmAndPersist } from './vrm-refresh.ts';
 import { setDynamicEssSchedule } from './mqtt-service.ts';
+import { getRebalanceNudge, type RebalanceNudge } from './rebalance-nudge.ts';
 import type { PlanRowWithDess, Data } from '../types.ts';
 
 // How many slots we push into Dynamic ESS
@@ -43,6 +44,7 @@ export interface ComputePlanResult {
   rows: PlanRowWithDess[];
   summary: PlanSummary;
   rebalanceWindow?: RebalanceWindow;
+  rebalanceNudge: RebalanceNudge;
 }
 
 /**
@@ -183,7 +185,9 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
     cfg.rebalanceRemainingSlots ?? 0,
   );
 
-  lastPlan = { cfg, data, timing, result, rows: rowsWithDess, summary, rebalanceWindow };
+  const rebalanceNudge = getRebalanceNudge(data);
+
+  lastPlan = { cfg, data, timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
   return lastPlan;
 }
 
