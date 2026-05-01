@@ -38,6 +38,28 @@ describe('parseSolution', () => {
     expect(rows[1].timestampMs).toBe(1700000000000 + 3600000);
   });
 
+  it('computes per-slot import and export costs', () => {
+    const result = {
+      Columns: {
+        'grid_to_load_0': { Primal: 1000 },
+        'pv_to_grid_0': { Primal: 500 },
+        'grid_to_battery_1': { Primal: 500 },
+        'battery_to_grid_1': { Primal: 1000 },
+      },
+    };
+    const cfgWithSignedExport = {
+      ...cfg,
+      exportPrice: [5, -2],
+    };
+
+    const rows = parseSolution(result, cfgWithSignedExport, opts);
+
+    expect(rows[0].importCost_cents).toBeCloseTo(10);
+    expect(rows[0].exportCost_cents).toBeCloseTo(2.5);
+    expect(rows[1].importCost_cents).toBeCloseTo(10);
+    expect(rows[1].exportCost_cents).toBeCloseTo(-2);
+  });
+
 });
 
 describe('parseSolution — ev_charge_mode derivation', () => {

@@ -43,6 +43,7 @@ export function getElements() {
     prices: $("#prices"),
     loadpv: $("#loadpv"),
     table: $("#table"),
+    tableDess: $("#table-dess"),
     tableKwh: $("#table-kwh"),
     tableUnit: $("#table-unit"),
     status: $("#status"),
@@ -54,6 +55,7 @@ export function getElements() {
     sumLoadBatt: $("#sum-load-batt-kwh"),
     sumLoadPv: $("#sum-load-pv-kwh"),
     avgImport: $("#avg-import-cent"),
+    netCost: $("#net-cost-cent"),
     gridBatteryTp: $("#tipping-point-cent"),
     gridChargeTp: $("#grid-charge-point-cent"),
     batteryExportTp: $("#export-point-cent"),
@@ -112,11 +114,14 @@ export function getElements() {
   };
 }
 
-export function wireGlobalInputs(els, { onInput, onSave = onInput, onRun, updateTerminalCustomUI }) {
-  // Auto-save whenever anything changes (except table toggler and run options).
+export function wireGlobalInputs(
+  els,
+  { onInput, onSave = onInput, onRun, onTableDisplayChange = onRun, updateTerminalCustomUI }
+) {
+  // Auto-save whenever anything changes (except table toggles and run options).
   // Inputs with data-no-autosolve save settings but do not trigger an auto-solve.
   for (const el of document.querySelectorAll("input, select, textarea")) {
-    if (el === els.tableKwh) continue;
+    if (el === els.tableKwh || el === els.tableDess) continue;
     if (el === els.updateDataBeforeRun) continue; // Checkbox doesn't trigger auto-save
     if (el === els.pushToVictron) continue; // Checkbox doesn't trigger auto-save
     if (el === els.optimizerQuickSettingsSelection) continue; // Managed by quick-settings pins
@@ -133,8 +138,9 @@ export function wireGlobalInputs(els, { onInput, onSave = onInput, onRun, update
   // Manual recompute
   els.run?.addEventListener("click", onRun);
 
-  // Units toggle recompute
-  els.tableKwh?.addEventListener("change", onRun);
+  // Table display toggles
+  els.tableKwh?.addEventListener("change", onTableDisplayChange);
+  els.tableDess?.addEventListener("change", onTableDisplayChange);
 
   // Keyboard shortcut: Ctrl+Enter (or Cmd+Enter) to Recompute
   document.addEventListener("keydown", (e) => {

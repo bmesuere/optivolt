@@ -166,6 +166,7 @@ export function updateSummaryUI(els, summary) {
     setText(els.sumLoadBatt, "—");
     setText(els.sumLoadPv, "—");
     setText(els.avgImport, "—");
+    setText(els.netCost, "—");
     setText(els.gridBatteryTp, "—");
     setText(els.gridChargeTp, "—");
     setText(els.batteryExportTp, "—");
@@ -185,6 +186,7 @@ export function updateSummaryUI(els, summary) {
     loadFromBattery_kWh,
     loadFromPv_kWh,
     avgImportPrice_cents_per_kWh,
+    netGridCost_cents,
     gridBatteryTippingPoint_cents_per_kWh,
     gridChargeTippingPoint_cents_per_kWh,
     batteryExportTippingPoint_cents_per_kWh,
@@ -197,6 +199,7 @@ export function updateSummaryUI(els, summary) {
   setText(els.sumLoadBatt, formatKWh(loadFromBattery_kWh));
   setText(els.sumLoadPv, formatKWh(loadFromPv_kWh));
   setText(els.avgImport, formatCentsPerKWh(avgImportPrice_cents_per_kWh));
+  setText(els.netCost, formatCostCents(netGridCost_cents));
   setText(els.gridBatteryTp, formatTippingPoint(gridBatteryTippingPoint_cents_per_kWh, "↓"));
   setText(els.gridChargeTp, formatTippingPoint(gridChargeTippingPoint_cents_per_kWh, "↓"));
   // Show battery export tp if present, otherwise fall back to PV export tp
@@ -366,16 +369,23 @@ export function formatKWh(v) {
   return `${n.toFixed(2)} kWh`;
 }
 
-function formatCentsPerKWh(v) {
-  if (v === null || v === undefined) return "—";
+function toFinite(v) {
+  if (v === null || v === undefined) return null;
   const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return `${n.toFixed(2)} c€/kWh`;
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatCentsPerKWh(v) {
+  const n = toFinite(v);
+  return n === null ? "—" : `${n.toFixed(2)} c€/kWh`;
+}
+
+function formatCostCents(v) {
+  const n = toFinite(v);
+  return n === null ? "—" : `${n.toFixed(2)} c€`;
 }
 
 function formatTippingPoint(v, symbol) {
-  if (v === null || v === undefined) return "—";
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return `${symbol} ${n.toFixed(2)} c€`;
+  const n = toFinite(v);
+  return n === null ? "—" : `${symbol} ${n.toFixed(2)} c€`;
 }

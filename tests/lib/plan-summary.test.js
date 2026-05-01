@@ -23,6 +23,9 @@ describe('buildPlanSummary — EV energy totals', () => {
     expect(s.evChargeFromGrid_kWh).toBe(0);
     expect(s.evChargeFromPv_kWh).toBe(0);
     expect(s.evChargeFromBattery_kWh).toBe(0);
+    expect(s.importCost_cents).toBe(0);
+    expect(s.exportCost_cents).toBe(0);
+    expect(s.netGridCost_cents).toBe(0);
   });
 
   it('returns zero EV totals when all EV fields are zero', () => {
@@ -71,5 +74,33 @@ describe('buildPlanSummary — EV energy totals', () => {
     delete row.b2ev;
     const s = buildPlanSummary([row], cfg);
     expect(s.evChargeTotal_kWh).toBe(0);
+  });
+});
+
+describe('buildPlanSummary — grid cost totals', () => {
+  it('totals import, export, and net grid costs from slot rates and energy', () => {
+    const rows = [
+      makeRow({ imp: 1000, exp: 500, ic: 20, ec: 8 }),
+      makeRow({ imp: 500, exp: 1000, ic: 10, ec: -2 }),
+    ];
+
+    const s = buildPlanSummary(rows, cfg);
+
+    expect(s.importCost_cents).toBeCloseTo(25);
+    expect(s.exportCost_cents).toBeCloseTo(2);
+    expect(s.netGridCost_cents).toBeCloseTo(23);
+  });
+
+  it('uses parsed row costs when present', () => {
+    const rows = [
+      makeRow({ imp: 1000, exp: 1000, ic: 99, ec: 99, importCost_cents: 3, exportCost_cents: 1 }),
+      makeRow({ imp: 1000, exp: 1000, ic: 99, ec: 99, importCost_cents: 4, exportCost_cents: -2 }),
+    ];
+
+    const s = buildPlanSummary(rows, cfg);
+
+    expect(s.importCost_cents).toBeCloseTo(7);
+    expect(s.exportCost_cents).toBeCloseTo(-1);
+    expect(s.netGridCost_cents).toBeCloseTo(8);
   });
 });
