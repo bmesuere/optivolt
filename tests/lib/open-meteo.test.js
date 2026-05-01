@@ -26,7 +26,7 @@ describe('buildArchiveUrl', () => {
     expect(url).toContain('longitude=3.71');
     expect(url).toContain('start_date=2024-06-01');
     expect(url).toContain('end_date=2024-06-14');
-    expect(url).toContain('hourly=shortwave_radiation');
+    expect(url).toContain('hourly=shortwave_radiation,direct_radiation,diffuse_radiation');
     expect(url).toContain('timezone=GMT');
   });
 });
@@ -46,7 +46,7 @@ describe('buildForecastUrl', () => {
     expect(url).toContain('timezone=GMT');
     expect(url).toContain('past_days=1');
     expect(url).toContain('forecast_days=2');
-    expect(url).toContain('hourly=shortwave_radiation');
+    expect(url).toContain('hourly=shortwave_radiation,direct_radiation,diffuse_radiation');
   });
 
   it('allows custom model and days', () => {
@@ -65,13 +65,13 @@ describe('buildForecastUrl', () => {
 
   it('uses hourly param when resolution=60', () => {
     const url = buildForecastUrl({ latitude: 51.05, longitude: 3.71, resolution: 60 });
-    expect(url).toContain('hourly=shortwave_radiation');
+    expect(url).toContain('hourly=shortwave_radiation,direct_radiation,diffuse_radiation');
     expect(url).not.toContain('minutely_15');
   });
 
   it('uses minutely_15 param when resolution=15', () => {
     const url = buildForecastUrl({ latitude: 51.05, longitude: 3.71, resolution: 15 });
-    expect(url).toContain('minutely_15=shortwave_radiation');
+    expect(url).toContain('minutely_15=shortwave_radiation,direct_radiation,diffuse_radiation');
     expect(url).not.toContain('hourly=');
   });
 });
@@ -87,6 +87,8 @@ describe('parseIrradianceResponse', () => {
       hourly: {
         time: ['2024-06-15T14:00'],
         shortwave_radiation: [600],
+        direct_radiation: [420],
+        diffuse_radiation: [180],
       },
     };
 
@@ -94,6 +96,8 @@ describe('parseIrradianceResponse', () => {
     expect(records).toHaveLength(1);
     expect(records[0].hour).toBe(13);
     expect(records[0].ghi_W_per_m2).toBe(600);
+    expect(records[0].directRadiation_W_per_m2).toBe(420);
+    expect(records[0].diffuseRadiation_W_per_m2).toBe(180);
     expect(records[0].intervalMinutes).toBe(60);
 
     // Timestamp should be shifted back 1 hour
@@ -172,6 +176,8 @@ describe('parseMinutely15Response', () => {
       minutely_15: {
         time: ['2024-06-15T13:00', '2024-06-15T13:15', '2024-06-15T13:30', '2024-06-15T13:45'],
         shortwave_radiation: [500, 520, 510, 480],
+        direct_radiation: [350, 360, 340, 310],
+        diffuse_radiation: [150, 160, 170, 170],
       },
     };
 
@@ -182,10 +188,14 @@ describe('parseMinutely15Response', () => {
     expect(records[0].hour).toBe(13);
     expect(records[0].time).toBe(new Date('2024-06-15T13:00:00Z').getTime());
     expect(records[0].ghi_W_per_m2).toBe(500);
+    expect(records[0].directRadiation_W_per_m2).toBe(350);
+    expect(records[0].diffuseRadiation_W_per_m2).toBe(150);
     expect(records[0].intervalMinutes).toBe(15);
 
     expect(records[1].time).toBe(new Date('2024-06-15T13:15:00Z').getTime());
     expect(records[1].ghi_W_per_m2).toBe(520);
+    expect(records[1].directRadiation_W_per_m2).toBe(360);
+    expect(records[1].diffuseRadiation_W_per_m2).toBe(160);
     expect(records[1].intervalMinutes).toBe(15);
   });
 
@@ -264,6 +274,8 @@ describe('expandHourlyTo15Min', () => {
     time: t13,
     hour: 13,
     ghi_W_per_m2: 400,
+    directRadiation_W_per_m2: 250,
+    diffuseRadiation_W_per_m2: 150,
     intervalMinutes: 60,
   };
 
@@ -284,6 +296,8 @@ describe('expandHourlyTo15Min', () => {
     const result = expandHourlyTo15Min([hourlyRecord]);
     for (const r of result) {
       expect(r.ghi_W_per_m2).toBe(400);
+      expect(r.directRadiation_W_per_m2).toBe(hourlyRecord.directRadiation_W_per_m2);
+      expect(r.diffuseRadiation_W_per_m2).toBe(hourlyRecord.diffuseRadiation_W_per_m2);
     }
   });
 

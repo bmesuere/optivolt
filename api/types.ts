@@ -106,6 +106,7 @@ export interface PredictionValidationWindow {
 
 /** Prediction mode for PV forecasting. Replaces the deprecated forecastResolution field. */
 export type PvMode = 'hourly' | 'hybrid' | '15min';
+export type PvModel = 'clearSkyRatio' | 'robustLinear';
 
 export interface PvPredictionConfig {
   latitude: number;
@@ -113,6 +114,7 @@ export interface PvPredictionConfig {
   historyDays: number;
   pvSensor: string;
   pvMode?: PvMode;
+  pvModel?: PvModel;
   /** @deprecated Use pvMode instead. 60 → 'hourly', 15 → 'hybrid'. */
   forecastResolution?: 15 | 60;
 }

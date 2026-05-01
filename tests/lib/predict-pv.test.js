@@ -10,6 +10,8 @@ import {
   calculateMaxProductionPerSlot,
   estimateSlotCapacity,
   forecastPvSlot,
+  estimateRobustLinearPvModels,
+  forecastPvLinear,
 } from '../../lib/predict-pv.ts';
 import { buildForecastSeries } from '../../lib/time-series-utils.ts';
 
@@ -488,5 +490,222 @@ describe('forecastPvSlot', () => {
     const irr = [{ time: t, hour: 12, ghi_W_per_m2: 400, intervalMinutes: 15 }];
     const points = forecastPvSlot(capacity, irr, lat, lon);
     expect(points[0].actual).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// robust linear PV model
+// ---------------------------------------------------------------------------
+
+describe('robust linear PV model', () => {
+  const slot = 48;
+  const hour = 12;
+
+  function sample(day, direct, diffuse, production_W) {
+    const time = Date.UTC(2024, 5, day, hour);
+    return {
+      production: { time, hour, slot, production_Wh: production_W },
+      irradiance: {
+        time,
+        hour,
+        ghi_W_per_m2: direct + diffuse,
+        directRadiation_W_per_m2: direct,
+        diffuseRadiation_W_per_m2: diffuse,
+        intervalMinutes: 15,
+      },
+    };
+  }
+
+  it('fits per-slot direct and diffuse coefficients', () => {
+    const rows = [
+      sample(10, 500, 100, 1500),
+      sample(11, 400, 200, 1800),
+      sample(12, 300, 300, 2100),
+      sample(13, 200, 400, 2400),
+    ];
+
+    const models = estimateRobustLinearPvModels(
+      rows.map(r => r.production),
+      rows.map(r => r.irradiance),
+      96,
+    );
+
+    expect(models[slot].fallback).toBe(false);
+    expect(models[slot].directCoeff).toBeCloseTo(2, 1);
+    expect(models[slot].diffuseCoeff).toBeCloseTo(5, 1);
+  });
+
+  it('excludes low strong-radiation outliers before refitting', () => {
+    const rows = [
+      sample(10, 500, 100, 1500),
+      sample(11, 400, 200, 1800),
+      sample(12, 300, 300, 2100),
+      sample(13, 200, 400, 2400),
+      sample(14, 450, 150, 1650),
+      sample(15, 480, 120, 120),
+    ];
+
+    const models = estimateRobustLinearPvModels(
+      rows.map(r => r.production),
+      rows.map(r => r.irradiance),
+      96,
+    );
+
+    expect(models[slot].excludedCount).toBe(1);
+    expect(models[slot].sampleCount).toBe(5);
+    expect(models[slot].directCoeff).toBeGreaterThan(1);
+    expect(models[slot].diffuseCoeff).toBeGreaterThan(1);
+  });
+
+  it('ignores exact zero production samples as invalid training data', () => {
+    const rows = [
+      sample(10, 500, 100, 1500),
+      sample(11, 400, 200, 1800),
+      sample(12, 300, 300, 2100),
+      sample(13, 200, 400, 2400),
+      sample(14, 500, 100, 0),
+      sample(15, 480, 120, 0),
+      sample(16, 450, 150, 0),
+    ];
+
+    const models = estimateRobustLinearPvModels(
+      rows.map(r => r.production),
+      rows.map(r => r.irradiance),
+      96,
+    );
+
+    expect(models[slot].sampleCount).toBe(4);
+    expect(models[slot].fallback).toBe(false);
+    expect(models[slot].directCoeff).toBeGreaterThan(1);
+    expect(models[slot].diffuseCoeff).toBeGreaterThan(1);
+  });
+
+  it('keeps the clear-sky fallback when cross-validation is better', () => {
+    const rows = [
+      sample(10, 500, 100, 1000),
+      sample(11, 500, 100, 2000),
+      sample(12, 500, 100, 1000),
+      sample(13, 500, 100, 2000),
+    ];
+    const fallbackPoints = new Map(rows.map(row => [row.irradiance.time, {
+      time: row.irradiance.time,
+      hour,
+      ghiClear_W_per_m2: 800,
+      ghiForecast_W_per_m2: row.irradiance.ghi_W_per_m2,
+      forecastRatio: 0.75,
+      predicted: row.production.production_Wh,
+      actual: row.production.production_Wh,
+    }]));
+
+    const models = estimateRobustLinearPvModels(
+      rows.map(r => r.production),
+      rows.map(r => r.irradiance),
+      96,
+      fallbackPoints,
+    );
+
+    expect(models[slot].fallback).toBe(true);
+  });
+
+  it('keeps the clear-sky fallback when too few non-zero samples remain to validate', () => {
+    const rows = [
+      sample(10, 500, 100, 1500),
+      sample(11, 400, 200, 1800),
+      sample(12, 300, 300, 2100),
+      sample(13, 500, 100, 0),
+      sample(14, 500, 100, 0),
+      sample(15, 500, 100, 0),
+    ];
+    const fallbackPoints = new Map(rows.map(row => [row.irradiance.time, {
+      time: row.irradiance.time,
+      hour,
+      ghiClear_W_per_m2: 800,
+      ghiForecast_W_per_m2: row.irradiance.ghi_W_per_m2,
+      forecastRatio: 0.75,
+      predicted: 1700,
+      actual: row.production.production_Wh,
+    }]));
+
+    const models = estimateRobustLinearPvModels(
+      rows.map(r => r.production),
+      rows.map(r => r.irradiance),
+      96,
+      fallbackPoints,
+    );
+
+    expect(models[slot].sampleCount).toBe(3);
+    expect(models[slot].fallback).toBe(true);
+  });
+
+  it('uses the robust model when cross-validation improves over clear-sky fallback', () => {
+    const rows = [
+      sample(10, 500, 100, 1500),
+      sample(11, 400, 200, 1800),
+      sample(12, 300, 300, 2100),
+      sample(13, 200, 400, 2400),
+    ];
+    const fallbackPoints = new Map(rows.map(row => [row.irradiance.time, {
+      time: row.irradiance.time,
+      hour,
+      ghiClear_W_per_m2: 800,
+      ghiForecast_W_per_m2: row.irradiance.ghi_W_per_m2,
+      forecastRatio: 0.75,
+      predicted: 1000,
+      actual: row.production.production_Wh,
+    }]));
+
+    const models = estimateRobustLinearPvModels(
+      rows.map(r => r.production),
+      rows.map(r => r.irradiance),
+      96,
+      fallbackPoints,
+    );
+
+    expect(models[slot].fallback).toBe(false);
+  });
+
+  it('falls back when a bucket has too few samples', () => {
+    const row = sample(10, 500, 100, 1500);
+    const models = estimateRobustLinearPvModels([row.production], [row.irradiance], 96);
+    expect(models[slot].fallback).toBe(true);
+  });
+
+  it('uses fallback points for missing robust model buckets', () => {
+    const time = Date.UTC(2024, 5, 20, hour);
+    const models = new Array(24).fill(null).map((_, index) => ({
+      index,
+      directCoeff: 0,
+      diffuseCoeff: 0,
+      sampleCount: 0,
+      excludedCount: 0,
+      fallback: true,
+    }));
+    const fallback = {
+      time,
+      hour,
+      ghiClear_W_per_m2: 800,
+      ghiForecast_W_per_m2: 500,
+      forecastRatio: 0.625,
+      predicted: 1234,
+      actual: null,
+    };
+
+    const points = forecastPvLinear(
+      models,
+      [{
+        time,
+        hour,
+        ghi_W_per_m2: 500,
+        directRadiation_W_per_m2: 300,
+        diffuseRadiation_W_per_m2: 200,
+        intervalMinutes: 60,
+      }],
+      51.05,
+      3.71,
+      undefined,
+      new Map([[time, fallback]]),
+    );
+
+    expect(points[0].predicted).toBe(1234);
   });
 });
