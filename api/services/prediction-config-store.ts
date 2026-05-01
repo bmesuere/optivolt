@@ -41,7 +41,7 @@ export async function loadPredictionConfig(): Promise<PredictionConfig> {
   // Strip activeConfig from userConfig (guard for stored configs that have both activeConfig and historicalPredictor)
   const { activeConfig: _ac, ...cleanUserConfig } = userConfig;
   const cleanConfig = cleanUserConfig as Partial<PredictionConfig>;
-  const pvConfig: PredictionConfig['pvConfig'] = defaults.pvConfig || cleanConfig.pvConfig
+  const pvConfig: PredictionConfig['pvConfig'] = (defaults.pvConfig || cleanConfig.pvConfig)
     ? { ...defaults.pvConfig, ...cleanConfig.pvConfig }
     : undefined;
   const merged = {

@@ -402,10 +402,10 @@ function fallbackLinearModel(index: number): PvLinearModel {
 function getRadiationFeatures(rec: IrradianceRecord): { direct: number; diffuse: number } | null {
   const direct = rec.directRadiation_W_per_m2;
   const diffuse = rec.diffuseRadiation_W_per_m2;
-  if (!Number.isFinite(direct) || !Number.isFinite(diffuse)) return null;
+  if (direct == null || diffuse == null || !Number.isFinite(direct) || !Number.isFinite(diffuse)) return null;
   return {
-    direct: Math.max(0, direct ?? 0),
-    diffuse: Math.max(0, diffuse ?? 0),
+    direct: Math.max(0, direct),
+    diffuse: Math.max(0, diffuse),
   };
 }
 
@@ -475,20 +475,20 @@ function predictLinear(fit: { directCoeff: number; diffuseCoeff: number }, sampl
 
 function fitWithOutlierPass(samples: PvLinearSample[], options: PvLinearFitOptions): {
   fit: { directCoeff: number; diffuseCoeff: number } | null;
-  sampleCount: number;
+  effectiveSamples: PvLinearSample[];
   excludedCount: number;
 } {
   const initial = fitNonNegativeRidge(samples, options);
-  if (!initial) return { fit: null, sampleCount: samples.length, excludedCount: 0 };
+  if (!initial) return { fit: null, effectiveSamples: samples, excludedCount: 0 };
 
   const outliers = lowOutlierIndexes(samples, initial, options);
   if (outliers.size > 0 && samples.length - outliers.size >= options.minSamples) {
     const filtered = samples.filter((_sample, i) => !outliers.has(i));
     const refit = fitNonNegativeRidge(filtered, options);
-    if (refit) return { fit: refit, sampleCount: filtered.length, excludedCount: outliers.size };
+    if (refit) return { fit: refit, effectiveSamples: filtered, excludedCount: outliers.size };
   }
 
-  return { fit: initial, sampleCount: samples.length, excludedCount: 0 };
+  return { fit: initial, effectiveSamples: samples, excludedCount: 0 };
 }
 
 function lowOutlierIndexes(
@@ -569,18 +569,20 @@ function fallbackMae(samples: PvLinearSample[]): number | null {
 function fitRobustLinearModel(index: number, samples: PvLinearSample[], options: PvLinearFitOptions): PvLinearModel {
   if (samples.length < options.minSamples) return fallbackLinearModel(index);
 
-  const { fit, sampleCount, excludedCount } = fitWithOutlierPass(samples, options);
+  const { fit, effectiveSamples, excludedCount } = fitWithOutlierPass(samples, options);
   if (!fit) return fallbackLinearModel(index);
 
-  const cvMae = crossValidatedLinearMae(samples, options);
-  const baseMae = fallbackMae(samples);
+  // Use effectiveSamples (post-outlier-removal) for both MAEs so the gate
+  // is evaluated on the same data the returned coefficients were fitted on.
+  const cvMae = crossValidatedLinearMae(effectiveSamples, options);
+  const baseMae = fallbackMae(effectiveSamples);
   // baseMae exists but cvMae is null: enough fallback data to judge but not enough to cross-validate
   // the linear model — distrust it conservatively.
   if (baseMae != null && cvMae == null) {
     return {
       index,
       ...fit,
-      sampleCount,
+      sampleCount: effectiveSamples.length,
       excludedCount,
       fallback: true,
     };
@@ -593,7 +595,7 @@ function fitRobustLinearModel(index: number, samples: PvLinearSample[], options:
     return {
       index,
       ...fit,
-      sampleCount,
+      sampleCount: effectiveSamples.length,
       excludedCount,
       fallback: true,
     };
@@ -602,7 +604,7 @@ function fitRobustLinearModel(index: number, samples: PvLinearSample[], options:
   return {
     index,
     ...fit,
-    sampleCount,
+    sampleCount: effectiveSamples.length,
     excludedCount,
     fallback: false,
   };
