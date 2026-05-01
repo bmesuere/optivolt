@@ -214,6 +214,13 @@ function getRenderedCharts() {
     if (chart?.canvas?.isConnected) charts.add(chart);
     else chartRegistry.delete(chart);
   }
+  // Pick up charts created directly with new Chart(...) outside renderChart (e.g. predictions-validation.js)
+  if (typeof document !== "undefined") {
+    for (const canvas of document.querySelectorAll("canvas")) {
+      const chart = canvas._chart || Chart.getChart?.(canvas);
+      if (chart) charts.add(chart);
+    }
+  }
   return charts;
 }
 
