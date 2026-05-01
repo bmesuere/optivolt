@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDataDir, readJson, writeJson } from './json-store.ts';
-import type { PredictionConfig } from '../types.ts';
+import type { PredictionConfig, PvPredictionConfig } from '../types.ts';
 
 const DATA_DIR = resolveDataDir();
 const PREDICTION_CONFIG_PATH = path.join(DATA_DIR, 'prediction-config.json');
@@ -42,7 +42,7 @@ export async function loadPredictionConfig(): Promise<PredictionConfig> {
   const { activeConfig: _ac, ...cleanUserConfig } = userConfig;
   const cleanConfig = cleanUserConfig as Partial<PredictionConfig>;
   const pvConfig: PredictionConfig['pvConfig'] = (defaults.pvConfig || cleanConfig.pvConfig)
-    ? { ...defaults.pvConfig, ...cleanConfig.pvConfig }
+    ? { ...defaults.pvConfig, ...cleanConfig.pvConfig } as PvPredictionConfig
     : undefined;
   const merged = {
     ...defaults,
