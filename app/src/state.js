@@ -1,4 +1,5 @@
 import { SOLUTION_COLORS } from "./charts.js";
+import { parseQuickSettingSelection, writeQuickSettingSelection } from "./optimizer-quick-settings.js";
 
 // ---------- UI <-> settings snapshot ----------
 export function snapshotUI(els) {
@@ -21,6 +22,7 @@ export function snapshotUI(els) {
     // ALGORITHM
     terminalSocValuation: els.terminal?.value || "zero",
     terminalSocCustomPrice_cents_per_kWh: num(els.terminalCustom?.value),
+    optimizerQuickSettings: parseQuickSettingSelection(els.optimizerQuickSettingsSelection?.value),
 
     // DATA
     dataSources: {
@@ -81,6 +83,9 @@ export function hydrateUI(els, obj = {}) {
     els.terminal.value = String(obj.terminalSocValuation);
   }
   setIfDef(els.terminalCustom, obj.terminalSocCustomPrice_cents_per_kWh);
+  if (obj.optimizerQuickSettings !== undefined) {
+    writeQuickSettingSelection(els.optimizerQuickSettingsSelection, obj.optimizerQuickSettings);
+  }
 
   // DATA
   if (els.sourcePrices && obj.dataSources?.prices) els.sourcePrices.value = obj.dataSources.prices;

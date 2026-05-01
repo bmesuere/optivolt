@@ -37,6 +37,7 @@ export interface Settings {
   blockFeedInOnNegativePrices: boolean;
   terminalSocValuation: TerminalSocValuation;
   terminalSocCustomPrice_cents_per_kWh: number;
+  optimizerQuickSettings: string[];
   dataSources: DataSources;
   rebalanceEnabled: boolean;
   rebalanceHoldHours: number;

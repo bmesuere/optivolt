@@ -35,6 +35,7 @@ const FLOWS_TOOLTIP_LABELS = {
 
 const NEGATIVE_INJECTION_EPSILON_W = 1;
 const NEGATIVE_INJECTION_ICON_SIZE = 13;
+const NEGATIVE_INJECTION_ICON_MIN_SIZE = 7;
 const NEGATIVE_INJECTION_DETAIL_LIMIT = 12;
 const BUY_PRICE_STRIP_HEIGHT = 7;
 const BUY_PRICE_STRIP_GAP = 4;
@@ -346,8 +347,9 @@ function getNegativeInjectionRanges(rows, h) {
   return ranges;
 }
 
-function drawNegativeInjectionIcon(ctx, x, y, dark) {
-  const radius = NEGATIVE_INJECTION_ICON_SIZE / 2;
+function drawNegativeInjectionIcon(ctx, x, y, dark, size = NEGATIVE_INJECTION_ICON_SIZE) {
+  const radius = size / 2;
+  const fontSize = Math.max(6, Math.round(size * 0.7));
 
   ctx.save();
   ctx.beginPath();
@@ -359,10 +361,10 @@ function drawNegativeInjectionIcon(ctx, x, y, dark) {
   ctx.stroke();
 
   ctx.fillStyle = dark ? 'rgba(251, 191, 36, 0.60)' : 'rgba(180, 83, 9, 0.55)';
-  ctx.font = '500 9px system-ui, sans-serif';
+  ctx.font = `500 ${fontSize}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('i', x, y + 0.5);
+  ctx.fillText('i', x, y + Math.max(0.25, size * 0.04));
   ctx.restore();
 }
 
@@ -487,18 +489,26 @@ function makeNegativePriceInjectionPlugin(rows, h) {
         ctx.fillStyle = fillStyle;
         ctx.fillRect(x0, chartArea.top, x1 - x0, chartArea.height);
 
-        const iconX = Math.min(
-          Math.max(x0 + 13, chartArea.left + NEGATIVE_INJECTION_ICON_SIZE),
-          x1 - NEGATIVE_INJECTION_ICON_SIZE / 2,
-          chartArea.right - NEGATIVE_INJECTION_ICON_SIZE
+        const rangeWidth = x1 - x0;
+        const iconSize = Math.max(
+          NEGATIVE_INJECTION_ICON_MIN_SIZE,
+          Math.min(NEGATIVE_INJECTION_ICON_SIZE, rangeWidth - 2)
         );
-        drawNegativeInjectionIcon(ctx, iconX, iconY, dark);
+        const halfIcon = iconSize / 2;
+        const iconX = rangeWidth < NEGATIVE_INJECTION_ICON_SIZE * 1.5
+          ? (x0 + x1) / 2
+          : Math.min(
+              Math.max(x0 + NEGATIVE_INJECTION_ICON_SIZE, chartArea.left + halfIcon),
+              x1 - halfIcon,
+              chartArea.right - halfIcon
+            );
+        drawNegativeInjectionIcon(ctx, iconX, iconY, dark, iconSize);
         iconHits.push({
           ...range,
-          left: iconX - NEGATIVE_INJECTION_ICON_SIZE,
-          right: iconX + NEGATIVE_INJECTION_ICON_SIZE,
-          top: iconY - NEGATIVE_INJECTION_ICON_SIZE,
-          bottom: iconY + NEGATIVE_INJECTION_ICON_SIZE,
+          left: iconX - iconSize,
+          right: iconX + iconSize,
+          top: iconY - iconSize,
+          bottom: iconY + iconSize,
         });
       }
 

@@ -31,6 +31,12 @@ function validateSettings(s: Settings): Settings {
     [s.minSoc_percent, s.maxSoc_percent] = [s.maxSoc_percent, s.minSoc_percent];
   }
 
+  if (!Array.isArray(s.optimizerQuickSettings)) {
+    s.optimizerQuickSettings = [];
+  } else {
+    s.optimizerQuickSettings = s.optimizerQuickSettings.filter((id): id is string => typeof id === 'string');
+  }
+
   return s;
 }
 

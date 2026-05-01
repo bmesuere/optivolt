@@ -6,6 +6,9 @@ export function getElements() {
     run: $("#run"),
     updateDataBeforeRun: $("#update-data-before-run"),
     pushToVictron: $("#push-to-victron"),
+    optimizerQuickSettingsSection: $("#optimizer-quick-settings"),
+    optimizerQuickSettingsBody: $("#optimizer-quick-settings-body"),
+    optimizerQuickSettingsSelection: $("#optimizer-quick-settings-selection"),
     sourcePrices: $("#source-prices"),
     sourceLoad: $("#source-load"),
     sourcePv: $("#source-pv"),
@@ -116,6 +119,8 @@ export function wireGlobalInputs(els, { onInput, onSave = onInput, onRun, update
     if (el === els.tableKwh) continue;
     if (el === els.updateDataBeforeRun) continue; // Checkbox doesn't trigger auto-save
     if (el === els.pushToVictron) continue; // Checkbox doesn't trigger auto-save
+    if (el === els.optimizerQuickSettingsSelection) continue; // Managed by quick-settings pins
+    if (el.dataset.optimizerQuickMirror) continue; // Mirrors dispatch changes through their source input
     if (el.dataset.predictionsOnly) continue; // Predictions tab inputs handled separately
     const handler = el.hasAttribute('data-no-autosolve') ? onSave : onInput;
     el.addEventListener("input", handler);

@@ -12,6 +12,7 @@ import { loadInitialConfig, saveConfig } from "./src/config-store.js";
 import { requestRemoteSolve, fetchHaEntityState } from "./src/api/api.js";
 import { initPredictionsTab } from "./src/predictions.js";
 import { updateEvPanel } from "./src/ev-tab.js";
+import { initOptimizerQuickSettings } from "./src/optimizer-quick-settings.js";
 
 // Import new modules
 import {
@@ -42,6 +43,7 @@ function revealCards(panel) {
 // or just initialize it at the top level since DOM content is likely ready (module scripts defer).
 // However, safer to call getElements() when needed or at top level if we trust DOMContentLoaded.
 const els = getElements();
+let optimizerQuickSettings = null;
 
 // ---------- State ----------
 const debounceRun = debounce(onRun, 250);
@@ -121,6 +123,14 @@ async function boot() {
   const { config: initialConfig, source } = await loadInitialConfig();
 
   hydrateUI(els, initialConfig);
+  optimizerQuickSettings = initOptimizerQuickSettings({
+    selectionInput: els.optimizerQuickSettingsSelection,
+    section: els.optimizerQuickSettingsSection,
+    body: els.optimizerQuickSettingsBody,
+    onSelectionChange: () => {
+      void persistConfig();
+    },
+  });
 
   setupTabSwitcher();
   await initPredictionsTab();
@@ -167,6 +177,7 @@ async function onRefreshVrmSettings() {
     const payload = await refreshVrmSettings();
     const saved = payload?.settings || {};
     hydrateUI(els, saved);
+    optimizerQuickSettings?.refresh();
     if (els.status) els.status.textContent = "System settings saved from VRM.";
   } catch (err) {
     console.error(err);
