@@ -44,6 +44,8 @@ function revealCards(panel) {
 // However, safer to call getElements() when needed or at top level if we trust DOMContentLoaded.
 const els = getElements();
 let optimizerQuickSettings = null;
+let lastTableRows = [];
+let lastTableRebalanceWindow = null;
 
 // ---------- State ----------
 const debounceRun = debounce(onRun, 250);
@@ -143,6 +145,7 @@ async function boot() {
     },
     onSave: queuePersistSnapshot,
     onRun: onRun,
+    onTableDisplayChange: onTableDisplayChange,
     updateTerminalCustomUI: () => updateTerminalCustomUI(els),
   });
 
@@ -256,14 +259,9 @@ async function onRun() {
       targetSoc_percent: parseFloat(els.evTargetSoc?.value) || null,
     } : null;
 
-    renderTable({
-      rows,
-      cfg: cfgForViz,
-      targets: { table: els.table, tableUnit: els.tableUnit },
-      showKwh: !!els.tableKwh?.checked,
-      rebalanceWindow: result.rebalanceWindow ?? null,
-      evSettings,
-    });
+    lastTableRows = rows;
+    lastTableRebalanceWindow = result.rebalanceWindow ?? null;
+    renderScheduleTable();
 
     renderAllCharts(rows, cfgForViz, result.rebalanceWindow ?? null, evSettings);
 
@@ -283,6 +281,36 @@ async function onRun() {
       runBtn.disabled = false;
     }
   }
+}
+
+function onTableDisplayChange(event) {
+  if (!renderScheduleTable()) {
+    void onRun();
+    return;
+  }
+  if (event?.currentTarget === els.tableKwh) {
+    queuePersistSnapshot();
+  }
+}
+
+function renderScheduleTable() {
+  if (!lastTableRows.length) return false;
+  renderTable({
+    rows: lastTableRows,
+    cfg: {
+      stepSize_m: Number(els.step?.value),
+      batteryCapacity_Wh: Number(els.cap?.value),
+    },
+    targets: { table: els.table, tableUnit: els.tableUnit },
+    showKwh: !!els.tableKwh?.checked,
+    showDess: !!els.tableDess?.checked,
+    rebalanceWindow: lastTableRebalanceWindow,
+    evSettings: els.evEnabled?.checked ? {
+      departureTime: els.evDepartureTime?.value || null,
+      targetSoc_percent: parseFloat(els.evTargetSoc?.value) || null,
+    } : null,
+  });
+  return true;
 }
 
 function renderAllCharts(rows, cfg, rebalanceWindow = null, evSettings = null) {

@@ -62,11 +62,14 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
   }
 
   // --- 2. Build rows (flows, soc, etc.) ---
+  const slotHours = opts.stepMin / 60;
   const rows: PlanRow[] = [];
   for (let t = 0; t < T; t++) {
     const imp = g2l[t] + g2b[t] + g2ev[t];
     const exp = pv2g[t] + b2g[t];
     const evW = g2ev[t] + pv2ev[t] + b2ev[t];
+    const importCost = imp * slotHours / 1000 * cfg.importPrice[t];
+    const exportCost = exp * slotHours / 1000 * cfg.exportPrice[t];
 
     rows.push({
       tIdx: t,
@@ -87,6 +90,8 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
 
       imp: round(imp),
       exp: round(exp),
+      importCost_cents: round(importCost),
+      exportCost_cents: round(exportCost),
       soc: round(soc[t]),
       soc_percent: (soc[t] / cap) * 100,
       g2ev:          round(g2ev[t]),

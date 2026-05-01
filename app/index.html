@@ -694,9 +694,13 @@
                 <div class="stat-label mb-0.5">Predicted PV</div>
                 <div id="sum-pv-kwh" class="stat-value color-flow-solar">—</div>
               </div>
-              <div class="px-3 py-2.5 col-span-2">
+              <div class="px-3 py-2.5 border-r border-slate-100 dark:border-white/5">
                 <div class="stat-label mb-0.5">Avg. import price</div>
                 <div id="avg-import-cent" class="stat-value">—</div>
+              </div>
+              <div class="px-3 py-2.5">
+                <div class="stat-label mb-0.5">Net cost</div>
+                <div id="net-cost-cent" class="stat-value">—</div>
               </div>
             </div>
             <div class="summary-block border-t border-slate-100 dark:border-white/5">
@@ -819,6 +823,11 @@
         <div class="mb-4 flex items-center justify-between gap-4">
           <h3 class="sidebar-label">Schedule table</h3>
           <div class="flex items-center gap-3">
+            <label class="toggle">
+              <input id="table-dess" type="checkbox">
+              <span class="toggle-knob"></span>
+              <span class="text-sm text-slate-600 dark:text-slate-400">Show DESS details</span>
+            </label>
             <label class="toggle">
               <input id="table-kwh" type="checkbox">
               <span class="toggle-knob"></span>
