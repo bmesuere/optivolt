@@ -125,6 +125,7 @@ export function hydrateUI(els, obj = {}) {
   }
 
   updateTerminalCustomUI(els);
+  updateRebalanceNudgeUI(els, obj.rebalanceNudge);
 }
 
 // Plan metadata helper
@@ -296,6 +297,27 @@ function updateRebalanceStatus(els, status) {
   }
 }
 
+export function updateRebalanceNudgeUI(els, nudge) {
+  const lastFullText = formatLastFullSoc(nudge?.lastFullSocAt);
+  const title = `Schedule battery rebalancing. Last 100% SoC: ${lastFullText}.`;
+  if (els.rebalanceToggleLabel) els.rebalanceToggleLabel.title = title;
+
+  if (!els.rebalanceNudge) return;
+
+  const recommended = !!nudge?.rebalanceRecommended;
+  const alreadyEnabled = !!els.rebalanceEnabled?.checked;
+  const shouldShow = recommended && !alreadyEnabled;
+  els.rebalanceNudge.classList.toggle("hidden", !shouldShow);
+
+  if (shouldShow) {
+    const days = nudge.daysSinceLastFullSoc;
+    const threshold = nudge.thresholdDays;
+    els.rebalanceNudge.textContent = days == null
+      ? `Battery has not reached 100% in over ${threshold} days. Consider scheduling battery rebalancing.`
+      : `Battery last reached 100% ${days} days ago. Consider scheduling battery rebalancing.`;
+  }
+}
+
 export function updateTerminalCustomUI(els) {
   const isCustom = els.terminal?.value === "custom";
   if (els.terminalCustom) els.terminalCustom.disabled = !isCustom;
@@ -360,6 +382,19 @@ function setText(el, txt) {
     }
     el._fadeTimer = null;
   }, 150);
+}
+
+function formatLastFullSoc(value) {
+  if (!value) return "not recorded yet";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "not recorded yet";
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export function formatKWh(v) {

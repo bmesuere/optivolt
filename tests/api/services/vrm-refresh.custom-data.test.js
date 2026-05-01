@@ -57,6 +57,7 @@ describe('vrm-refresh logic with custom data', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     delete process.env.VRM_INSTALLATION_ID;
     delete process.env.VRM_TOKEN;
   });
@@ -121,6 +122,29 @@ describe('vrm-refresh logic with custom data', () => {
     expect(mqttService.readVictronSocPercent).not.toHaveBeenCalled();
     expect(saveData).toHaveBeenCalledWith(expect.objectContaining({
       soc: expect.objectContaining({ value: 50, timestamp: '2024-01-01T00:00:00.000Z' }) // Strictly Preserved
+    }));
+  });
+
+  it('records the last full SoC timestamp when MQTT reports 100%', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-13T12:34:56.000Z'));
+    mqttService.readVictronSocPercent.mockResolvedValue(100);
+    mockFetchForecasts.mockResolvedValue({ timestamps: ['2024-01-13T10:00:00.000Z'], load_W: [1], pv_W: [2] });
+    mockFetchPrices.mockResolvedValue({ timestamps: ['2024-01-13T10:00:00.000Z'], importPrice_cents_per_kwh: [3], exportPrice_cents_per_kwh: [4] });
+    loadData.mockResolvedValue({
+      load: { start: '2024-01-01T00:00:00.000Z', values: [] },
+      pv: { start: '2024-01-01T00:00:00.000Z', values: [] },
+      importPrice: { start: '2024-01-01T00:00:00.000Z', values: [] },
+      exportPrice: { start: '2024-01-01T00:00:00.000Z', values: [] },
+      soc: { value: 50, timestamp: '2024-01-01T00:00:00.000Z' },
+      lastFullSocAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    await refreshSeriesFromVrmAndPersist();
+
+    expect(saveData).toHaveBeenCalledWith(expect.objectContaining({
+      soc: { timestamp: '2024-01-13T12:34:56.000Z', value: 100 },
+      lastFullSocAt: '2024-01-13T12:34:56.000Z',
     }));
   });
 });

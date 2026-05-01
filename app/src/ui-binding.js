@@ -13,7 +13,9 @@ export function getElements() {
     sourceLoad: $("#source-load"),
     sourcePv: $("#source-pv"),
     sourceSoc: $("#source-soc"),
+    rebalanceToggleLabel: $("#rebalance-toggle-label"),
     rebalanceEnabled: $("#rebalance-enabled"),
+    rebalanceNudge: $("#rebalance-nudge"),
     rebalanceHoldHours: $("#rebalance-hold-hours"),
     blockFeedInOnNegativePrices: $("#block-feedin-negative-prices"),
 

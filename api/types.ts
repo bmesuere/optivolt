@@ -86,6 +86,7 @@ export interface Data {
   importPrice: TimeSeries;
   exportPrice: TimeSeries;
   soc: SocData;
+  lastFullSocAt?: string | null;
   rebalanceState?: RebalanceState;
   predictionAdjustments?: PredictionAdjustment[];
 }

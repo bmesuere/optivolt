@@ -2,6 +2,7 @@ import { HttpError } from '../http-errors.ts';
 import { loadSettings } from './settings-store.ts';
 import { loadData, saveData } from './data-store.ts';
 import { applyPredictionAdjustmentsToData, pruneExpiredPredictionAdjustments } from './prediction-adjustments.ts';
+import { recordFullSocObservation } from './rebalance-nudge.ts';
 import { extractWindow, getQuarterStart } from '../../lib/time-series-utils.ts';
 import { fetchHaEntityState } from './ha-client.ts';
 import type { SolverConfig, TimeSeries, EvConfig } from '../../lib/types.ts';
@@ -135,8 +136,16 @@ export async function getSolverInputs(): Promise<{ cfg: SolverConfig; timing: { 
   const [settings, loadedData] = await Promise.all([loadSettings(), loadData()]);
   const startMs = getQuarterStart(new Date(), settings.stepSize_m);
   const pruned = pruneExpiredPredictionAdjustments(loadedData, startMs);
-  if (pruned.changed) await saveData(pruned.data);
-  const data = pruned.data;
+  let data = pruned.data;
+  let shouldSaveData = pruned.changed;
+
+  const observedData = recordFullSocObservation(data);
+  if (observedData !== data) {
+    data = observedData;
+    shouldSaveData = true;
+  }
+
+  if (shouldSaveData) await saveData(data);
 
   let evState: { pluggedIn: boolean; soc_percent: number } | undefined;
   if (settings.evEnabled && settings.evSocSensor && settings.evPlugSensor) {

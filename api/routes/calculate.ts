@@ -16,7 +16,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       writeToVictron: shouldWriteToVictron,
     });
 
-    const { cfg, timing, result, rows, summary, rebalanceWindow } =
+    const { cfg, timing, result, rows, summary, rebalanceWindow, rebalanceNudge } =
       await planAndMaybeWrite({
         updateData: shouldUpdateData,
         writeToVictron: shouldWriteToVictron,
@@ -30,6 +30,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       tsStart: new Date(timing.startMs).toISOString(),
       summary,
       rebalanceWindow,
+      rebalanceNudge,
     });
   } catch (error) {
     logCalculateError(error);

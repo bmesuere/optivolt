@@ -632,11 +632,15 @@
 
           <!-- Rebalancing toggle -->
           <div class="mt-4">
-            <label class="toggle">
+            <label id="rebalance-toggle-label" class="toggle">
               <input id="rebalance-enabled" type="checkbox" data-settings-input>
               <span class="toggle-knob"></span>
               <span class="text-sm text-slate-600 dark:text-slate-400">Schedule battery rebalancing</span>
             </label>
+            <p id="rebalance-nudge"
+              class="hidden mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
+              Battery has not reached 100% recently. Consider scheduling battery rebalancing.
+            </p>
           </div>
 
           <div id="optimizer-quick-settings" class="hidden mt-4 pt-4 border-t border-slate-100 dark:border-white/5">

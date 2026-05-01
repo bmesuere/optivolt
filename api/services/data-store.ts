@@ -34,6 +34,11 @@ export function validateData(d: Data): Data {
   if (Number.isNaN(new Date(d.soc.timestamp).getTime())) {
     throw new Error(`Invalid soc: 'timestamp' is not a valid timestamp (${d.soc.timestamp})`);
   }
+  if (d.lastFullSocAt !== undefined && d.lastFullSocAt !== null) {
+    if (typeof d.lastFullSocAt !== 'string' || Number.isNaN(new Date(d.lastFullSocAt).getTime())) {
+      throw new Error(`Invalid lastFullSocAt: must be null or a valid timestamp (${d.lastFullSocAt})`);
+    }
+  }
   if (d.predictionAdjustments !== undefined) {
     if (!Array.isArray(d.predictionAdjustments)) {
       throw new Error("Invalid predictionAdjustments: must be an array");

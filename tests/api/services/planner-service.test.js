@@ -86,6 +86,23 @@ describe('computePlan — rebalance bookkeeping', () => {
     );
   });
 
+  it('returns a rebalance nudge in the computed plan', async () => {
+    loadSettings.mockResolvedValue(baseSettings);
+    loadData.mockResolvedValue({
+      ...baseData,
+      lastFullSocAt: '2023-12-20T00:00:00.000Z',
+    });
+
+    const result = await computePlan();
+
+    expect(result.rebalanceNudge).toMatchObject({
+      lastFullSocAt: '2023-12-20T00:00:00.000Z',
+      daysSinceLastFullSoc: 12,
+      rebalanceRecommended: true,
+      thresholdDays: 10,
+    });
+  });
+
   it('clears startMs and disables rebalancing when cycle is complete (remainingSlots = 0)', async () => {
     // holdHours=2, stepSize=60min → holdSlots=2; started 2h ago → remainingSlots=0
     const startMs = NOW_MS - 2 * 60 * 60_000;
