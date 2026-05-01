@@ -118,15 +118,9 @@ export function wireGlobalInputs(
   els,
   { onInput, onSave = onInput, onRun, onTableDisplayChange = onRun, updateTerminalCustomUI }
 ) {
-  // Auto-save whenever anything changes (except table toggles and run options).
-  // Inputs with data-no-autosolve save settings but do not trigger an auto-solve.
-  for (const el of document.querySelectorAll("input, select, textarea")) {
-    if (el === els.tableKwh || el === els.tableDess) continue;
-    if (el === els.updateDataBeforeRun) continue; // Checkbox doesn't trigger auto-save
-    if (el === els.pushToVictron) continue; // Checkbox doesn't trigger auto-save
-    if (el === els.optimizerQuickSettingsSelection) continue; // Managed by quick-settings pins
+  // Auto-save only settings-owned controls.
+  for (const el of document.querySelectorAll("[data-settings-input]")) {
     if (el.dataset.optimizerQuickMirror) continue; // Mirrors dispatch changes through their source input
-    if (el.dataset.predictionsOnly) continue; // Predictions tab inputs handled separately
     const handler = el.hasAttribute('data-no-autosolve') ? onSave : onInput;
     el.addEventListener("input", handler);
     el.addEventListener("change", handler);

@@ -32,7 +32,7 @@ Plan and control a home energy system with forecasts, dynamic tariffs, and a day
    Open the Optivolt App configuration panel and enter your Victron VRM credentials / installation ID, and the Victron IP address on your local network.
    *(Note: Make sure mqtt access is enabled on your local Venus OS device: open the remote console: Settings, Services → toggle the MQTT access switch.)*
    *(Note: Optivolt automatically connects to the internal HA WebSocket API using the supervisor token to fetch historical sensor data.)*
-6. **Start and verify:**
+5. **Start and verify:**
    Start the Optivolt App, open the UI, and verify that data (time series, prices, SoC, etc.) is being fetched correctly.
 
 ### Standalone / Local Development
@@ -46,7 +46,7 @@ By default the server listens on `http://localhost:3000`.
 
 **Environment variables:**
 - `HOST` (default `0.0.0.0`), `PORT` (default `3000`)
-- `DATA_DIR` (default `<repo>/data`); stores `settings.json` and `data.json`
+- `DATA_DIR` (default `<repo>/data`); stores `settings.json`, `data.json`, and `prediction-config.json`
 - `VRM_INSTALLATION_ID`, `VRM_TOKEN` (enable VRM refresh routes)
 - `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD` (optional; required to push Dynamic ESS schedules)
 
@@ -156,19 +156,28 @@ Use `sensor.optivolt_ev_charge_mode` and `sensor.optivolt_ev_charge_current_a` i
 
 ```text
 app/                 # Static web UI (index.html, main.js, app/src/**)
-api/                 # Express server (routes + services)
-lib/                 # Core logic: LP builder, parser, DESS mapper, VRM + MQTT clients
+api/                 # Express TypeScript server (routes + services)
+lib/                 # TypeScript core logic: LP builder, parser, DESS mapper, VRM + MQTT clients
 addon/               # Home Assistant add-on wrapper (s6, run scripts)
 translations/        # i18n strings for the HA add-on settings
 Dockerfile           # Image for HA add-on / container use
 config.yaml          # Home Assistant add-on manifest
 ```
 
-The **UI** is static and calls the **Express API** on the same origin. The **API** exposes:
+The **UI** is static and calls the **Express API** on the same origin. Server-owned state lives in `DATA_DIR`:
 
-- `POST /calculate` — Builds & solves the LP with **HiGHS** and returns per-slot flows, SoC, and DESS mappings. Fast execution.
-- `GET/POST /settings` — Reads/writes persisted system + algorithm settings (defaulting to `api/defaults/default-settings.json`).
-- `POST /data` — Endpoint to inject custom time-series data. The payload maps arrays of 15m values:
+- `settings.json` stores system, algorithm, Home Assistant, data-source, and EV settings.
+- `data.json` stores time-series data, current SoC, and manual prediction adjustments.
+- `prediction-config.json` stores load/PV prediction model configuration.
+
+Data-source behavior is explicit: when a data source is set to `vrm`, VRM refreshes own that series in `data.json`; when set to `api`, pushed data or prediction endpoints may write that series. The solver always reads persisted settings and data server-side.
+
+The **API** exposes:
+
+- `GET /settings` — Reads persisted settings, or `api/defaults/default-settings.json` when missing.
+- `POST /settings` — Merges the incoming settings object into `DATA_DIR/settings.json`.
+- `GET /data` — Reads persisted time-series data.
+- `POST /data` — Injects custom time-series data. The payload maps arrays of 15m values:
   ```json
   {
     "importPrice": {
@@ -178,10 +187,19 @@ The **UI** is static and calls the **Express API** on the same origin. The **API
     }
   }
   ```
+- `POST /calculate` — Builds and solves the LP with **HiGHS** from persisted settings/data. Optional body flags: `updateData` refreshes VRM series before solving, and `writeToVictron` attempts an MQTT DESS schedule write.
 - `POST /vrm/refresh-settings` — Fetches latest Dynamic ESS limits/settings from VRM and persists.
-- `GET/POST /predictions/*` — Load forecasting features (`/validate`, `/forecast`, `/forecast/now`).
+- `GET /predictions/config` — Reads prediction configuration plus `isAddon`.
+- `POST /predictions/config` — Saves prediction configuration. Home Assistant URL/token are intentionally stored in `/settings`, not this file.
+- `GET /predictions/adjustments` — Lists active manual forecast adjustments and prunes expired ones.
+- `POST /predictions/adjustments` — Creates a manual forecast adjustment for `load` or `pv`.
+- `PATCH /predictions/adjustments/:id` — Updates a manual forecast adjustment.
+- `DELETE /predictions/adjustments/:id` — Deletes a manual forecast adjustment.
+- `POST /predictions/validate` — Runs load-predictor validation against Home Assistant history.
+- `POST /predictions/load/forecast` — Runs the active load forecast and returns adjusted forecast data with `rawForecast` when adjustments apply.
+- `POST /predictions/pv/forecast` — Runs the PV forecast when PV configuration is complete.
+- `POST /predictions/forecast` — Runs load and PV forecasts together, persists raw forecasts according to data-source settings, and returns adjusted forecasts.
+- `GET /predictions/forecast/now` — Same combined forecast path with recent comparison disabled.
 - `GET /ev/current` — Current time slot's EV charging decision (`ev_charge_mode`, `ev_charge_A`, source flows, EV SoC).
 - `GET /ev/schedule` — Full per-slot EV charging schedule from the last computed plan.
 - `GET /ha/entity/:entityId` — Fetch live entity state from Home Assistant (used to validate EV sensor configuration).
-
-*Note:* Data and settings are server-owned. VRM refreshes write to `DATA_DIR/data.json` and the solver always reads from this persisted snapshot.

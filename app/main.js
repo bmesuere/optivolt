@@ -1,30 +1,20 @@
-// Import shared logic
-import {
-  drawFlowsBarStackSigned,
-  drawSocChart,
-  drawPricesStepLines,
-  drawLoadPvGrouped,
-} from "./src/charts.js";
-import { renderTable } from "./src/table.js";
-import { debounce } from "./src/utils.js";
 import { refreshVrmSettings } from "./src/api/api.js";
-import { loadInitialConfig, saveConfig } from "./src/config-store.js";
-import { requestRemoteSolve, fetchHaEntityState } from "./src/api/api.js";
+import { loadInitialConfig } from "./src/config-store.js";
 import { initPredictionsTab } from "./src/predictions.js";
-import { updateEvPanel } from "./src/ev-tab.js";
+import {
+  initDepartureDatetimeMin,
+  refreshEvSensorStates,
+  wireEvSensorInputs,
+} from "./src/ev-settings.js";
 import { initOptimizerQuickSettings } from "./src/optimizer-quick-settings.js";
-
-// Import new modules
+import { createOptimizerController } from "./src/optimizer-controller.js";
 import {
   getElements,
   wireGlobalInputs,
   wireVrmSettingInput,
 } from "./src/ui-binding.js";
 import {
-  snapshotUI,
   hydrateUI,
-  updatePlanMeta,
-  updateSummaryUI,
   updateTerminalCustomUI,
 } from "./src/state.js";
 
@@ -38,20 +28,9 @@ function revealCards(panel) {
 }
 
 // ---------- DOM ----------
-// 'els' is now retrieved via getElements() in boot() and passed around or accessed globally if we kept it global.
-// For cleaner refactoring, let's keep a module-level reference initialized in boot,
-// or just initialize it at the top level since DOM content is likely ready (module scripts defer).
-// However, safer to call getElements() when needed or at top level if we trust DOMContentLoaded.
 const els = getElements();
+const optimizer = createOptimizerController({ els });
 let optimizerQuickSettings = null;
-let lastTableRows = [];
-let lastTableRebalanceWindow = null;
-
-// ---------- State ----------
-const debounceRun = debounce(onRun, 250);
-const persistConfigDebounced = debounce((cfg) => {
-  void persistConfig(cfg);
-}, 600);
 
 // ---------- Boot ----------
 boot();
@@ -130,7 +109,7 @@ async function boot() {
     section: els.optimizerQuickSettingsSection,
     body: els.optimizerQuickSettingsBody,
     onSelectionChange: () => {
-      void persistConfig();
+      void optimizer.persistConfig();
     },
   });
 
@@ -140,12 +119,12 @@ async function boot() {
   // Wire inputs with callbacks
   wireGlobalInputs(els, {
     onInput: () => {
-      queuePersistSnapshot();
-      debounceRun();
+      optimizer.queuePersistSnapshot();
+      optimizer.debounceRun();
     },
-    onSave: queuePersistSnapshot,
-    onRun: onRun,
-    onTableDisplayChange: onTableDisplayChange,
+    onSave: optimizer.queuePersistSnapshot,
+    onRun: optimizer.onRun,
+    onTableDisplayChange: optimizer.onTableDisplayChange,
     updateTerminalCustomUI: () => updateTerminalCustomUI(els),
   });
 
@@ -153,7 +132,11 @@ async function boot() {
     onRefresh: onRefreshVrmSettings,
   });
 
-  wireEvSensorInputs(els);
+  wireEvSensorInputs(els, {
+    persistConfig: optimizer.persistConfig,
+    persistConfigDebounced: optimizer.persistConfigDebounced,
+    debounceRun: optimizer.debounceRun,
+  });
   initDepartureDatetimeMin(els);
 
   if (els.status) {
@@ -166,7 +149,7 @@ async function boot() {
   void refreshEvSensorStates(els);
 
   // Initial compute
-  await onRun();
+  await optimizer.onRun();
 
   // Reveal cards on the initial (optimizer) panel after first compute
   const optimizerPanel = document.getElementById('panel-optimizer');
@@ -185,280 +168,5 @@ async function onRefreshVrmSettings() {
   } catch (err) {
     console.error(err);
     if (els.status) els.status.textContent = `VRM error: ${err.message}`;
-  }
-}
-
-// ---------- Main compute ----------
-async function onRun() {
-  // Cancel any pending auto-save to avoid double writes
-  if (typeof persistConfigDebounced.cancel === "function") {
-    persistConfigDebounced.cancel();
-  }
-
-  if (els.status) {
-    els.status.textContent = "Calculating…";
-    // Reset color to neutral
-    els.status.className = "text-sm font-medium text-ink dark:text-slate-100";
-  }
-
-  const runBtn = els.run;
-  if (runBtn) {
-    runBtn.classList.add('loading');
-    runBtn.disabled = true;
-  }
-
-  try {
-    // Persist current inputs to /settings; server will read these
-    await persistConfig();
-
-    // Run options
-    const updateData = !!els.updateDataBeforeRun?.checked;
-    const writeToVictron = !!els.pushToVictron?.checked;
-
-    // Solve with server-only settings/timing, passing the flags
-    const result = await requestRemoteSolve({ updateData, writeToVictron });
-
-    const rows = Array.isArray(result?.rows) ? result.rows : [];
-    const solverStatus =
-      typeof result?.solverStatus === "string" ? result.solverStatus : "OK";
-
-    // Update SoC and tsStart from result
-    updatePlanMeta(els, result.initialSoc_percent, result.tsStart);
-
-    // Update summary if present
-    updateSummaryUI(els, result.summary);
-
-    if (els.status) {
-      const nonOptimal =
-        typeof solverStatus === "string" &&
-        solverStatus.toLowerCase() !== "optimal";
-
-      let label;
-      let colorClass = "text-emerald-600 dark:text-emerald-400"; // Green for success
-
-      if (nonOptimal) {
-        label = `Plan status: ${solverStatus}`;
-        colorClass = "text-amber-600 dark:text-amber-400"; // Amber for warning
-      } else if (writeToVictron) {
-        label = "Plan updated and sent to Victron";
-      } else {
-        label = "Plan updated";
-      }
-      els.status.textContent = label;
-      els.status.className = `text-sm font-medium ${colorClass}`;
-    }
-
-    // Only the few chart/table scalars are read from inputs (already hydrated from /settings)
-    const cfgForViz = {
-      stepSize_m: Number(els.step?.value),
-      batteryCapacity_Wh: Number(els.cap?.value),
-    };
-
-    const evSettings = els.evEnabled?.checked ? {
-      departureTime: els.evDepartureTime?.value || null,
-      targetSoc_percent: parseFloat(els.evTargetSoc?.value) || null,
-    } : null;
-
-    lastTableRows = rows;
-    lastTableRebalanceWindow = result.rebalanceWindow ?? null;
-    renderScheduleTable();
-
-    renderAllCharts(rows, cfgForViz, result.rebalanceWindow ?? null, evSettings);
-
-    updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m);
-    updateEvDepartureQuickSet(els, rows);
-  } catch (err) {
-    console.error(err);
-    if (els.status) {
-      els.status.textContent = `Error: ${err.message}`;
-      els.status.className = "text-sm font-medium text-red-600 dark:text-red-400";
-    }
-    // In error, clear summary so it doesn't look "fresh"
-    updateSummaryUI(els, null);
-  } finally {
-    if (runBtn) {
-      runBtn.classList.remove('loading');
-      runBtn.disabled = false;
-    }
-  }
-}
-
-function onTableDisplayChange(event) {
-  if (!renderScheduleTable()) {
-    void onRun();
-    return;
-  }
-  if (event?.currentTarget === els.tableKwh) {
-    queuePersistSnapshot();
-  }
-}
-
-function renderScheduleTable() {
-  if (!lastTableRows.length) return false;
-  renderTable({
-    rows: lastTableRows,
-    cfg: {
-      stepSize_m: Number(els.step?.value),
-      batteryCapacity_Wh: Number(els.cap?.value),
-    },
-    targets: { table: els.table, tableUnit: els.tableUnit },
-    showKwh: !!els.tableKwh?.checked,
-    showDess: !!els.tableDess?.checked,
-    rebalanceWindow: lastTableRebalanceWindow,
-    evSettings: els.evEnabled?.checked ? {
-      departureTime: els.evDepartureTime?.value || null,
-      targetSoc_percent: parseFloat(els.evTargetSoc?.value) || null,
-    } : null,
-  });
-  return true;
-}
-
-function renderAllCharts(rows, cfg, rebalanceWindow = null, evSettings = null) {
-  drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, rebalanceWindow, evSettings);
-  drawSocChart(els.soc, rows, cfg.stepSize_m, evSettings);
-  drawPricesStepLines(els.prices, rows, cfg.stepSize_m);
-  drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m);
-}
-
-async function persistConfig(cfg = snapshotUI(els)) {
-  try {
-    await saveConfig(cfg);
-  } catch (error) {
-    console.error("Failed to persist settings", error);
-    if (els.status) els.status.textContent = `Settings error: ${error.message}`;
-  }
-}
-
-function queuePersistSnapshot() {
-  persistConfigDebounced(snapshotUI(els));
-}
-
-const SENSOR_IND_BASE = "mt-1 block text-xs";
-const SENSOR_IND_NEUTRAL = `${SENSOR_IND_BASE} text-slate-500 dark:text-slate-400`;
-const SENSOR_IND_SUCCESS = `${SENSOR_IND_BASE} text-emerald-600 dark:text-emerald-400`;
-const SENSOR_IND_ERROR = `${SENSOR_IND_BASE} text-red-600 dark:text-red-400`;
-
-function toDatetimeLocal(d) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function initDepartureDatetimeMin(els) {
-  const input = els.evDepartureTime;
-  if (!input) return;
-  // Round down to the last 15-min block
-  const blockMs = Math.floor(Date.now() / (15 * 60 * 1000)) * (15 * 60 * 1000);
-  input.min = toDatetimeLocal(new Date(blockMs));
-}
-
-async function refreshEvSensorStates(els) {
-  const sensors = [
-    { input: els.evSocSensor, indicator: els.evSocValue },
-    { input: els.evPlugSensor, indicator: els.evPlugValue },
-  ];
-  await Promise.allSettled(sensors.map(async ({ input, indicator }) => {
-    const entityId = input?.value?.trim();
-    if (!entityId || !indicator) return;
-    try {
-      const state = await fetchHaEntityState(entityId);
-      indicator.textContent = `Current value: ${state.state}`;
-      indicator.className = SENSOR_IND_SUCCESS;
-      indicator.dataset.haState = state.state;
-    } catch {
-      // HA not configured or entity unavailable — leave indicator as-is
-    }
-  }));
-  updateEvSocQuickSet(els);
-}
-
-function updateEvDepartureQuickSet(els, rows) {
-  const btn = els.evDepartureQuickSet;
-  if (!btn) return;
-  const lastRow = rows[rows.length - 1];
-  if (!lastRow) {
-    btn.disabled = true;
-    btn.title = "Run a plan first";
-    btn.onclick = null;
-    return;
-  }
-  const d = new Date(lastRow.timestampMs);
-  const dtLocal = toDatetimeLocal(d);
-  btn.disabled = false;
-  btn.title = `Set to end of current plan (${d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })})`;
-  btn.onclick = () => {
-    els.evDepartureTime.value = dtLocal;
-    els.evDepartureTime.dispatchEvent(new Event('input', { bubbles: true }));
-  };
-}
-
-function updateEvSocQuickSet(els) {
-  const btn = els.evTargetSocQuickSet;
-  if (!btn) return;
-  const soc = parseFloat(els.evSocValue?.dataset.haState);
-  if (!isNaN(soc)) {
-    const rounded = Math.round(soc);
-    btn.disabled = false;
-    btn.title = `Set to current EV SoC (${rounded}%)`;
-    btn.onclick = () => {
-      els.evTargetSoc.value = rounded;
-      els.evTargetSoc.dispatchEvent(new Event('input', { bubbles: true }));
-    };
-  } else {
-    btn.disabled = true;
-    btn.title = "Configure EV SoC sensor first";
-    btn.onclick = null;
-  }
-}
-
-function wireEvSensorInputs(els) {
-  const sensors = [
-    { input: els.evSocSensor, indicator: els.evSocValue },
-    { input: els.evPlugSensor, indicator: els.evPlugValue },
-  ];
-
-  for (const { input, indicator } of sensors) {
-    if (!input || !indicator) continue;
-
-    let seq = 0; // stale-fetch guard: each blur gets a unique id
-
-    input.addEventListener("input", () => {
-      indicator.textContent = "";
-      indicator.className = SENSOR_IND_NEUTRAL;
-      delete indicator.dataset.haState;
-      updateEvSocQuickSet(els);
-    });
-
-    input.addEventListener("blur", async () => {
-      const entityId = input.value.trim();
-      if (!entityId) {
-        indicator.textContent = "";
-        return;
-      }
-
-      const id = ++seq;
-
-      // Cancel any pending debounced save/solve and flush immediately so the
-      // server has the latest HA credentials before we validate the entity.
-      persistConfigDebounced.cancel();
-      debounceRun.cancel();
-      await persistConfig();
-
-      if (id !== seq) return; // another blur fired while we were saving
-
-      try {
-        const state = await fetchHaEntityState(entityId);
-        if (id !== seq) return; // stale response
-        indicator.textContent = `Current value: ${state.state}`;
-        indicator.className = SENSOR_IND_SUCCESS;
-        indicator.dataset.haState = state.state;
-        updateEvSocQuickSet(els);
-      } catch (err) {
-        if (id !== seq) return; // stale response
-        indicator.textContent = `Error: ${err.message}`;
-        indicator.className = SENSOR_IND_ERROR;
-        delete indicator.dataset.haState;
-        updateEvSocQuickSet(els);
-      }
-    });
   }
 }

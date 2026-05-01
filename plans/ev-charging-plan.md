@@ -1,5 +1,9 @@
 # EV Charging Support — Revised Plan
 
+## Status
+
+Completed and retained as implementation history. The main phases below are done: EV settings, HA entity validation, LP-integrated planned charging, optimizer UI surfaces, EV tab, and HA-pollable EV endpoints. Remaining ideas are tracked as future work at the end of this document rather than active implementation steps.
+
 ## Context
 
 OptiVolt currently optimizes battery/grid flows but has no awareness of EV charging. The EV charger sits behind the Victron inverter. The goal is to add **planned charging** — "charge to X% by time Y" — as an LP-integrated feature.
@@ -55,7 +59,7 @@ OptiVolt currently optimizes battery/grid flows but has no awareness of EV charg
 ### Settings additions:
 - `evDepartureTime: string` — target departure time (HH:MM)
 - `evTargetSoc_percent: number` — desired SoC at departure
-- `evReimbursement_cents_per_kWh: number` — employer reimbursement rate (optional)
+- `evReimbursement_cents_per_kWh: number` — future idea, not part of the completed implementation
 
 ### LP changes:
 New flow variables following the `{source}_to_{sink}` pattern: `grid_to_ev_t`, `pv_to_ev_t`, `battery_to_ev_t`. These appear as additional sinks in the energy balance:
@@ -107,8 +111,9 @@ EV SoC tracking with hard constraint at departure slot.
 
 ---
 
-## Open questions
+## Future work
 - **V2G (vehicle-to-grid):** Not in scope
 - **Multiple EVs:** Future consideration
 - **Variable charge rate:** LP supports continuous between min/max current; charger hardware may only support discrete steps
 - **Home battery priority:** May need `evMinHomeSoc_percent` constraint to ensure home battery charges first
+- **EV reimbursement:** Optional employer reimbursement modeling was considered but not implemented
