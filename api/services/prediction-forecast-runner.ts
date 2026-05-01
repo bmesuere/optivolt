@@ -37,12 +37,12 @@ export async function runCombinedPredictionForecast(config: PredictionRunConfig,
     executeLoadForecast(config, endpoint).catch(handleCombinedForecastError('load', endpoint)),
     executePvForecast(config, endpoint).catch(handleCombinedForecastError('pv', endpoint)),
   ]);
-  const [, { adjustments }] = await Promise.all([
-    persistForecastData({ load: loadResult?.forecast, pv: pvResult?.forecast }).catch(err =>
-      console.warn('[predict] forecast persistence failed:', err instanceof Error ? err.message : err)
-    ),
-    loadActiveAdjustmentsAndPrune(),
-  ]);
+  let adjustments: ReturnType<typeof pruneExpiredPredictionAdjustments>['adjustments'] = [];
+  try {
+    adjustments = await persistForecastAndPrune({ load: loadResult?.forecast, pv: pvResult?.forecast });
+  } catch (err) {
+    console.warn('[predict] forecast persistence failed:', err instanceof Error ? err.message : err);
+  }
   return {
     load: applyForecastAdjustments(loadResult, 'load', adjustments),
     pv: applyForecastAdjustments(pvResult, 'pv', adjustments),
@@ -104,6 +104,17 @@ export async function persistForecastData(updates: { load?: TimeSeries; pv?: Tim
   if (setLoad) data.load = updates.load!;
   if (setPv)   data.pv   = updates.pv!;
   await saveData(data);
+}
+
+async function persistForecastAndPrune(updates: { load?: TimeSeries; pv?: TimeSeries }) {
+  const [settings, data] = await Promise.all([loadSettings(), loadData()]);
+  const setLoad = !!updates.load?.values && settings.dataSources.load === 'api';
+  const setPv   = !!updates.pv?.values   && settings.dataSources.pv   === 'api';
+  if (setLoad) data.load = updates.load!;
+  if (setPv)   data.pv   = updates.pv!;
+  const { data: pruned, adjustments, changed } = pruneExpiredPredictionAdjustments(data);
+  if (setLoad || setPv || changed) await saveData(pruned);
+  return adjustments;
 }
 
 export async function withAdjustedForecast<T extends { forecast?: TimeSeries } | null>(
