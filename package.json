@@ -28,20 +28,20 @@
   "dependencies": {
     "express": "^5.2.1",
     "highs": "^1.8.0",
-    "mqtt": "^5.15.0"
+    "mqtt": "^5.15.1"
   },
   "devDependencies": {
-    "@eslint/css": "^0.14.1",
+    "@eslint/css": "^1.2.0",
     "@eslint/js": "^10.0.1",
-    "@eslint/markdown": "^7.5.1",
+    "@eslint/markdown": "^8.0.1",
     "@types/express": "^5.0.6",
     "dotenv-cli": "^11.0.0",
-    "eslint": "^10.0.3",
-    "globals": "^17.4.0",
-    "jsdom": "^29.0.0",
+    "eslint": "^10.3.0",
+    "globals": "^17.6.0",
+    "jsdom": "^29.1.1",
     "nodemon": "^3.1.14",
     "supertest": "^7.2.2",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.0"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
   }
 }
