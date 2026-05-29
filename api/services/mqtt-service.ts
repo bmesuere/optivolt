@@ -1,5 +1,7 @@
 import { VictronMqttClient } from '../../lib/victron-mqtt.ts';
 import type { PlanRowWithDess } from '../types.ts';
+import type { ConnectionOptions, PeerCertificate } from 'tls';
+import * as crypto from 'crypto';
 
 let victronClient: VictronMqttClient | null = null;
 
@@ -9,10 +11,10 @@ function getVictronClient(): VictronMqttClient {
     const port = Number(process.env.MQTT_PORT ?? '1883');
     const username = process.env.MQTT_USERNAME ?? '';
     const password = process.env.MQTT_PASSWORD ?? '';
-
-    victronClient = new VictronMqttClient({ host, port, username, password });
+    const protocol = process.env.MQTT_TLS === 'true' ? 'mqtts' : 'mqtt';
+    const tlsOptions = buildTlsOptions();
+    victronClient = new VictronMqttClient({ host, port, username, password, protocol, tlsOptions });
   }
-
   return victronClient;
 }
 
@@ -90,3 +92,26 @@ export async function shutdownVictronClient(): Promise<void> {
   await victronClient.close();
   victronClient = null;
 }
+
+export function buildTlsOptions(): ConnectionOptions {
+  const tlsEnabled = process.env.MQTT_TLS === 'true';
+  if (!tlsEnabled) return {};
+
+  const fingerprint = process.env.MQTT_TLS_FINGERPRINT ?? '';
+  if (fingerprint) {
+    const expected = fingerprint.replace(/:/g, '').toLowerCase();
+    return {
+      rejectUnauthorized: false,
+      checkServerIdentity: (_host: string, cert: PeerCertificate) => {
+        const actual = crypto.createHash('sha256').update(cert.raw).digest('hex');
+        if (actual !== expected) {
+          return new Error(`Certificate fingerprint mismatch: got ${actual}, expected ${expected}`);
+        }
+      },
+    };
+  }
+
+  const verify = process.env.MQTT_TLS_VERIFY !== 'false'; // default true
+  return { rejectUnauthorized: verify };
+}
+

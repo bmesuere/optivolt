@@ -29,9 +29,17 @@ options:
   site_id: ""
   vrm_token: ""
   mqtt_host: "venus.local"
+  # use 8883 for tls
   mqtt_port: 1883
   mqtt_username: ""
   mqtt_password: ""
+  mqtt_tls: false # consider setting to true
+  mqtt_tls_insecure: true # don't fail on invalid certs
+  # specify the tls fingerprint of the host, this is a good fallback if you skip cert validation.
+  # you can get the fingerprint with
+  #   openssl s_client -connect <cerbo-ip>:8883 < /dev/null 2>/dev/null \
+  #   | openssl x509 -fingerprint -sha256 -noout
+  mqtt_tls_fingerprint: ""
 
 schema:
   site_id: str
@@ -40,3 +48,6 @@ schema:
   mqtt_port: int
   mqtt_username: str
   mqtt_password: password
+  mqtt_tls: bool
+  mqtt_tls_insecure: bool
+  mqtt_tls_fingerprint: str
