@@ -1,6 +1,7 @@
-import { VictronMqttClient } from '../../lib/victron-mqtt.ts';
+import { VictronMqttClient, type MqttTlsOptions } from '../../lib/victron-mqtt.ts';
 import type { PlanRowWithDess } from '../types.ts';
-import type { ConnectionOptions, PeerCertificate } from 'tls';
+import type { PeerCertificate } from 'tls';
+
 import * as crypto from 'crypto';
 
 let victronClient: VictronMqttClient | null = null;
@@ -93,7 +94,7 @@ export async function shutdownVictronClient(): Promise<void> {
   victronClient = null;
 }
 
-export function buildTlsOptions(): ConnectionOptions {
+export function buildTlsOptions(): MqttTlsOptions {
   const tlsEnabled = process.env.MQTT_TLS === 'true';
   if (!tlsEnabled) return {};
 

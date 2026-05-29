@@ -1,5 +1,14 @@
-import mqtt, { type MqttClient } from 'mqtt';
-import type { ConnectionOptions } from 'tls';
+import mqtt, { type MqttClient, type IClientOptions } from 'mqtt';
+import type { PeerCertificate } from 'tls';
+
+
+export type MqttTlsOptions = {
+  rejectUnauthorized?: boolean;
+  checkServerIdentity?: (host: string, cert: PeerCertificate) => Error | undefined;
+  ca?: string | Buffer;
+  cert?: string | Buffer;
+  key?: string | Buffer;
+};
 
 export interface VictronMqttConfig {
   host?: string;
@@ -9,7 +18,7 @@ export interface VictronMqttConfig {
   protocol?: string;
   reconnectPeriod?: number;
   serial?: string;
-  tlsOptions?: ConnectionOptions;
+  tlsOptions?: MqttTlsOptions;
 }
 
 interface WaitForMessageOptions {
@@ -40,7 +49,7 @@ export class VictronMqttClient {
   protocol: string;
   reconnectPeriod: number;
   serial: string | null;
-  tlsOptions: ConnectionOptions;
+  tlsOptions: MqttTlsOptions;
   private _serialPromise: Promise<string> | null;
   private _clientPromise: Promise<MqttClient> | null;
 
