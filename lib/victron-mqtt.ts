@@ -58,7 +58,7 @@ export class VictronMqttClient {
     port = 1883,
     username = '',
     password = '',
-    protocol = 'mqtt',    // 'mqtt', 'ws', 'wss', ...
+    protocol = 'mqtt',    // 'mqtt', 'mqtts', 'ws', 'wss', ...
     reconnectPeriod = 0,  // 0 = no auto reconnect by default
     serial,               // optional: if you already know the portal id
     tlsOptions = {},
