@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "express": "^5.2.1",
-    "highs": "^1.8.0",
+    "highs": "^1.14.2",
     "mqtt": "^5.15.1"
   },
   "devDependencies": {
