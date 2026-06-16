@@ -55,6 +55,9 @@ export interface SolverConfig {
   terminalSocValuation: TerminalSocValuation;
   terminalSocCustomPrice_cents_per_kWh: number;
 
+  // EV SoC valuation (value of energy left in the EV battery, c€/kWh; 0 = disabled)
+  evSocValue_cents_per_kWh: number;
+
   // Initial state
   initialSoc_percent: number;
 

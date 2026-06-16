@@ -81,6 +81,7 @@ export function buildSolverConfigFromSettings(
     idleDrain_W:                          settings.idleDrain_W,
     terminalSocValuation:                 settings.terminalSocValuation,
     terminalSocCustomPrice_cents_per_kWh: settings.terminalSocCustomPrice_cents_per_kWh,
+    evSocValue_cents_per_kWh:             settings.evSocValue_cents_per_kWh,
     initialSoc_percent:                   data.soc.value,
   };
 
@@ -107,7 +108,12 @@ export function buildSolverConfigFromSettings(
     const capacityWh = settings.evBatteryCapacity_kWh * 1000;
     const stepHours = settings.stepSize_m / 60;
 
+    // D > 0: a valid future departure within (or just beyond) the horizon.
+    // D <= 0: no departure set or it is in the past. The EV is still modeled (so an EV SoC
+    // valuation can drive charging), but with no enforced target — evDepartureSlot is set
+    // beyond the horizon (skips c_ev_target) and the target is 0 (skips the cardinality bound).
     const D = departureTimeToSlot(settings.evDepartureTime, nowMs, settings.stepSize_m, T);
+    let targetSoc_percent: number;
     if (D > 0) {
       const initialWh = (evState.soc_percent / 100) * capacityWh;
       const requestedTargetWh = (settings.evTargetSoc_percent / 100) * capacityWh;
@@ -115,18 +121,21 @@ export function buildSolverConfigFromSettings(
       const efficiency = settings.evChargeEfficiency_percent / 100;
       const maxChargeable_Wh = maxPow_W * stepHours * chargingSlots * efficiency;
       const achievableTargetWh = Math.min(requestedTargetWh, initialWh + maxChargeable_Wh, capacityWh);
-
-      const ev: EvConfig = {
-        evMinChargePower_W: Math.min(minPow_W, maxPow_W),
-        evMaxChargePower_W: maxPow_W,
-        evBatteryCapacity_Wh: capacityWh,
-        evInitialSoc_percent: evState.soc_percent,
-        evTargetSoc_percent: (achievableTargetWh / capacityWh) * 100,
-        evDepartureSlot: D,
-        evChargeEfficiency_percent: settings.evChargeEfficiency_percent,
-      };
-      base.ev = ev;
+      targetSoc_percent = (achievableTargetWh / capacityWh) * 100;
+    } else {
+      targetSoc_percent = 0;
     }
+
+    const ev: EvConfig = {
+      evMinChargePower_W: Math.min(minPow_W, maxPow_W),
+      evMaxChargePower_W: maxPow_W,
+      evBatteryCapacity_Wh: capacityWh,
+      evInitialSoc_percent: evState.soc_percent,
+      evTargetSoc_percent: targetSoc_percent,
+      evDepartureSlot: D > 0 ? D : T + 1,
+      evChargeEfficiency_percent: settings.evChargeEfficiency_percent,
+    };
+    base.ev = ev;
   }
 
   return base;

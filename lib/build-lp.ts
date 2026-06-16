@@ -28,6 +28,9 @@ export function buildLP({
   terminalSocValuation = "zero",
   terminalSocCustomPrice_cents_per_kWh = 0,
 
+  // EV SoC valuation: value of energy left in the EV battery in c€/kWh (0 = disabled)
+  evSocValue_cents_per_kWh = 0,
+
   // variable parameters
   initialSoc_percent = 20,
 
@@ -65,6 +68,8 @@ export function buildLP({
   const idleDrain_Wh = idleDrain_W * stepHours; // Wh lost from battery per slot due to inverter idle consumption
 
   const terminalPrice_cents_per_Wh = selectTerminalPriceCentsPerKWh(terminalSocValuation, importPrice, terminalSocCustomPrice_cents_per_kWh) / 1000 * (dischargeEfficiency_percent / 100); // c€/Wh
+  // EV energy is consumed as driving fuel (never discharged back to the house), so no discharge-efficiency factor.
+  const evTerminalPrice_cents_per_Wh = evSocValue_cents_per_kWh / 1000; // c€/Wh
 
   // Convert soc percentages to Wh
   const minSoc_Wh = (minSoc_percent / 100) * batteryCapacity_Wh;
@@ -150,6 +155,10 @@ export function buildLP({
   // Terminal SOC valuation
   if (terminalPrice_cents_per_Wh > 0) {
     objTerms.push(` - ${toNum(terminalPrice_cents_per_Wh)} ${soc(T - 1)}`);
+  }
+  // EV SoC valuation: value energy left in the EV battery at the end of the horizon
+  if (evActive && evTerminalPrice_cents_per_Wh > 0) {
+    objTerms.push(` - ${toNum(evTerminalPrice_cents_per_Wh)} ${evSocVar(T - 1)}`);
   }
   // Rebalancing symmetry-breaking: escalating penalty prefers earlier windows when cost-equivalent.
   if (D > 0) {

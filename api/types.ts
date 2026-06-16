@@ -52,6 +52,7 @@ export interface Settings {
   evDepartureTime: string;
   evTargetSoc_percent: number;
   evChargeEfficiency_percent: number;
+  evSocValue_cents_per_kWh: number;
 }
 
 // ----------------------------- Persisted data ---------------------------
