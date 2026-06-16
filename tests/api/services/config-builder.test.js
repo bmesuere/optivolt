@@ -165,19 +165,35 @@ describe('buildSolverConfigFromSettings — EV config', () => {
     expect(cfg.ev.evChargeEfficiency_percent).toBe(85);
   });
 
-  it('does not add ev when departure is in the past (D=0)', () => {
+  // When there is no usable departure (past or unparseable), the EV is still modeled so an
+  // EV SoC valuation can drive charging, but with no enforced target: evDepartureSlot is set
+  // beyond the horizon (T+1 = 97) so c_ev_target is skipped, and the target is 0.
+  it('models ev without a target when departure is in the past (D=0)', () => {
     const pastDeparture = { ...evSettings, evDepartureTime: '2024-01-01T11:00:00Z' };
     const cfg = buildSolverConfigFromSettings(
       pastDeparture, makeData(), NOW_MS, { pluggedIn: true, soc_percent: 50 },
     );
-    expect(cfg.ev).toBeUndefined();
+    expect(cfg.ev).toBeDefined();
+    expect(cfg.ev.evDepartureSlot).toBe(97); // T + 1, beyond the 96-slot horizon
+    expect(cfg.ev.evTargetSoc_percent).toBe(0);
+    expect(cfg.ev.evInitialSoc_percent).toBe(50);
   });
 
-  it('does not add ev when departure string is not a valid date', () => {
+  it('models ev without a target when departure string is not a valid date', () => {
     const badDeparture = { ...evSettings, evDepartureTime: '07:30' };
     const cfg = buildSolverConfigFromSettings(
       badDeparture, makeData(), NOW_MS, { pluggedIn: true, soc_percent: 50 },
     );
-    expect(cfg.ev).toBeUndefined();
+    expect(cfg.ev).toBeDefined();
+    expect(cfg.ev.evDepartureSlot).toBe(97);
+    expect(cfg.ev.evTargetSoc_percent).toBe(0);
+  });
+
+  it('passes evSocValue_cents_per_kWh through to the solver config', () => {
+    const cfg = buildSolverConfigFromSettings(
+      { ...evSettings, evSocValue_cents_per_kWh: 15 },
+      makeData(), NOW_MS, { pluggedIn: true, soc_percent: 50 },
+    );
+    expect(cfg.evSocValue_cents_per_kWh).toBe(15);
   });
 });

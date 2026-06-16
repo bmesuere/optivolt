@@ -89,6 +89,7 @@ export function getElements() {
     evDepartureQuickSet: $("#ev-departure-quick-set"),
     evTargetSoc: $("#ev-target-soc"),
     evTargetSocQuickSet: $("#ev-target-soc-quick-set"),
+    evSocValuation: $("#ev-soc-valuation"),
     evSocSensor: $("#ev-soc-sensor"),
     evPlugSensor: $("#ev-plug-sensor"),
     evSocValue: $("#ev-soc-value"),

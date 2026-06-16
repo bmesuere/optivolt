@@ -253,4 +253,23 @@ describe('buildLP — EV charging (MILP)', () => {
     const lp = buildLP({ ...base, ev: { ...evCfg, evChargeEfficiency_percent: 100 } });
     expect(lp).toMatch(/c_ev_soc_0:.*0\.25 grid_to_ev_0/);
   });
+
+  it('values terminal EV SoC in the objective when evSocValue_cents_per_kWh > 0', () => {
+    // 20 c€/kWh → 0.02 c€/Wh, no discharge-efficiency factor; valued at the last slot (T-1=4)
+    const lp = buildLP({ ...base, ev: evCfg, evSocValue_cents_per_kWh: 20 });
+    const objLine = lp.split('\n').find((l) => l.trim().startsWith('obj:'));
+    expect(objLine).toMatch(/- 0\.02 ev_soc_4\b/);
+  });
+
+  it('does not value EV SoC when evSocValue_cents_per_kWh is 0', () => {
+    const lp = buildLP({ ...base, ev: evCfg, evSocValue_cents_per_kWh: 0 });
+    // ev_soc_t still appears in constraints; assert only the objective has no valuation term.
+    const objLine = lp.split('\n').find((l) => l.trim().startsWith('obj:'));
+    expect(objLine).not.toContain('ev_soc_');
+  });
+
+  it('does not value EV SoC when ev is not configured', () => {
+    const lp = buildLP({ ...base, evSocValue_cents_per_kWh: 20 });
+    expect(lp).not.toContain('ev_soc_');
+  });
 });
