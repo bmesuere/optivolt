@@ -7,11 +7,22 @@ const SENSOR_IND_SUCCESS = `${SENSOR_IND_BASE} text-emerald-600 dark:text-emeral
 const SENSOR_IND_ERROR = `${SENSOR_IND_BASE} text-red-600 dark:text-red-400`;
 
 export function initDepartureDatetimeMin(els) {
-  const input = els.evDepartureTime;
-  if (!input) return;
   // Round down to the last 15-min block
   const blockMs = Math.floor(Date.now() / (15 * 60 * 1000)) * (15 * 60 * 1000);
-  input.min = toDatetimeLocal(new Date(blockMs));
+  const min = toDatetimeLocal(new Date(blockMs));
+  if (els.evDepartureTime) els.evDepartureTime.min = min;
+  if (els.evArrivalTime) els.evArrivalTime.min = min;
+}
+
+// Quick-set: stamp the arrival time to the current 15-min block ("now").
+export function wireEvArrivalQuickSet(els) {
+  const btn = els.evArrivalQuickSet;
+  if (!btn || !els.evArrivalTime) return;
+  btn.onclick = () => {
+    const blockMs = Math.floor(Date.now() / (15 * 60 * 1000)) * (15 * 60 * 1000);
+    els.evArrivalTime.value = toDatetimeLocal(new Date(blockMs));
+    els.evArrivalTime.dispatchEvent(new Event('input', { bubbles: true }));
+  };
 }
 
 export async function refreshEvSensorStates(els) {

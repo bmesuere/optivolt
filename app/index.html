@@ -1515,6 +1515,25 @@
             <span class="text-sm text-slate-600 dark:text-slate-400">Enable EV charging</span>
           </label>
           <label class="block text-sm">
+            <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Expected arrival</span>
+            <div class="flex mt-1">
+              <input id="ev-arrival-time" type="datetime-local" class="form-input flex-1 min-w-0 !mt-0 !rounded-r-none !border-r-0" step="900" data-settings-input />
+              <button id="ev-arrival-quick-set" type="button" title="Set to now"
+                class="btn-quick-set">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="12" cy="12" r="9" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 7.5V12l3 1.5" />
+                </svg>
+              </button>
+            </div>
+            <span class="mt-1 block text-xs text-slate-400 dark:text-slate-500">Only used when the car is not plugged in.</span>
+          </label>
+          <label class="block text-sm">
+            <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Assumed SoC on arrival (%)</span>
+            <input id="ev-arrival-soc" type="number" min="0" max="100" step="1" placeholder="auto (from sensor)"
+              class="form-input mt-1" data-settings-input />
+          </label>
+          <label class="block text-sm">
             <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">Ready by</span>
             <div class="flex mt-1">
               <input id="ev-departure-time" type="datetime-local" class="form-input flex-1 min-w-0 !mt-0 !rounded-r-none !border-r-0" step="900" data-settings-input />

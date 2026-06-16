@@ -49,6 +49,8 @@ export interface Settings {
   evBatteryCapacity_kWh: number;
   evSocSensor: string;
   evPlugSensor: string;
+  evArrivalTime: string;
+  evArrivalSocOverride_percent: string;
   evDepartureTime: string;
   evTargetSoc_percent: number;
   evChargeEfficiency_percent: number;

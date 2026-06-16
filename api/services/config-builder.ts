@@ -101,41 +101,70 @@ export function buildSolverConfigFromSettings(
     base.rebalanceTargetSoc_percent = settings.maxSoc_percent;
   }
 
-  if (settings.evEnabled && evState?.pluggedIn) {
+  if (settings.evEnabled) {
     const T = base.load_W.length;
-    const minPow_W = settings.evMinChargeCurrent_A * 230;
-    const maxPow_W = settings.evMaxChargeCurrent_A * 230;
-    const capacityWh = settings.evBatteryCapacity_kWh * 1000;
-    const stepHours = settings.stepSize_m / 60;
+    // Arrival is "now" (slot 0) when the car is already plugged in; otherwise it is
+    // derived from the configured expected-arrival time. This lets the solver reserve
+    // capacity for an overnight charge before the car physically arrives.
+    const evPluggedIn = evState?.pluggedIn ?? false;
+    const arrivalSlot = evPluggedIn
+      ? 0
+      : departureTimeToSlot(settings.evArrivalTime, nowMs, settings.stepSize_m, T);
 
-    // D > 0: a valid future departure within (or just beyond) the horizon.
-    // D <= 0: no departure set or it is in the past. The EV is still modeled (so an EV SoC
-    // valuation can drive charging), but with no enforced target — evDepartureSlot is set
-    // beyond the horizon (skips c_ev_target) and the target is 0 (skips the cardinality bound).
-    const D = departureTimeToSlot(settings.evDepartureTime, nowMs, settings.stepSize_m, T);
-    let targetSoc_percent: number;
-    if (D > 0) {
-      const initialWh = (evState.soc_percent / 100) * capacityWh;
-      const requestedTargetWh = (settings.evTargetSoc_percent / 100) * capacityWh;
-      const chargingSlots = Math.min(D, T);
-      const efficiency = settings.evChargeEfficiency_percent / 100;
-      const maxChargeable_Wh = maxPow_W * stepHours * chargingSlots * efficiency;
-      const achievableTargetWh = Math.min(requestedTargetWh, initialWh + maxChargeable_Wh, capacityWh);
-      targetSoc_percent = (achievableTargetWh / capacityWh) * 100;
-    } else {
-      targetSoc_percent = 0;
+    // Only model the EV when it is present now or expected within the horizon.
+    if (evPluggedIn || arrivalSlot > 0) {
+      // SoC to assume on arrival: a manual override wins, otherwise the live sensor
+      // reading. Without either we cannot meaningfully reserve capacity, so we skip.
+      const overrideSoc = parseFloat(settings.evArrivalSocOverride_percent);
+      let initialSoc_percent: number | undefined;
+      if (evPluggedIn) {
+        initialSoc_percent = evState?.soc_percent;
+      } else if (Number.isFinite(overrideSoc)) {
+        initialSoc_percent = overrideSoc;
+      } else if (evState && Number.isFinite(evState.soc_percent)) {
+        initialSoc_percent = evState.soc_percent;
+      }
+
+      if (initialSoc_percent != null && Number.isFinite(initialSoc_percent)) {
+        const minPow_W = settings.evMinChargeCurrent_A * 230;
+        const maxPow_W = settings.evMaxChargeCurrent_A * 230;
+        const capacityWh = settings.evBatteryCapacity_kWh * 1000;
+        const stepHours = settings.stepSize_m / 60;
+
+        // D > 0: a valid future departure within (or just beyond) the horizon.
+        // D <= 0: no departure set or it is in the past. The EV is still modeled (so an EV SoC
+        // valuation can drive charging), but with no enforced target — evDepartureSlot is set
+        // beyond the horizon (skips c_ev_target) and the target is 0 (skips the cardinality bound).
+        const D = departureTimeToSlot(settings.evDepartureTime, nowMs, settings.stepSize_m, T);
+        let targetSoc_percent: number;
+        if (D > 0) {
+          const initialWh = (initialSoc_percent / 100) * capacityWh;
+          const requestedTargetWh = (settings.evTargetSoc_percent / 100) * capacityWh;
+          // Charging can only happen between arrival and departure, within the horizon.
+          const chargingSlots = Math.max(0, Math.min(D, T) - arrivalSlot);
+          const efficiency = settings.evChargeEfficiency_percent / 100;
+          const maxChargeable_Wh = maxPow_W * stepHours * chargingSlots * efficiency;
+          const achievableTargetWh = Math.min(requestedTargetWh, initialWh + maxChargeable_Wh, capacityWh);
+          targetSoc_percent = (achievableTargetWh / capacityWh) * 100;
+        } else {
+          targetSoc_percent = 0;
+        }
+
+        const ev: EvConfig = {
+          evMinChargePower_W: Math.min(minPow_W, maxPow_W),
+          evMaxChargePower_W: maxPow_W,
+          evBatteryCapacity_Wh: capacityWh,
+          evInitialSoc_percent: initialSoc_percent,
+          evTargetSoc_percent: targetSoc_percent,
+          evArrivalSlot: arrivalSlot,
+          evDepartureSlot: D > 0 ? D : T + 1,
+          evChargeEfficiency_percent: settings.evChargeEfficiency_percent,
+        };
+        base.ev = ev;
+      } else {
+        console.warn('EV expected but no arrival SoC available (no override and no sensor reading); skipping EV modeling.');
+      }
     }
-
-    const ev: EvConfig = {
-      evMinChargePower_W: Math.min(minPow_W, maxPow_W),
-      evMaxChargePower_W: maxPow_W,
-      evBatteryCapacity_Wh: capacityWh,
-      evInitialSoc_percent: evState.soc_percent,
-      evTargetSoc_percent: targetSoc_percent,
-      evDepartureSlot: D > 0 ? D : T + 1,
-      evChargeEfficiency_percent: settings.evChargeEfficiency_percent,
-    };
-    base.ev = ev;
   }
 
   return base;
@@ -168,9 +197,9 @@ export async function getSolverInputs(): Promise<{ cfg: SolverConfig; timing: { 
         && plugEntity.state !== 'unavailable'
         && plugEntity.state !== 'unknown'
         && plugEntity.state !== 'off';
-      if (Number.isFinite(soc_percent)) {
-        evState = { pluggedIn, soc_percent };
-      }
+      // soc_percent may be NaN (e.g. the car is away and the sensor is unavailable);
+      // an away-charging plan can still proceed using the manual arrival-SoC override.
+      evState = { pluggedIn, soc_percent };
     } catch (err) {
       console.warn('Could not read EV state from HA:', err instanceof Error ? err.message : String(err));
     }
