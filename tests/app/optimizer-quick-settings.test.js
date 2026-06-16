@@ -9,6 +9,7 @@ const definitions = [
   { id: 'minSoc_percent', selector: '#minsoc', label: 'Min SoC (%)', kind: 'number' },
   { id: 'mode', selector: '#mode', label: 'Mode', kind: 'select' },
   { id: 'blockFeedInOnNegativePrices', selector: '#block-feedin-negative-prices', label: 'Block feed-in', kind: 'checkbox' },
+  { id: 'evTargetSoc_percent', selector: '#ev-target-soc', label: 'EV target SoC (%)', kind: 'number', mirrorClass: 'form-input' },
 ];
 
 function setupDom(selection = '[]') {
@@ -30,6 +31,13 @@ function setupDom(selection = '[]') {
       <input id="block-feedin-negative-prices" type="checkbox" />
       <span class="toggle-knob"></span>
       <span>Block feed-in</span>
+    </label>
+    <label class="block text-sm">
+      <span>EV target SoC (%)</span>
+      <div class="flex mt-1">
+        <input id="ev-target-soc" type="number" class="form-input flex-1 min-w-0 !mt-0 !rounded-r-none !border-r-0" value="80" />
+        <button id="ev-target-soc-quick-set" type="button"></button>
+      </div>
     </label>
   `;
 
@@ -147,6 +155,21 @@ describe('optimizer quick settings', () => {
     expect(controller.getSelectedIds()).toEqual(['minSoc_percent']);
     expect(JSON.parse(els.selectionInput.value)).toEqual(['minSoc_percent']);
     expect(els.body.querySelector('#optimizer-quick-missing')).toBeNull();
+  });
+
+  it('applies mirrorClass to the cloned mirror, dropping source adjacency classes', () => {
+    const els = setupDom('["evTargetSoc_percent"]');
+    initOptimizerQuickSettings({ ...els, definitions });
+
+    const mirror = document.querySelector('#optimizer-quick-evTargetSoc_percent');
+    expect(mirror.className).toBe('form-input');
+    expect(mirror.classList.contains('!rounded-r-none')).toBe(false);
+
+    // Pin button still lives on the source label, and two-way sync still works.
+    expect(document.querySelector('[data-quick-setting-pin="evTargetSoc_percent"]')).toBeTruthy();
+    mirror.value = '90';
+    mirror.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(document.querySelector('#ev-target-soc').value).toBe('90');
   });
 
   it('parses JSON and comma-separated selection values', () => {
