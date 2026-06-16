@@ -22,6 +22,11 @@ export const QUICK_SETTING_DEFS = [
   { id: "evMaxChargeCurrent_A", selector: "#ev-max-charge-current", label: "EV max current (A)", kind: "number" },
   { id: "evBatteryCapacity_kWh", selector: "#ev-battery-capacity", label: "EV capacity (kWh)", kind: "number" },
   { id: "evChargeEfficiency_percent", selector: "#ev-charge-efficiency", label: "EV efficiency (%)", kind: "number" },
+  // These EV inputs sit in a button/unit group on the EV tab; mirrorClass drops the
+  // adjacency classes (rounded-r-none, border-r-0, pr-16) so the standalone clone renders cleanly.
+  { id: "evDepartureTime", selector: "#ev-departure-time", label: "EV ready by", kind: "datetime", mirrorClass: "form-input" },
+  { id: "evTargetSoc_percent", selector: "#ev-target-soc", label: "EV target SoC (%)", kind: "number", mirrorClass: "form-input" },
+  { id: "evSocValue_cents_per_kWh", selector: "#ev-soc-valuation", label: "EV SoC value (c€/kWh)", kind: "number", mirrorClass: "form-input" },
 ];
 
 const FIELD_LABEL_CLASS = "block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide";
@@ -180,6 +185,7 @@ function createMirrorField(state, def, source) {
   mirror.id = `optimizer-quick-${def.id}`;
   mirror.removeAttribute("name");
   mirror.dataset.optimizerQuickMirror = def.id;
+  if (def.mirrorClass) mirror.className = def.mirrorClass;
   syncControl(source, mirror);
 
   mirror.addEventListener(inputEventName(mirror), () => {
