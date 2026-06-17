@@ -125,6 +125,26 @@ describe('vrm-refresh logic with custom data', () => {
     }));
   });
 
+  it('preserves evScheduleEntries through a series refresh', async () => {
+    const entries = [
+      { id: 'a', type: 'departure', time: '2024-01-02T08:00:00.000Z', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' },
+    ];
+    loadData.mockResolvedValue({
+      load: { start: '2024-01-01T00:00:00.000Z', values: [] },
+      pv: { start: '2024-01-01T00:00:00.000Z', values: [] },
+      importPrice: { start: '2024-01-01T00:00:00.000Z', values: [] },
+      exportPrice: { start: '2024-01-01T00:00:00.000Z', values: [] },
+      soc: { value: 50, timestamp: '2024-01-01T00:00:00.000Z' },
+      evScheduleEntries: entries,
+    });
+    mockFetchForecasts.mockResolvedValue({ timestamps: ['2024-01-01T10:00:00.000Z'], load_W: [1], pv_W: [2] });
+    mockFetchPrices.mockResolvedValue({ timestamps: ['2024-01-01T10:00:00.000Z'], importPrice_cents_per_kwh: [3], exportPrice_cents_per_kwh: [4] });
+
+    await refreshSeriesFromVrmAndPersist();
+
+    expect(saveData).toHaveBeenCalledWith(expect.objectContaining({ evScheduleEntries: entries }));
+  });
+
   it('records the last full SoC timestamp when MQTT reports 100%', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-13T12:34:56.000Z'));
