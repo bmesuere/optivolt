@@ -24,7 +24,7 @@ const fromDatetimeLocal = (value) => {
   const ms = new Date(value).getTime();
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 };
-const fmtEntryTime = new Intl.DateTimeFormat([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const fmtEntryTime = new Intl.DateTimeFormat([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 
 /**
  * Controller for the EV schedule entry list + inline editor (arrival / departure / target),
