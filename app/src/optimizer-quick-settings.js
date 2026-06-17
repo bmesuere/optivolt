@@ -22,10 +22,7 @@ export const QUICK_SETTING_DEFS = [
   { id: "evMaxChargeCurrent_A", selector: "#ev-max-charge-current", label: "EV max current (A)", kind: "number" },
   { id: "evBatteryCapacity_kWh", selector: "#ev-battery-capacity", label: "EV capacity (kWh)", kind: "number" },
   { id: "evChargeEfficiency_percent", selector: "#ev-charge-efficiency", label: "EV efficiency (%)", kind: "number" },
-  // These EV inputs sit in a button/unit group on the EV tab; mirrorClass drops the
-  // adjacency classes (rounded-r-none, border-r-0, pr-16) so the standalone clone renders cleanly.
-  { id: "evDepartureTime", selector: "#ev-departure-time", label: "EV ready by", kind: "datetime", mirrorClass: "form-input" },
-  { id: "evTargetSoc_percent", selector: "#ev-target-soc", label: "EV target SoC (%)", kind: "number", mirrorClass: "form-input" },
+  // mirrorClass drops the input's button/unit-group adjacency classes so the standalone clone renders cleanly.
   { id: "evSocValue_cents_per_kWh", selector: "#ev-soc-valuation", label: "EV SoC value (c€/kWh)", kind: "number", mirrorClass: "form-input" },
 ];
 

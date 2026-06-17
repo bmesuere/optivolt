@@ -3,8 +3,10 @@ import request from 'supertest';
 import app from '../../api/app.ts';
 
 vi.mock('../../api/services/planner-service.ts');
+vi.mock('../../api/services/data-store.ts');
 
 import { getLastPlan } from '../../api/services/planner-service.ts';
+import { loadData, saveData } from '../../api/services/data-store.ts';
 
 const START_MS = 1700000000000;
 
@@ -109,5 +111,73 @@ describe('GET /ev/current', () => {
     const res = await request(app).get('/ev/current');
 
     expect(res.body.timestampMs).toBe(START_MS);
+  });
+});
+
+describe('/ev/schedule-entries CRUD', () => {
+  const FAR_FUTURE = '2100-01-01T06:00:00Z';
+  const FAR_PAST = '2000-01-01T06:00:00Z';
+  const makeEntry = (over = {}) => ({
+    id: 'e1', type: 'departure', time: FAR_FUTURE,
+    createdAt: FAR_PAST, updatedAt: FAR_PAST, ...over,
+  });
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    saveData.mockResolvedValue();
+  });
+
+  it('creates an entry and persists it', async () => {
+    loadData.mockResolvedValue({ evScheduleEntries: [] });
+    const res = await request(app)
+      .post('/ev/schedule-entries')
+      .send({ type: 'departure', time: FAR_FUTURE, soc_percent: 80 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.entry).toMatchObject({ type: 'departure', soc_percent: 80 });
+    expect(res.body.entries).toHaveLength(1);
+    expect(saveData).toHaveBeenCalledWith(expect.objectContaining({
+      evScheduleEntries: expect.arrayContaining([expect.objectContaining({ type: 'departure' })]),
+    }));
+  });
+
+  it('rejects an invalid entry (target without SoC)', async () => {
+    loadData.mockResolvedValue({ evScheduleEntries: [] });
+    const res = await request(app)
+      .post('/ev/schedule-entries')
+      .send({ type: 'target', time: FAR_FUTURE });
+    expect(res.status).toBe(400);
+  });
+
+  it('prunes past entries on GET', async () => {
+    loadData.mockResolvedValue({
+      evScheduleEntries: [makeEntry({ id: 'past', time: FAR_PAST }), makeEntry({ id: 'future' })],
+    });
+    const res = await request(app).get('/ev/schedule-entries');
+    expect(res.status).toBe(200);
+    expect(res.body.entries.map(e => e.id)).toEqual(['future']);
+    expect(saveData).toHaveBeenCalled();
+  });
+
+  it('updates an entry', async () => {
+    loadData.mockResolvedValue({ evScheduleEntries: [makeEntry({ soc_percent: 80 })] });
+    const res = await request(app)
+      .patch('/ev/schedule-entries/e1')
+      .send({ soc_percent: 55 });
+    expect(res.status).toBe(200);
+    expect(res.body.entry.soc_percent).toBe(55);
+  });
+
+  it('deletes an entry', async () => {
+    loadData.mockResolvedValue({ evScheduleEntries: [makeEntry()] });
+    const res = await request(app).delete('/ev/schedule-entries/e1');
+    expect(res.status).toBe(200);
+    expect(res.body.entries).toEqual([]);
+  });
+
+  it('returns 404 for an unknown id on update and delete', async () => {
+    loadData.mockResolvedValue({ evScheduleEntries: [makeEntry()] });
+    expect((await request(app).patch('/ev/schedule-entries/nope').send({ soc_percent: 10 })).status).toBe(404);
+    expect((await request(app).delete('/ev/schedule-entries/nope')).status).toBe(404);
   });
 });

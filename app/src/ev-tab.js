@@ -1,7 +1,29 @@
 import { SOLUTION_COLORS, toRGBA, drawEvPowerChart, drawEvSocChartTab } from "./charts.js";
 import { formatKWh, updateStackedBarContainer } from "./state.js";
 
-export function updateEvPanel(els, rows, summary, stepSize_m = 15) {
+/**
+ * Derive the chart/table annotation inputs from the EV schedule entries: arrival and departure
+ * times (multiple possible) and the list of SoC deadlines. A departure carrying a SoC also
+ * contributes a target at its time.
+ */
+export function collectEvSettings(entries = []) {
+  const arrivals = [];
+  const departures = [];
+  const targets = [];
+  for (const e of entries) {
+    if (e.type === 'arrival') {
+      arrivals.push(e.time);
+    } else if (e.type === 'departure') {
+      departures.push(e.time);
+      if (e.soc_percent > 0) targets.push({ time: e.time, soc_percent: e.soc_percent });
+    } else if (e.type === 'target' && e.soc_percent > 0) {
+      targets.push({ time: e.time, soc_percent: e.soc_percent });
+    }
+  }
+  return { arrivals, departures, targets };
+}
+
+export function updateEvPanel(els, rows, summary, stepSize_m = 15, evSettings = { arrivals: [], departures: [], targets: [] }) {
   const evTotal = summary?.evChargeTotal_kWh ?? 0;
   const hasEv = evTotal > 0;
 
@@ -19,11 +41,6 @@ export function updateEvPanel(els, rows, summary, stepSize_m = 15) {
     els.evTabPlugStatus.textContent = isPlugged ? 'Connected' : 'Disconnected';
     els.evTabPlugStatus.className = `stat-value ${isPlugged ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`;
   }
-
-  const evSettings = {
-    targetSoc_percent: parseFloat(els.evTargetSoc?.value) || null,
-    departureTime: els.evDepartureTime?.value || null,
-  };
 
   const h = Math.max(0.000001, stepSize_m / 60);
   const evRows = rows.filter(r => (r.ev_soc_percent ?? 0) > 0);
@@ -140,6 +157,32 @@ function renderEvTable(evRows, tableEl, stepSize_m = 15, evSettings = {}) {
 
   const baseTh = "px-2 py-1.5 border-b border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900";
 
+  const rowIdxAtOrAfter = (time) => {
+    if (!time) return -1;
+    const ms = new Date(time).getTime();
+    if (!Number.isFinite(ms)) return -1;
+    return evRows.findIndex(r => r.timestampMs >= ms);
+  };
+  const rowIdxSet = (times) => {
+    const set = new Set();
+    for (const t of (times ?? [])) {
+      const idx = rowIdxAtOrAfter(t);
+      if (idx >= 0) set.add(idx);
+    }
+    return set;
+  };
+
+  const arrivalIdxs = rowIdxSet(evSettings.arrivals);
+  const departureIdxs = rowIdxSet(evSettings.departures);
+
+  // Map each target deadline to the first row at/after it, so the target % shows on that row.
+  const targetByRowIdx = new Map();
+  for (const t of (evSettings.targets ?? [])) {
+    const idx = rowIdxAtOrAfter(t.time);
+    if (idx >= 0 && !targetByRowIdx.has(idx)) targetByRowIdx.set(idx, t.soc_percent);
+  }
+  const hasTarget = targetByRowIdx.size > 0;
+
   const totalsRow = `<tr>
     <th class="${baseTh} text-left" scope="row"><span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-200/80 dark:bg-slate-700/60 text-[9px] font-bold text-slate-400 dark:text-slate-500" title="Column totals (kWh)">Σ</span></th>
     <th class="${baseTh} text-right font-mono tabular-nums text-[11px] font-semibold text-slate-500 dark:text-slate-400">${totGridCost_cents.toFixed(1)}¢</th>
@@ -149,15 +192,8 @@ function renderEvTable(evRows, tableEl, stepSize_m = 15, evSettings = {}) {
     <th class="${baseTh} text-right">${fmtTotalChip(totBatt,  'b2ev')}</th>
     <th class="${baseTh} text-right">${fmtTotalChip(totSolar, 'pv2ev')}</th>
     <th class="${baseTh}"></th>
-    ${evSettings.targetSoc_percent != null ? `<th class="${baseTh}"></th>` : ''}
+    ${hasTarget ? `<th class="${baseTh}"></th>` : ''}
   </tr>`;
-
-  const departureMs = evSettings.departureTime ? new Date(evSettings.departureTime).getTime() : null;
-  const departureIdx = departureMs != null
-    ? (evRows.findIndex(r => r.timestampMs >= departureMs))
-    : -1;
-
-  const hasTarget = evSettings.targetSoc_percent != null && !isNaN(evSettings.targetSoc_percent);
 
   const MODE_BADGE = {
     fixed:      `<span class="rounded px-1 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400">fixed</span>`,
@@ -184,7 +220,10 @@ function renderEvTable(evRows, tableEl, stepSize_m = 15, evSettings = {}) {
   const tbody = evRows.map((r, i) => {
     const timeLabel = fmtRowTime(r.timestampMs);
     const isMidnight = /^\d{2}\/\d{2}$/.test(timeLabel);
-    const isDeparture = i === departureIdx;
+    const isArrival = arrivalIdxs.has(i);
+    const isDeparture = departureIdxs.has(i);
+    const rowTargetSoc = targetByRowIdx.get(i);
+    const hasRowTarget = rowTargetSoc != null;
     const isCharging = (r.ev_charge ?? 0) > 0;
     const ampStr = isCharging ? (r.ev_charge_A ?? 0).toFixed(1) : '–';
     const modeHtml = isCharging ? (MODE_BADGE[r.ev_charge_mode] ?? '') : '';
@@ -192,18 +231,23 @@ function renderEvTable(evRows, tableEl, stepSize_m = 15, evSettings = {}) {
     const gridCost_cents = (r.g2ev || 0) * h / 1000 * (r.ic || 0);
     const costStr = gridCost_cents < 0.05 ? '–' : `${gridCost_cents.toFixed(1)}¢`;
 
-    const timeCell = isDeparture
-      ? `${timeLabel}<span class="ml-1.5 inline-block rounded px-1 py-0 text-[9px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" title="Ready by">ready</span>`
-      : timeLabel;
+    const badge = (label, classes, title) =>
+      `<span class="ml-1.5 inline-block rounded px-1 py-0 text-[9px] font-medium ${classes}" title="${title}">${label}</span>`;
+    const markers = [];
+    if (isArrival) markers.push(badge('arrives', 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400', 'Car arrives'));
+    if (isDeparture) markers.push(badge('leaves', 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400', 'Car leaves'));
+    if (hasRowTarget) markers.push(badge(`target ${rowTargetSoc}%`, 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400', 'Target SoC deadline'));
+    const timeCell = `${timeLabel}${markers.join('')}`;
 
     const targetCell = hasTarget
-      ? `<td class="px-2 py-1 text-right font-mono tabular-nums text-[11px] ${isDeparture ? 'font-semibold text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-600'}">${isDeparture ? `${evSettings.targetSoc_percent}%` : '—'}</td>`
+      ? `<td class="px-2 py-1 text-right font-mono tabular-nums text-[11px] ${hasRowTarget ? 'font-semibold text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-600'}">${hasRowTarget ? `${rowTargetSoc}%` : '—'}</td>`
       : '';
 
     const rowBg = isMidnight ? 'bg-slate-50/50 dark:bg-slate-800/30' : '';
+    const isEventRow = isArrival || isDeparture || hasRowTarget;
 
     return `
-    <tr class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 font-mono text-xs ${rowBg}${isDeparture ? ' ring-1 ring-inset ring-emerald-200 dark:ring-emerald-800/50' : ''}">
+    <tr class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 font-mono text-xs ${rowBg}${isEventRow ? ' ring-1 ring-inset ring-emerald-200 dark:ring-emerald-800/50' : ''}">
       <td class="px-2 py-1 text-left tabular-nums${isMidnight ? ' font-semibold text-slate-600 dark:text-slate-300' : ''}">${timeCell}</td>
       <td class="px-2 py-1 text-right">${costStr}</td>
       <td class="px-2 py-1 text-right">${modeHtml}</td>

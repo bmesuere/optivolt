@@ -8,8 +8,7 @@ import { renderTable } from "./table.js";
 import { debounce } from "./utils.js";
 import { saveConfig } from "./config-store.js";
 import { requestRemoteSolve } from "./api/api.js";
-import { updateEvPanel } from "./ev-tab.js";
-import { updateEvDepartureQuickSet } from "./ev-settings.js";
+import { updateEvPanel, collectEvSettings } from "./ev-tab.js";
 import {
   snapshotUI,
   updatePlanMeta,
@@ -17,7 +16,7 @@ import {
   updateSummaryUI,
 } from "./state.js";
 
-export function createOptimizerController({ els, services = {} }) {
+export function createOptimizerController({ els, services = {}, getEvEntries = () => [], onPlanRows = () => {} }) {
   const deps = {
     debounce,
     drawFlowsBarStackSigned,
@@ -28,7 +27,6 @@ export function createOptimizerController({ els, services = {} }) {
     requestRemoteSolve,
     saveConfig,
     snapshotUI,
-    updateEvDepartureQuickSet,
     updateEvPanel,
     updatePlanMeta,
     updateRebalanceNudgeUI,
@@ -84,8 +82,8 @@ export function createOptimizerController({ els, services = {} }) {
       renderScheduleTable();
 
       renderAllCharts(rows, cfgForViz, result.rebalanceWindow ?? null, evSettings);
-      deps.updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m);
-      deps.updateEvDepartureQuickSet(els, rows);
+      deps.updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m, evSettings);
+      onPlanRows(rows);
     } catch (err) {
       console.error(err);
       if (els.status) {
@@ -175,10 +173,7 @@ export function createOptimizerController({ els, services = {} }) {
   }
 
   function getEvSettings() {
-    return els.evEnabled?.checked ? {
-      departureTime: els.evDepartureTime?.value || null,
-      targetSoc_percent: parseFloat(els.evTargetSoc?.value) || null,
-    } : null;
+    return els.evEnabled?.checked ? collectEvSettings(getEvEntries()) : null;
   }
 
   return {

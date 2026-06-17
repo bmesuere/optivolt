@@ -14,18 +14,46 @@ export type TerminalSocValuation = 'zero' | 'min' | 'avg' | 'max' | 'custom';
  */
 export type EvChargeMode = 'off' | 'fixed' | 'solar_only' | 'solar_grid' | 'max';
 
+/**
+ * A window during which the EV is plugged in and available to charge, as the
+ * half-open slot range [startSlot, endSlot). Outside every window the EV is
+ * forced off (charging held at zero, SoC flat). The builder emits a single
+ * window today; the array form is forward-compatible with future multiple
+ * arrival/departure windows and recurring schedules.
+ */
+export interface EvAvailabilityWindow {
+  /** Inclusive first available slot, clamped to [0, T]. */
+  startSlot: number;
+  /** Exclusive last available slot, clamped to [startSlot, T]. */
+  endSlot: number;
+  /**
+   * SoC (Wh) assumed at startSlot, anchoring the SoC chain for this window.
+   * Today only the first window sets this (= the arrival SoC). A future window
+   * modelling a return trip would reset it; undefined means SoC carries over
+   * from the previous slot.
+   */
+  resetSoc_Wh?: number;
+}
+
+/** A SoC deadline: ev_soc must be at least soc_Wh by slot. */
+export interface EvSocTarget {
+  /** 0-based slot index at which the constraint is pinned. */
+  slot: number;
+  /** Required minimum SoC at that slot, in Wh. */
+  soc_Wh: number;
+}
+
 export interface EvConfig {
   evMinChargePower_W: number;
   evMaxChargePower_W: number;
   evBatteryCapacity_Wh: number;
   evInitialSoc_percent: number;
-  evTargetSoc_percent: number;
-  /** First slot the EV is available to charge (0 = from the start of the horizon). */
-  evArrivalSlot: number;
-  /** Number of available charging slots before departure. Constraint emitted if <= T. */
-  evDepartureSlot: number;
   /** AC-to-DC efficiency of the EV's onboard charger, as a percentage (e.g. 90 = 90%). */
   evChargeEfficiency_percent: number;
+  /** Availability windows; charging is forced off outside all of them. */
+  availabilityWindows: EvAvailabilityWindow[];
+  /** SoC deadlines layered onto the plan. Empty means no enforced target (latent charging only). */
+  targets: EvSocTarget[];
 }
 
 /**

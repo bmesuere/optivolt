@@ -144,8 +144,8 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   const solveMs = performance.now() - t0;
   const evCfg = cfg.ev;
   const evInfo = evCfg ? {
-    depSlot: evCfg.evDepartureSlot,
-    deficitWh: Math.round((evCfg.evTargetSoc_percent - evCfg.evInitialSoc_percent) / 100 * evCfg.evBatteryCapacity_Wh),
+    windows: evCfg.availabilityWindows.map((w) => [w.startSlot, w.endSlot]),
+    targets: evCfg.targets.map((t) => ({ slot: t.slot, soc_Wh: Math.round(t.soc_Wh) })),
     minW: evCfg.evMinChargePower_W,
     maxW: evCfg.evMaxChargePower_W,
   } : null;

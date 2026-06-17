@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { resolveDataDir, readJson, writeJson } from './json-store.ts';
 import type { Data, TimeSeries } from '../types.ts';
 import { validatePredictionAdjustment } from './prediction-adjustments.ts';
+import { validateEvScheduleEntry } from './ev-schedule-entries.ts';
 
 const DATA_DIR = resolveDataDir();
 const DATA_PATH = path.join(DATA_DIR, 'data.json');
@@ -45,6 +46,14 @@ export function validateData(d: Data): Data {
     }
     for (const adjustment of d.predictionAdjustments) {
       validatePredictionAdjustment(adjustment);
+    }
+  }
+  if (d.evScheduleEntries !== undefined) {
+    if (!Array.isArray(d.evScheduleEntries)) {
+      throw new Error("Invalid evScheduleEntries: must be an array");
+    }
+    for (const entry of d.evScheduleEntries) {
+      validateEvScheduleEntry(entry);
     }
   }
   return d;

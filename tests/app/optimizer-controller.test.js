@@ -28,6 +28,7 @@ function setupController() {
   const els = {
     cap: input('9000'),
     evDepartureTime: input('2026-05-01T18:30'),
+    evDepartureTargetSoc: input('80'),
     evEnabled: checkbox(true),
     evTargetSoc: input('80'),
     flows: document.createElement('canvas'),
@@ -61,15 +62,15 @@ function setupController() {
     }),
     saveConfig: vi.fn().mockResolvedValue(undefined),
     snapshotUI: vi.fn(() => ({ tableShowKwh: els.tableKwh.checked })),
-    updateEvDepartureQuickSet: vi.fn(),
     updateEvPanel: vi.fn(),
     updatePlanMeta: vi.fn(),
     updateRebalanceNudgeUI: vi.fn(),
     updateSummaryUI: vi.fn(),
   };
 
+  const evEntries = [{ type: 'departure', time: '2026-05-01T18:30', soc_percent: 80 }];
   return {
-    controller: createOptimizerController({ els, services }),
+    controller: createOptimizerController({ els, services, getEvEntries: () => evEntries }),
     els,
     rebalanceWindow,
     rows,
@@ -110,8 +111,9 @@ describe('optimizer controller', () => {
     expect(tableArgs.showDess).toBe(false);
     expect(tableArgs.rebalanceWindow).toBe(rebalanceWindow);
     expect(tableArgs.evSettings).toEqual({
-      departureTime: '2026-05-01T18:30',
-      targetSoc_percent: 80,
+      arrivals: [],
+      departures: ['2026-05-01T18:30'],
+      targets: [{ time: '2026-05-01T18:30', soc_percent: 80 }],
     });
 
     expect(services.drawFlowsBarStackSigned).toHaveBeenCalledWith(
@@ -124,8 +126,7 @@ describe('optimizer controller', () => {
     expect(services.drawSocChart).toHaveBeenCalledWith(els.soc, rows, 30, tableArgs.evSettings);
     expect(services.drawPricesStepLines).toHaveBeenCalledWith(els.prices, rows, 30);
     expect(services.drawLoadPvGrouped).toHaveBeenCalledWith(els.loadpv, rows, 30);
-    expect(services.updateEvPanel).toHaveBeenCalledWith(els, rows, summary, 30);
-    expect(services.updateEvDepartureQuickSet).toHaveBeenCalledWith(els, rows);
+    expect(services.updateEvPanel).toHaveBeenCalledWith(els, rows, summary, 30, tableArgs.evSettings);
     expect(els.status.textContent).toBe('Plan updated');
     expect(els.run.disabled).toBe(false);
     expect(els.run.classList.contains('loading')).toBe(false);

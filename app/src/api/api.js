@@ -36,6 +36,10 @@ export function fetchHaEntityState(entityId) {
 // --- EV ---
 export const fetchEvSchedule = () => getJson('/ev/schedule');
 export const fetchEvCurrent = () => getJson('/ev/current');
+export const fetchEvScheduleEntries = () => getJson('/ev/schedule-entries');
+export const createEvScheduleEntry = (entry) => postJson('/ev/schedule-entries', entry);
+export const updateEvScheduleEntry = (id, entry) => postJson(`/ev/schedule-entries/${encodeURIComponent(id)}`, entry, { method: 'PATCH' });
+export const deleteEvScheduleEntry = (id) => postJson(`/ev/schedule-entries/${encodeURIComponent(id)}`, {}, { method: 'DELETE' });
 
 // --- Predictions ---
 export const fetchPredictionConfig = () => getJson('/predictions/config');
