@@ -1,4 +1,14 @@
-import mqtt, { type MqttClient } from 'mqtt';
+import mqtt, { type MqttClient, type IClientOptions } from 'mqtt';
+import type { PeerCertificate } from 'tls';
+
+
+export type MqttTlsOptions = {
+  rejectUnauthorized?: boolean;
+  checkServerIdentity?: (host: string, cert: PeerCertificate) => Error | undefined;
+  ca?: string | Buffer;
+  cert?: string | Buffer;
+  key?: string | Buffer;
+};
 
 export interface VictronMqttConfig {
   host?: string;
@@ -8,6 +18,7 @@ export interface VictronMqttConfig {
   protocol?: string;
   reconnectPeriod?: number;
   serial?: string;
+  tlsOptions?: MqttTlsOptions;
 }
 
 interface WaitForMessageOptions {
@@ -38,6 +49,7 @@ export class VictronMqttClient {
   protocol: string;
   reconnectPeriod: number;
   serial: string | null;
+  tlsOptions: MqttTlsOptions;
   private _serialPromise: Promise<string> | null;
   private _clientPromise: Promise<MqttClient> | null;
 
@@ -46,9 +58,10 @@ export class VictronMqttClient {
     port = 1883,
     username = '',
     password = '',
-    protocol = 'mqtt',    // 'mqtt', 'ws', 'wss', ...
+    protocol = 'mqtt',    // 'mqtt', 'mqtts', 'ws', 'wss', ...
     reconnectPeriod = 0,  // 0 = no auto reconnect by default
     serial,               // optional: if you already know the portal id
+    tlsOptions = {},
   }: VictronMqttConfig = {}) {
     this.host = host;
     this.port = port;
@@ -56,6 +69,7 @@ export class VictronMqttClient {
     this.password = password || undefined;
     this.protocol = protocol;
     this.reconnectPeriod = reconnectPeriod;
+    this.tlsOptions = tlsOptions;
 
     this.serial = serial ?? null;  // cached portal id once known
     this._serialPromise = null;   // in-flight detection, if any
@@ -71,6 +85,7 @@ export class VictronMqttClient {
       username: this.username,
       password: this.password,
       reconnectPeriod: this.reconnectPeriod,
+            ...this.tlsOptions,
     });
 
     const client = await this._clientPromise;
