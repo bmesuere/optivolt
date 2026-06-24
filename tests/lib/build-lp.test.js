@@ -272,4 +272,29 @@ describe('buildLP — EV charging (MILP)', () => {
     const lp = buildLP({ ...base, evSocValue_cents_per_kWh: 20 });
     expect(lp).not.toContain('ev_soc_');
   });
+
+  it('does not emit force-off constraints when evArrivalSlot is 0 (or unset)', () => {
+    const lp = buildLP({ ...base, ev: evCfg });
+    expect(lp).not.toContain('c_ev_off_before_arrival_');
+  });
+
+  it('forces ev_on = 0 for every slot before evArrivalSlot', () => {
+    const lp = buildLP({ ...base, ev: { ...evCfg, evArrivalSlot: 3, evDepartureSlot: T + 5 } });
+    // slots 0..2 forced off, slots 3+ free to charge
+    expect(lp).toMatch(/c_ev_off_before_arrival_0: ev_on_0 = 0\b/);
+    expect(lp).toContain('c_ev_off_before_arrival_1: ev_on_1 = 0');
+    expect(lp).toContain('c_ev_off_before_arrival_2: ev_on_2 = 0');
+    expect(lp).not.toContain('c_ev_off_before_arrival_3:');
+  });
+
+  it('counts only post-arrival slots in the c_ev_min_on cardinality bound', () => {
+    // initial 75% = 45000, target 80% = 48000 → deficit 3000 Wh.
+    // perSlot = 0.25 * 3680 = 920 → kMin = ceil(3000/920) = 4; chargeableSlots = depLimit(5) - arrival(1) = 4.
+    const lp = buildLP({ ...base, ev: { ...evCfg, evInitialSoc_percent: 75, evArrivalSlot: 1, evDepartureSlot: T } });
+    const onLine = lp.split('\n').find((l) => l.trim().startsWith('c_ev_min_on:'));
+    expect(onLine).toBeDefined();
+    // The bound must not reference the forced-off slot 0, and must require all 4 remaining slots.
+    expect(onLine).not.toMatch(/\bev_on_0\b/);
+    expect(onLine).toMatch(/>= 4\b/);
+  });
 });
