@@ -66,6 +66,7 @@ export function mapRowsToDess(rows: PlanRow[], cfg: SolverConfig, options: DessM
     const pv2g = row.pv2g;
     const b2l = row.b2l;
     const b2g = row.b2g;
+    const g2ev = row.g2ev ?? 0;
 
     // Flow booleans
     const hasG2L = g2l > FLOW_EPSILON_W;
@@ -103,7 +104,7 @@ export function mapRowsToDess(rows: PlanRow[], cfg: SolverConfig, options: DessM
       // This means we'll want to use the grid as much as possible and store PV in the battery.
       // So we set pro-battery (and a target SoC that's higher than current SoC)
       strategy = Strategy.proBattery;
-      if (g2l + g2b >= cfg.maxGridImport_W - FLOW_EPSILON_W) {
+      if (g2l + g2b + g2ev >= cfg.maxGridImport_W - FLOW_EPSILON_W) {
         // Grid import is at (or very close to) max capacity.
         // We want to make sure to charge at max speed, even if the load would be lower than expected.
         // So we artificially increase the target SoC.
@@ -219,11 +220,20 @@ function aggregateSegmentPrice(
 
 /**
  * We want to find the tipping point price where battery usage is favored over grid usage.
- * Within the given segment, we look for grid→load flows and keep track of the highest price observed during these flows.
+ * Within the given segment, we look for grid flows that serve demand the battery could have
+ * served instead — grid→load or grid→EV — and keep the highest price observed while the
+ * battery still had discharge headroom. (Grid charging the EV at a high price while the
+ * battery could have supplied it is the same revealed-marginal-value signal as grid→load.)
  */
 function findHighestGridUsageCost(rows: PlanRow[], segment: Segment | null, cfg: SolverConfig): number {
   const maxDischarge = cfg.maxDischargePower_W - FLOW_EPSILON_W;
-  return aggregateSegmentPrice(rows, segment, r => r.g2l > FLOW_EPSILON_W && r.b2l + (r.b2ev ?? 0) < maxDischarge, r => r.ic, 'max');
+  return aggregateSegmentPrice(
+    rows,
+    segment,
+    r => (r.g2l > FLOW_EPSILON_W || (r.g2ev ?? 0) > FLOW_EPSILON_W) && r.b2l + (r.b2ev ?? 0) < maxDischarge,
+    r => r.ic,
+    'max',
+  );
 }
 
 /**
