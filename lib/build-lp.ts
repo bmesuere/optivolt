@@ -98,13 +98,29 @@ export function buildLP({
   const evActive        = ev != null;
   const evCapacityWh    = ev?.evBatteryCapacity_Wh ?? 0;
   const evInitialWh     = (ev?.evInitialSoc_percent ?? 0) / 100 * evCapacityWh;
-  const evTargetWh      = (ev?.evTargetSoc_percent  ?? 0) / 100 * evCapacityWh;
   const evMinPow_W      = ev?.evMinChargePower_W ?? 0;
   const evMaxPow_W      = ev?.evMaxChargePower_W ?? 0;
-  const evDepSlot       = ev?.evDepartureSlot ?? (T + 1);
-  // First slot the EV is available to charge. Clamped to [0, T]; slots before this are forced off.
-  const evArrivalSlot   = Math.min(T, Math.max(0, ev?.evArrivalSlot ?? 0));
   const evChargeWhPerW  = stepHours * ((ev?.evChargeEfficiency_percent ?? 100) / 100);
+
+  // Availability map: clamp windows to [0, T], drop empties, then derive per-slot availability,
+  // the SoC-reset points (window starts that re-anchor the SoC chain), and the last slot the EV
+  // can charge in. Outside every window the EV is forced off.
+  const evWindows = (ev?.availabilityWindows ?? [])
+    .map((w) => ({
+      startSlot: Math.min(T, Math.max(0, w.startSlot)),
+      endSlot: Math.min(T, Math.max(0, w.endSlot)),
+      resetSoc_Wh: w.resetSoc_Wh,
+    }))
+    .filter((w) => w.endSlot > w.startSlot);
+  const evAvailable: boolean[] = Array(T).fill(false);
+  for (const w of evWindows) for (let t = w.startSlot; t < w.endSlot; t++) evAvailable[t] = true;
+  const evResetAt = new Map<number, number>();
+  for (const w of evWindows) if (w.resetSoc_Wh != null) evResetAt.set(w.startSlot, w.resetSoc_Wh);
+  const evLastAvailableSlot = evAvailable.lastIndexOf(true);
+  // SoC deadlines, clamped to in-horizon slots and to battery capacity.
+  const evTargets = (ev?.targets ?? [])
+    .filter((tg) => tg.slot >= 0 && tg.slot < T)
+    .map((tg) => ({ slot: tg.slot, soc_Wh: Math.min(tg.soc_Wh, evCapacityWh) }));
 
   // Variable name helpers
   const gridToLoad = (t: number) => `grid_to_load_${t}`;
@@ -158,9 +174,11 @@ export function buildLP({
   if (terminalPrice_cents_per_Wh > 0) {
     objTerms.push(` - ${toNum(terminalPrice_cents_per_Wh)} ${soc(T - 1)}`);
   }
-  // EV SoC valuation: value energy left in the EV battery at the end of the horizon
-  if (evActive && evTerminalPrice_cents_per_Wh > 0) {
-    objTerms.push(` - ${toNum(evTerminalPrice_cents_per_Wh)} ${evSocVar(T - 1)}`);
+  // EV SoC valuation: value energy left in the EV battery at the last slot it is available.
+  // (SoC is held flat after the last window, so this equals the horizon-end SoC today, but
+  // valuing the last available slot is correct once multiple windows exist.)
+  if (evActive && evTerminalPrice_cents_per_Wh > 0 && evLastAvailableSlot >= 0) {
+    objTerms.push(` - ${toNum(evTerminalPrice_cents_per_Wh)} ${evSocVar(evLastAvailableSlot)}`);
   }
   // Rebalancing symmetry-breaking: escalating penalty prefers earlier windows when cost-equivalent.
   if (D > 0) {
@@ -241,36 +259,49 @@ export function buildLP({
       lines.push(` c_ev_max_${t}: ${gridToEv(t)} + ${pvToEv(t)} + ${batteryToEv(t)} - ${toNum(evMaxPow_W)} ${evOn(t)} <= 0`);
     }
 
-    // Before the EV arrives it cannot charge: forcing ev_on_t = 0 zeroes all EV flows
-    // via c_ev_min/c_ev_max, so ev_soc stays flat at the initial value until arrival.
-    for (let t = 0; t < evArrivalSlot; t++) {
-      lines.push(` c_ev_off_before_arrival_${t}: ${evOn(t)} = 0`);
+    // Outside every availability window the EV cannot charge: forcing ev_on_t = 0 zeroes all
+    // EV flows via c_ev_min/c_ev_max, so ev_soc stays flat (before arrival, after departure,
+    // and in any gap between windows).
+    for (let t = 0; t < T; t++) {
+      if (!evAvailable[t]) lines.push(` c_ev_off_${t}: ${evOn(t)} = 0`);
     }
 
-    lines.push(` c_ev_soc_0: ${evSocVar(0)} - ${toNum(evChargeWhPerW)} ${gridToEv(0)} - ${toNum(evChargeWhPerW)} ${pvToEv(0)} - ${toNum(evChargeWhPerW)} ${batteryToEv(0)} = ${toNum(evInitialWh)}`);
-    for (let t = 1; t < T; t++) {
-      lines.push(` c_ev_soc_${t}: ${evSocVar(t)} - ${evSocVar(t - 1)} - ${toNum(evChargeWhPerW)} ${gridToEv(t)} - ${toNum(evChargeWhPerW)} ${pvToEv(t)} - ${toNum(evChargeWhPerW)} ${batteryToEv(t)} = 0`);
+    // SoC evolution. Slot 0 anchors to the initial SoC; any other window start with a reset
+    // re-anchors the chain (a future returning trip). All other slots chain from the previous.
+    for (let t = 0; t < T; t++) {
+      const reset = t === 0 ? evInitialWh : evResetAt.get(t);
+      const flows = `- ${toNum(evChargeWhPerW)} ${gridToEv(t)} - ${toNum(evChargeWhPerW)} ${pvToEv(t)} - ${toNum(evChargeWhPerW)} ${batteryToEv(t)}`;
+      if (reset != null) {
+        lines.push(` c_ev_soc_${t}: ${evSocVar(t)} ${flows} = ${toNum(reset)}`);
+      } else {
+        lines.push(` c_ev_soc_${t}: ${evSocVar(t)} - ${evSocVar(t - 1)} ${flows} = 0`);
+      }
     }
 
-    if (evDepSlot <= T && evDepSlot > 0) {
-      lines.push(` c_ev_target: ${evSocVar(evDepSlot - 1)} >= ${toNum(evTargetWh)}`);
+    // SoC deadlines layered onto the plan.
+    for (const tg of evTargets) {
+      lines.push(` c_ev_target_${tg.slot}: ${evSocVar(tg.slot)} >= ${toNum(tg.soc_Wh)}`);
     }
 
     // Cardinality lower bound: tightens the LP relaxation by telling the solver the minimum
-    // number of on-slots needed to meet the target. Without this, each ev_on_t floats freely
-    // in [0,1] during LP relaxation, giving weak bounds and causing excessive MIP branching.
-    const evDeficitWh = Math.max(0, evTargetWh - evInitialWh);
+    // number of on-slots needed to meet the binding target. Without this, each ev_on_t floats
+    // freely in [0,1] during LP relaxation, giving weak bounds and excessive MIP branching.
+    // Count only slots the EV can actually charge in (available, at or before the deadline).
     const evChargeWhPerSlot = evChargeWhPerW * evMaxPow_W;
-    if (evDeficitWh > 0 && evChargeWhPerSlot > 0) {
-      const kMin = Math.ceil(evDeficitWh / evChargeWhPerSlot);
-      const depLimit = Math.min(evDepSlot, T);
-      // Only count slots the EV can actually charge in (arrival .. departure).
-      const chargeableSlots = depLimit - evArrivalSlot;
-      if (kMin >= 1 && kMin <= chargeableSlots && chargeableSlots > 0) {
+    if (evTargets.length > 0 && evChargeWhPerSlot > 0) {
+      let bestKMin = 0;
+      for (const tg of evTargets) {
+        const deficitWh = Math.max(0, tg.soc_Wh - evInitialWh);
+        if (deficitWh <= 0) continue;
+        const kMin = Math.ceil(deficitWh / evChargeWhPerSlot);
+        let chargeable = 0;
+        for (let t = 0; t <= tg.slot; t++) if (evAvailable[t]) chargeable++;
+        if (kMin >= 1 && kMin <= chargeable && kMin > bestKMin) bestKMin = kMin;
+      }
+      if (bestKMin >= 1) {
         const termParts: string[] = [];
-        for (let t = evArrivalSlot; t < depLimit; t++) termParts.push(` ${evOn(t)}`);
-        const terms = termParts.join(' +');
-        lines.push(` c_ev_min_on:${terms} >= ${kMin}`);
+        for (let t = 0; t < T; t++) if (evAvailable[t]) termParts.push(` ${evOn(t)}`);
+        lines.push(` c_ev_min_on:${termParts.join(' +')} >= ${bestKMin}`);
       }
     }
   }

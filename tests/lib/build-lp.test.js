@@ -169,8 +169,9 @@ describe('buildLP — EV charging (MILP)', () => {
     evMaxChargePower_W: 3680,
     evBatteryCapacity_Wh: 60000,
     evInitialSoc_percent: 50,  // → 30 000 Wh
-    evTargetSoc_percent: 80,   // → 48 000 Wh
-    evDepartureSlot: 4,        // deadline at slot index 3 (0-based)
+    // Available the whole horizon [0, 5); target 80% (= 48 000 Wh) by slot 3.
+    availabilityWindows: [{ startSlot: 0, endSlot: T, resetSoc_Wh: 30000 }],
+    targets: [{ slot: 3, soc_Wh: 48000 }],
   };
 
   it('does not include EV variables or Binaries when ev is not set', () => {
@@ -215,11 +216,11 @@ describe('buildLP — EV charging (MILP)', () => {
     expect(lp).toMatch(/c_ev_soc_1:.*= 0\b/);
   });
 
-  it('includes target SoC constraint at departure slot - 1', () => {
+  it('includes a target SoC constraint at each target slot', () => {
     const lp = buildLP({ ...base, ev: evCfg });
-    // evDepartureSlot=4 → constraint on ev_soc_3 >= targetWh = 80% of 60000 = 48000
-    expect(lp).toContain('c_ev_target:');
-    expect(lp).toMatch(/c_ev_target:.*ev_soc_3.*>= 48000\b/);
+    // target { slot: 3, soc_Wh: 48000 } → ev_soc_3 >= 48000
+    expect(lp).toContain('c_ev_target_3:');
+    expect(lp).toMatch(/c_ev_target_3:.*ev_soc_3.*>= 48000\b/);
   });
 
   it('adds pv_to_ev term to PV split constraints', () => {
@@ -237,9 +238,9 @@ describe('buildLP — EV charging (MILP)', () => {
     expect(lp).toMatch(/c_grid_import_cap_0:.*grid_to_ev_0/);
   });
 
-  it('omits c_ev_target when evDepartureSlot > T', () => {
-    const lp = buildLP({ ...base, ev: { ...evCfg, evDepartureSlot: T + 5 } });
-    expect(lp).not.toContain('c_ev_target:');
+  it('omits target constraints when targets is empty', () => {
+    const lp = buildLP({ ...base, ev: { ...evCfg, targets: [] } });
+    expect(lp).not.toContain('c_ev_target_');
   });
 
   it('applies evChargeEfficiency_percent to EV SoC evolution coefficients', () => {
@@ -255,10 +256,33 @@ describe('buildLP — EV charging (MILP)', () => {
   });
 
   it('values terminal EV SoC in the objective when evSocValue_cents_per_kWh > 0', () => {
-    // 20 c€/kWh → 0.02 c€/Wh, no discharge-efficiency factor; valued at the last slot (T-1=4)
+    // 20 c€/kWh → 0.02 c€/Wh, no discharge-efficiency factor; valued at the last
+    // available slot, which for the full-horizon window [0,5) is index 4.
     const lp = buildLP({ ...base, ev: evCfg, evSocValue_cents_per_kWh: 20 });
     const objLine = lp.split('\n').find((l) => l.trim().startsWith('obj:'));
     expect(objLine).toMatch(/- 0\.02 ev_soc_4\b/);
+  });
+
+  it('values EV SoC at the last available slot, not the horizon end', () => {
+    // Window [0,3) → last available slot is index 2. No charging is rewarded after departure.
+    const lp = buildLP({
+      ...base,
+      ev: { ...evCfg, availabilityWindows: [{ startSlot: 0, endSlot: 3, resetSoc_Wh: 30000 }], targets: [] },
+      evSocValue_cents_per_kWh: 20,
+    });
+    const objLine = lp.split('\n').find((l) => l.trim().startsWith('obj:'));
+    expect(objLine).toMatch(/- 0\.02 ev_soc_2\b/);
+    expect(objLine).not.toMatch(/ev_soc_4\b/);
+  });
+
+  it('omits the EV SoC valuation term when no slot is available', () => {
+    const lp = buildLP({
+      ...base,
+      ev: { ...evCfg, availabilityWindows: [], targets: [] },
+      evSocValue_cents_per_kWh: 20,
+    });
+    const objLine = lp.split('\n').find((l) => l.trim().startsWith('obj:'));
+    expect(objLine).not.toContain('ev_soc_');
   });
 
   it('does not value EV SoC when evSocValue_cents_per_kWh is 0', () => {
@@ -273,24 +297,76 @@ describe('buildLP — EV charging (MILP)', () => {
     expect(lp).not.toContain('ev_soc_');
   });
 
-  it('does not emit force-off constraints when evArrivalSlot is 0 (or unset)', () => {
+  it('does not emit force-off constraints when the EV is available the whole horizon', () => {
     const lp = buildLP({ ...base, ev: evCfg });
-    expect(lp).not.toContain('c_ev_off_before_arrival_');
+    expect(lp).not.toContain('c_ev_off_');
   });
 
-  it('forces ev_on = 0 for every slot before evArrivalSlot', () => {
-    const lp = buildLP({ ...base, ev: { ...evCfg, evArrivalSlot: 3, evDepartureSlot: T + 5 } });
+  it('forces ev_on = 0 for every slot before arrival', () => {
+    const lp = buildLP({ ...base, ev: { ...evCfg, availabilityWindows: [{ startSlot: 3, endSlot: T, resetSoc_Wh: 30000 }] } });
     // slots 0..2 forced off, slots 3+ free to charge
-    expect(lp).toMatch(/c_ev_off_before_arrival_0: ev_on_0 = 0\b/);
-    expect(lp).toContain('c_ev_off_before_arrival_1: ev_on_1 = 0');
-    expect(lp).toContain('c_ev_off_before_arrival_2: ev_on_2 = 0');
-    expect(lp).not.toContain('c_ev_off_before_arrival_3:');
+    expect(lp).toMatch(/c_ev_off_0: ev_on_0 = 0\b/);
+    expect(lp).toContain('c_ev_off_1: ev_on_1 = 0');
+    expect(lp).toContain('c_ev_off_2: ev_on_2 = 0');
+    expect(lp).not.toContain('c_ev_off_3:');
   });
 
-  it('counts only post-arrival slots in the c_ev_min_on cardinality bound', () => {
+  it('forces ev_on = 0 for every slot after departure', () => {
+    // Window [0,3): the car leaves at slot 3, so slots 3,4 must be forced off.
+    const lp = buildLP({ ...base, ev: { ...evCfg, availabilityWindows: [{ startSlot: 0, endSlot: 3, resetSoc_Wh: 30000 }], targets: [] } });
+    expect(lp).not.toContain('c_ev_off_0:');
+    expect(lp).not.toContain('c_ev_off_2:');
+    expect(lp).toContain('c_ev_off_3: ev_on_3 = 0');
+    expect(lp).toContain('c_ev_off_4: ev_on_4 = 0');
+  });
+
+  it('keeps charging available after an early target deadline (decoupled)', () => {
+    // Available all horizon [0,5), but a target deadline at slot 2. Slots 3,4 stay chargeable.
+    const lp = buildLP({ ...base, ev: { ...evCfg, targets: [{ slot: 2, soc_Wh: 40000 }] } });
+    expect(lp).toContain('c_ev_target_2:');
+    expect(lp).not.toContain('c_ev_off_3:');
+    expect(lp).not.toContain('c_ev_off_4:');
+  });
+
+  it('forces ev_on = 0 for all slots and omits targets when no window is available', () => {
+    const lp = buildLP({ ...base, ev: { ...evCfg, availabilityWindows: [], targets: [] } });
+    for (let t = 0; t < T; t++) {
+      expect(lp).toContain(`c_ev_off_${t}: ev_on_${t} = 0`);
+    }
+    expect(lp).not.toContain('c_ev_target_');
+    expect(lp).not.toContain('c_ev_min_on:');
+  });
+
+  it('resets the SoC chain at a window start with resetSoc_Wh (forward-compat)', () => {
+    // Two windows; the second starts at slot 3 with a reset to 20000 Wh (a returning trip).
+    const lp = buildLP({
+      ...base,
+      ev: {
+        ...evCfg,
+        availabilityWindows: [
+          { startSlot: 0, endSlot: 2, resetSoc_Wh: 30000 },
+          { startSlot: 3, endSlot: T, resetSoc_Wh: 20000 },
+        ],
+        targets: [],
+      },
+    });
+    // The window-start slot uses an absolute RHS reset (no chained - ev_soc_2 term).
+    expect(lp).toMatch(/c_ev_soc_3:.*= 20000\b/);
+    expect(lp).not.toMatch(/c_ev_soc_3:.*ev_soc_2/);
+  });
+
+  it('counts only available slots in the c_ev_min_on cardinality bound', () => {
     // initial 75% = 45000, target 80% = 48000 → deficit 3000 Wh.
-    // perSlot = 0.25 * 3680 = 920 → kMin = ceil(3000/920) = 4; chargeableSlots = depLimit(5) - arrival(1) = 4.
-    const lp = buildLP({ ...base, ev: { ...evCfg, evInitialSoc_percent: 75, evArrivalSlot: 1, evDepartureSlot: T } });
+    // perSlot = 0.25 * 3680 = 920 → kMin = ceil(3000/920) = 4; available slots [1,5) = 4.
+    const lp = buildLP({
+      ...base,
+      ev: {
+        ...evCfg,
+        evInitialSoc_percent: 75,
+        availabilityWindows: [{ startSlot: 1, endSlot: T, resetSoc_Wh: 45000 }],
+        targets: [{ slot: 4, soc_Wh: 48000 }],
+      },
+    });
     const onLine = lp.split('\n').find((l) => l.trim().startsWith('c_ev_min_on:'));
     expect(onLine).toBeDefined();
     // The bound must not reference the forced-off slot 0, and must require all 4 remaining slots.

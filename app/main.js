@@ -2,11 +2,10 @@ import { refreshVrmSettings } from "./src/api/api.js";
 import { loadInitialConfig } from "./src/config-store.js";
 import { initPredictionsTab } from "./src/predictions.js";
 import {
-  initDepartureDatetimeMin,
   refreshEvSensorStates,
   wireEvSensorInputs,
-  wireEvArrivalQuickSet,
 } from "./src/ev-settings.js";
+import { createEvScheduleController } from "./src/ev-schedule.js";
 import { initOptimizerQuickSettings } from "./src/optimizer-quick-settings.js";
 import { createOptimizerController } from "./src/optimizer-controller.js";
 import {
@@ -30,7 +29,16 @@ function revealCards(panel) {
 
 // ---------- DOM ----------
 const els = getElements();
-const optimizer = createOptimizerController({ els });
+let evSchedule = null;
+const optimizer = createOptimizerController({
+  els,
+  getEvEntries: () => evSchedule?.getEntries() ?? [],
+  onPlanRows: (rows) => evSchedule?.refreshHorizonQuickSet(rows),
+});
+evSchedule = createEvScheduleController({
+  els,
+  onChange: () => optimizer.debounceRun(),
+});
 let optimizerQuickSettings = null;
 
 // ---------- Boot ----------
@@ -138,8 +146,8 @@ async function boot() {
     persistConfigDebounced: optimizer.persistConfigDebounced,
     debounceRun: optimizer.debounceRun,
   });
-  initDepartureDatetimeMin(els);
-  wireEvArrivalQuickSet(els);
+  evSchedule.wireEditor();
+  await evSchedule.loadEntries();
 
   if (els.status) {
     els.status.textContent =

@@ -49,10 +49,6 @@ export interface Settings {
   evBatteryCapacity_kWh: number;
   evSocSensor: string;
   evPlugSensor: string;
-  evArrivalTime: string;
-  evArrivalSocOverride_percent: string;
-  evDepartureTime: string;
-  evTargetSoc_percent: number;
   evChargeEfficiency_percent: number;
   evSocValue_cents_per_kWh: number;
 }
@@ -83,6 +79,18 @@ export interface PredictionAdjustment {
   updatedAt: string;
 }
 
+export type EvScheduleEntryType = 'arrival' | 'departure' | 'target';
+
+export interface EvScheduleEntry {
+  id: string;
+  type: EvScheduleEntryType;
+  time: string;
+  /** Arrival: assumed SoC on arrival. Departure: optional target SoC at departure. Target: required SoC. */
+  soc_percent?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Data {
   load: TimeSeries;
   pv: TimeSeries;
@@ -92,6 +100,7 @@ export interface Data {
   lastFullSocAt?: string | null;
   rebalanceState?: RebalanceState;
   predictionAdjustments?: PredictionAdjustment[];
+  evScheduleEntries?: EvScheduleEntry[];
 }
 
 // ----------------------------- Plan rows with DESS ----------------------
