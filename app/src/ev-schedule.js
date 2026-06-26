@@ -145,7 +145,8 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     } else if (type === "target") {
       showError("A target needs a required SoC."); return null;
     }
-    return { type, time, ...(soc_percent != null ? { soc_percent } : {}) };
+    // Always send soc_percent (null when cleared) so an edit can remove a previously-set value.
+    return { type, time, soc_percent: soc_percent ?? null };
   }
 
   async function saveEntry() {

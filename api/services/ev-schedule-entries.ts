@@ -32,7 +32,9 @@ function parseEntryFields(
   const time = String(input.time ?? base?.time ?? '');
   const timeMs = toTimestamp(time, 'time');
 
-  const socRaw = input.soc_percent ?? base?.soc_percent;
+  // Distinguish "field absent" (keep the existing value) from "field present but empty"
+  // (the user cleared it), so an edit can actually remove a previously-set soc_percent.
+  const socRaw = input.soc_percent !== undefined ? input.soc_percent : base?.soc_percent;
   const hasSoc = socRaw != null && socRaw !== '';
   let soc_percent: number | undefined;
   if (hasSoc) {
@@ -79,9 +81,12 @@ export function updateEvScheduleEntry(
   input: EvScheduleEntryInput,
   nowMs = Date.now(),
 ): EvScheduleEntry {
+  // Take id/createdAt from the existing entry, but let parseEntryFields produce the full content
+  // (type/time/soc_percent). Spreading `existing` wholesale would resurrect a cleared soc_percent.
   return {
-    ...existing,
+    id: existing.id,
     ...parseEntryFields(input, existing, nowMs),
+    createdAt: existing.createdAt,
     updatedAt: new Date(nowMs).toISOString(),
   };
 }

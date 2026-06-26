@@ -68,6 +68,24 @@ describe('updateEvScheduleEntry', () => {
     expect(updated.soc_percent).toBe(55);
     expect(updated.updatedAt).toBe(new Date(laterMs).toISOString());
   });
+
+  it('clears a previously-set soc_percent when passed null', () => {
+    const created = createEvScheduleEntry({ type: 'arrival', time: FUTURE, soc_percent: 40 }, NOW_MS);
+    const updated = updateEvScheduleEntry(created, { type: 'arrival', time: FUTURE, soc_percent: null }, NOW_MS);
+    expect('soc_percent' in updated).toBe(false);
+  });
+
+  it('clears a previously-set soc_percent when passed an empty string', () => {
+    const created = createEvScheduleEntry({ type: 'departure', time: FUTURE, soc_percent: 80 }, NOW_MS);
+    const updated = updateEvScheduleEntry(created, { type: 'departure', time: FUTURE, soc_percent: '' }, NOW_MS);
+    expect('soc_percent' in updated).toBe(false);
+  });
+
+  it('keeps the existing soc_percent when the field is absent', () => {
+    const created = createEvScheduleEntry({ type: 'arrival', time: FUTURE, soc_percent: 40 }, NOW_MS);
+    const updated = updateEvScheduleEntry(created, { type: 'arrival', time: FUTURE }, NOW_MS);
+    expect(updated.soc_percent).toBe(40);
+  });
 });
 
 describe('pruneExpiredEvScheduleEntries', () => {
