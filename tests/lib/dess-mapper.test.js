@@ -368,6 +368,30 @@ describe('Tipping Point Calculations', () => {
     expect(result.diagnostics.gridBatteryTippingPoint_cents_per_kWh).toBe(40);
   });
 
+  it('should include grid->EV usage in the Grid Battery Tipping Point', () => {
+    const rows = [
+      createRow({ soc_percent: 50, g2ev: 100, ic: 45 }), // Grid charges EV at 45c, battery idle (headroom)
+      createRow({ soc_percent: 50, g2l: 100, ic: 30 }),  // Grid->load at 30c
+    ];
+
+    const result = mapRowsToDess(rows, mockCfg);
+    // Charging the EV from grid at 45c while the battery could have supplied it is the same
+    // signal as grid->load, so it sets the tipping point.
+    expect(result.diagnostics.gridBatteryTippingPoint_cents_per_kWh).toBe(45);
+  });
+
+  it('should ignore grid->EV when battery discharge is power-maxed', () => {
+    const rows = [
+      // EV pulls from grid at 99c, but the battery is already discharging at max (1000W),
+      // so it could not have supplied the EV — this slot must not count.
+      createRow({ soc_percent: 50, g2ev: 100, ic: 99, b2ev: 1000 }),
+      createRow({ soc_percent: 50, g2l: 100, ic: 30 }), // grid->load at 30c, battery has headroom
+    ];
+
+    const result = mapRowsToDess(rows, mockCfg);
+    expect(result.diagnostics.gridBatteryTippingPoint_cents_per_kWh).toBe(30);
+  });
+
   it('should return -Infinity for Grid Battery Tipping Point if no grid usage occurs', () => {
     const rows = [
       createRow({ soc_percent: 50, g2l: 0, ic: 40 }),
@@ -424,6 +448,16 @@ describe('mapRowsToDessV2', () => {
     const rows = [
       makeRow({ g2b: 100, ic: 15, soc_percent: 50 }),
       makeRow({ ic: 10, ec: 5, soc_percent: 50, g2l: 1000, g2b: 4000 }), // g2l+g2b = 5000 = maxGridImport
+    ];
+    const { perSlot } = mapRowsToDessV2(rows, cfg);
+    expect(perSlot[1].socTarget_percent).toBe(55); // 50 + 5
+  });
+
+  it('counts grid->EV toward grid-import saturation for the +5% SoC boost', () => {
+    const rows = [
+      makeRow({ g2b: 100, ic: 15, soc_percent: 50 }),
+      // g2l+g2b alone = 2000 (< 5000), but adding g2ev=3000 reaches the 5000 import cap.
+      makeRow({ ic: 10, ec: 5, soc_percent: 50, g2b: 2000, g2ev: 3000 }),
     ];
     const { perSlot } = mapRowsToDessV2(rows, cfg);
     expect(perSlot[1].socTarget_percent).toBe(55); // 50 + 5
