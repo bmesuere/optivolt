@@ -6,10 +6,10 @@ export type TerminalSocValuation = 'zero' | 'min' | 'avg' | 'max' | 'custom';
 
 /**
  * How HA should control the charger for a given slot:
- *   fixed      — set exactly ev_charge_A amps (charger is at minimum rate; can't track dynamically)
+ *   fixed      — set exactly ev_charge_A amps (minimum, partial, or source-limited planned rate)
  *   solar_only — track actual PV surplus only; may turn off if PV drops below minimum
  *   solar_grid — track PV surplus + grid headroom; no battery draw (covers grid-only slots too)
- *   max        — charge at maximum amps using all available sources (battery involved)
+ *   max        — set the charger to its configured maximum current
  *   off        — no charging
  */
 export type EvChargeMode = 'off' | 'fixed' | 'solar_only' | 'solar_grid' | 'max';

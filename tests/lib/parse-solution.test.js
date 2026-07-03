@@ -141,14 +141,30 @@ describe('parseSolution — ev_charge_mode derivation', () => {
     expect(row.ev_charge_mode).toBe('solar_grid');
   });
 
-  it('max — battery involved above minimum rate (+ grid + PV)', () => {
-    const [row] = parseSolution(makeResult(1000, 500, 500), evCfg, opts);
+  it('max — battery involved at configured charger maximum (+ grid + PV)', () => {
+    const [row] = parseSolution(makeResult(1000, 500, 2180), evCfg, opts);
     expect(row.ev_charge_mode).toBe('max');
   });
 
-  it('max — battery only, above minimum rate', () => {
-    const [row] = parseSolution(makeResult(0, 0, 2000), evCfg, opts);
+  it('max — battery only, at configured charger maximum', () => {
+    const [row] = parseSolution(makeResult(0, 0, 3680), evCfg, opts);
     expect(row.ev_charge_mode).toBe('max');
+  });
+
+  it('fixed — battery assists a partial planned rate below charger maximum', () => {
+    const cfg = {
+      ...evCfg,
+      ev: {
+        ...evCfg.ev,
+        evMinChargePower_W: 1840, // 8 A
+        evMaxChargePower_W: 5750, // 25 A
+      },
+    };
+    // 1200 W PV + 1468 W battery = 2668 W = 11.6 A, below the 25 A charger ceiling.
+    // Even if the battery is the limiting source, HA can reproduce the plan with exact amps.
+    const [row] = parseSolution(makeResult(0, 1200, 1468), cfg, opts);
+    expect(row.ev_charge_A).toBeCloseTo(11.6, 1);
+    expect(row.ev_charge_mode).toBe('fixed');
   });
 
   it('fixed — battery tops up to reach minimum charge rate (not max)', () => {
