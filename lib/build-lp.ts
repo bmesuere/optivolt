@@ -175,8 +175,10 @@ export function buildLP({
   }
   // EV SoC valuation: the car drives away with whatever energy it holds at each departure, so
   // value the SoC at the last slot of EVERY window (its endSlot - 1), not just the final one.
-  // The SoC chain re-anchors at each window start (resetAt), so these are independent energies —
-  // valuing only the last window would leave earlier windows' pre-departure charging unrewarded.
+  // Valuing only the last window would leave earlier windows' pre-departure charging unrewarded.
+  // This assumes every window carries resetSoc_Wh (ev-config-builder always sets it), making the
+  // windows' energies independent. A reset-less window would continue the previous chain, and
+  // valuing both window ends would then double-count the energy charged before the gap.
   if (evActive && evTerminalPrice_cents_per_Wh > 0) {
     for (const w of evWindows) {
       objTerms.push(` - ${toNum(evTerminalPrice_cents_per_Wh)} ${evSocVar(w.endSlot - 1)}`);
