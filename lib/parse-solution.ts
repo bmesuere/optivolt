@@ -54,7 +54,7 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
     else if (name.startsWith("pv_to_grid_")) pv2g[t] = v;
     else if (name.startsWith("battery_to_load_")) b2l[t] = v;
     else if (name.startsWith("battery_to_grid_")) b2g[t] = v;
-    else if (name.startsWith("soc_")) soc[t] = v;
+    else if (/^soc_\d+$/.test(name)) soc[t] = v; // exact: must not match soc_shortfall_*
     else if (name.startsWith("grid_to_ev_"))    g2ev[t]  = v;
     else if (name.startsWith("pv_to_ev_"))       pv2ev[t] = v;
     else if (name.startsWith("battery_to_ev_"))  b2ev[t]  = v;

@@ -38,6 +38,23 @@ describe('parseSolution', () => {
     expect(rows[1].timestampMs).toBe(1700000000000 + 3600000);
   });
 
+  it('does not let soc_shortfall_* columns corrupt soc (regardless of key order)', () => {
+    const result = {
+      Columns: {
+        'soc_0': { Primal: 200 },
+        'soc_1': { Primal: 150 },
+        // Emitted after soc_* here: the old startsWith("soc_") match would clobber soc.
+        'soc_shortfall_0': { Primal: 999 },
+        'soc_shortfall_1': { Primal: 999 },
+      },
+    };
+
+    const rows = parseSolution(result, cfg, opts);
+
+    expect(rows[0].soc).toBe(200);
+    expect(rows[1].soc).toBe(150);
+  });
+
   it('computes per-slot import and export costs', () => {
     const result = {
       Columns: {
