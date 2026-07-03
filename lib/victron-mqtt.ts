@@ -67,16 +67,28 @@ export class VictronMqttClient {
 
     const url = `${this.protocol}://${this.host}:${this.port}`;
 
-    this._clientPromise = mqtt.connectAsync(url, {
+    const clientPromise = mqtt.connectAsync(url, {
       username: this.username,
       password: this.password,
       reconnectPeriod: this.reconnectPeriod,
     });
+    this._clientPromise = clientPromise;
 
-    const client = await this._clientPromise;
+    let client: MqttClient;
+    try {
+      client = await clientPromise;
+    } catch (err) {
+      if (this._clientPromise === clientPromise) this._clientPromise = null;
+      throw err;
+    }
 
     client.on('error', (err) => {
       console.error('[victron-mqtt] client error:', err.message);
+    });
+    // With reconnectPeriod 0 the client never reconnects on its own; drop the cached
+    // instance when the connection closes so the next call establishes a fresh one.
+    client.on('close', () => {
+      if (this._clientPromise === clientPromise) this._clientPromise = null;
     });
 
     return client;
@@ -168,6 +180,9 @@ export class VictronMqttClient {
     const wait = this._waitForFirstMessage(
       client,
       (topic, payload) => {
+        // The message handler sees traffic from ALL subscriptions on the shared client,
+        // so only accept messages that actually match the serial wildcard.
+        if (!/^N\/[^/]+\/system\/0\/Serial$/.test(topic)) return undefined;
         // Payload is {"value":"xxxxxxxxx"}
         const obj = JSON.parse(payload.toString()) as { value?: string };
         return obj?.value;
