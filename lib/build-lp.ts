@@ -102,6 +102,8 @@ export function buildLP({
   const evMinPow_W      = ev?.evMinChargePower_W ?? 0;
   const evMaxPow_W      = ev?.evMaxChargePower_W ?? 0;
   const evDepSlot       = ev?.evDepartureSlot ?? (T + 1);
+  // First slot the EV is available to charge. Clamped to [0, T]; slots before this are forced off.
+  const evArrivalSlot   = Math.min(T, Math.max(0, ev?.evArrivalSlot ?? 0));
   const evChargeWhPerW  = stepHours * ((ev?.evChargeEfficiency_percent ?? 100) / 100);
 
   // Variable name helpers
@@ -239,6 +241,12 @@ export function buildLP({
       lines.push(` c_ev_max_${t}: ${gridToEv(t)} + ${pvToEv(t)} + ${batteryToEv(t)} - ${toNum(evMaxPow_W)} ${evOn(t)} <= 0`);
     }
 
+    // Before the EV arrives it cannot charge: forcing ev_on_t = 0 zeroes all EV flows
+    // via c_ev_min/c_ev_max, so ev_soc stays flat at the initial value until arrival.
+    for (let t = 0; t < evArrivalSlot; t++) {
+      lines.push(` c_ev_off_before_arrival_${t}: ${evOn(t)} = 0`);
+    }
+
     lines.push(` c_ev_soc_0: ${evSocVar(0)} - ${toNum(evChargeWhPerW)} ${gridToEv(0)} - ${toNum(evChargeWhPerW)} ${pvToEv(0)} - ${toNum(evChargeWhPerW)} ${batteryToEv(0)} = ${toNum(evInitialWh)}`);
     for (let t = 1; t < T; t++) {
       lines.push(` c_ev_soc_${t}: ${evSocVar(t)} - ${evSocVar(t - 1)} - ${toNum(evChargeWhPerW)} ${gridToEv(t)} - ${toNum(evChargeWhPerW)} ${pvToEv(t)} - ${toNum(evChargeWhPerW)} ${batteryToEv(t)} = 0`);
@@ -256,9 +264,11 @@ export function buildLP({
     if (evDeficitWh > 0 && evChargeWhPerSlot > 0) {
       const kMin = Math.ceil(evDeficitWh / evChargeWhPerSlot);
       const depLimit = Math.min(evDepSlot, T);
-      if (kMin >= 1 && kMin < depLimit) {
+      // Only count slots the EV can actually charge in (arrival .. departure).
+      const chargeableSlots = depLimit - evArrivalSlot;
+      if (kMin >= 1 && kMin <= chargeableSlots && chargeableSlots > 0) {
         const termParts: string[] = [];
-        for (let t = 0; t < depLimit; t++) termParts.push(` ${evOn(t)}`);
+        for (let t = evArrivalSlot; t < depLimit; t++) termParts.push(` ${evOn(t)}`);
         const terms = termParts.join(' +');
         lines.push(` c_ev_min_on:${terms} >= ${kMin}`);
       }

@@ -196,4 +196,53 @@ describe('buildSolverConfigFromSettings — EV config', () => {
     );
     expect(cfg.evSocValue_cents_per_kWh).toBe(15);
   });
+
+  it('sets evArrivalSlot to 0 and uses live SoC when plugged in (ignores arrival fields)', () => {
+    const cfg = buildSolverConfigFromSettings(
+      { ...evSettings, evArrivalTime: '2024-01-01T13:00:00Z', evArrivalSocOverride_percent: '20' },
+      makeData(), NOW_MS, { pluggedIn: true, soc_percent: 50 },
+    );
+    expect(cfg.ev).toBeDefined();
+    expect(cfg.ev.evArrivalSlot).toBe(0);
+    expect(cfg.ev.evInitialSoc_percent).toBe(50); // live sensor, override ignored while plugged in
+  });
+
+  it('models ev when away with a future arrival, using the SoC override', () => {
+    const cfg = buildSolverConfigFromSettings(
+      { ...evSettings, evArrivalTime: '2024-01-01T13:00:00Z', evArrivalSocOverride_percent: '20' },
+      makeData(), NOW_MS, { pluggedIn: false, soc_percent: 50 },
+    );
+    expect(cfg.ev).toBeDefined();
+    expect(cfg.ev.evArrivalSlot).toBe(4); // 1h / 15min
+    expect(cfg.ev.evInitialSoc_percent).toBe(20); // override wins over the (stale) sensor reading
+  });
+
+  it('falls back to the live sensor SoC when away with no override', () => {
+    const cfg = buildSolverConfigFromSettings(
+      { ...evSettings, evArrivalTime: '2024-01-01T13:00:00Z' },
+      makeData(), NOW_MS, { pluggedIn: false, soc_percent: 40 },
+    );
+    expect(cfg.ev).toBeDefined();
+    expect(cfg.ev.evArrivalSlot).toBe(4);
+    expect(cfg.ev.evInitialSoc_percent).toBe(40);
+  });
+
+  it('does not model ev when away with a future arrival but no SoC available', () => {
+    const cfg = buildSolverConfigFromSettings(
+      { ...evSettings, evArrivalTime: '2024-01-01T13:00:00Z' },
+      makeData(), NOW_MS, { pluggedIn: false, soc_percent: NaN },
+    );
+    expect(cfg.ev).toBeUndefined();
+  });
+
+  it('clamps achievable target to slots available after arrival', () => {
+    // arrival slot 4, departure slot 8 → 4 charging slots; override 50% = 30000 Wh.
+    // 4 × 3680 W × 0.25 h × 1.0 = 3680 Wh; achievable = min(48000, 33680, 60000) = 33680.
+    const cfg = buildSolverConfigFromSettings(
+      { ...evSettings, evArrivalTime: '2024-01-01T13:00:00Z', evArrivalSocOverride_percent: '50' },
+      makeData(), NOW_MS, { pluggedIn: false, soc_percent: 50 },
+    );
+    const expectedPct = (33680 / 60000) * 100;
+    expect(cfg.ev.evTargetSoc_percent).toBeCloseTo(expectedPct, 3);
+  });
 });

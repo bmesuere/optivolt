@@ -31,6 +31,8 @@
   "evBatteryCapacity_kWh": 60,
   "evSocSensor": "",
   "evPlugSensor": "",
+  "evArrivalTime": "",
+  "evArrivalSocOverride_percent": "",
   "evDepartureTime": "",
   "evTargetSoc_percent": 80,
   "evChargeEfficiency_percent": 90,

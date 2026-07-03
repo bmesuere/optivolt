@@ -20,6 +20,8 @@ export interface EvConfig {
   evBatteryCapacity_Wh: number;
   evInitialSoc_percent: number;
   evTargetSoc_percent: number;
+  /** First slot the EV is available to charge (0 = from the start of the horizon). */
+  evArrivalSlot: number;
   /** Number of available charging slots before departure. Constraint emitted if <= T. */
   evDepartureSlot: number;
   /** AC-to-DC efficiency of the EV's onboard charger, as a percentage (e.g. 90 = 90%). */

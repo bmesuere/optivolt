@@ -5,6 +5,7 @@ import {
   initDepartureDatetimeMin,
   refreshEvSensorStates,
   wireEvSensorInputs,
+  wireEvArrivalQuickSet,
 } from "./src/ev-settings.js";
 import { initOptimizerQuickSettings } from "./src/optimizer-quick-settings.js";
 import { createOptimizerController } from "./src/optimizer-controller.js";
@@ -138,6 +139,7 @@ async function boot() {
     debounceRun: optimizer.debounceRun,
   });
   initDepartureDatetimeMin(els);
+  wireEvArrivalQuickSet(els);
 
   if (els.status) {
     els.status.textContent =
