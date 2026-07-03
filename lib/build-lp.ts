@@ -116,7 +116,6 @@ export function buildLP({
   for (const w of evWindows) for (let t = w.startSlot; t < w.endSlot; t++) evAvailable[t] = true;
   const evResetAt = new Map<number, number>();
   for (const w of evWindows) if (w.resetSoc_Wh != null) evResetAt.set(w.startSlot, w.resetSoc_Wh);
-  const evLastAvailableSlot = evAvailable.lastIndexOf(true);
   // SoC deadlines, clamped to in-horizon slots and to battery capacity.
   const evTargets = (ev?.targets ?? [])
     .filter((tg) => tg.slot >= 0 && tg.slot < T)
@@ -174,11 +173,14 @@ export function buildLP({
   if (terminalPrice_cents_per_Wh > 0) {
     objTerms.push(` - ${toNum(terminalPrice_cents_per_Wh)} ${soc(T - 1)}`);
   }
-  // EV SoC valuation: value energy left in the EV battery at the last slot it is available.
-  // (SoC is held flat after the last window, so this equals the horizon-end SoC today, but
-  // valuing the last available slot is correct once multiple windows exist.)
-  if (evActive && evTerminalPrice_cents_per_Wh > 0 && evLastAvailableSlot >= 0) {
-    objTerms.push(` - ${toNum(evTerminalPrice_cents_per_Wh)} ${evSocVar(evLastAvailableSlot)}`);
+  // EV SoC valuation: the car drives away with whatever energy it holds at each departure, so
+  // value the SoC at the last slot of EVERY window (its endSlot - 1), not just the final one.
+  // The SoC chain re-anchors at each window start (resetAt), so these are independent energies —
+  // valuing only the last window would leave earlier windows' pre-departure charging unrewarded.
+  if (evActive && evTerminalPrice_cents_per_Wh > 0) {
+    for (const w of evWindows) {
+      objTerms.push(` - ${toNum(evTerminalPrice_cents_per_Wh)} ${evSocVar(w.endSlot - 1)}`);
+    }
   }
   // Rebalancing symmetry-breaking: escalating penalty prefers earlier windows when cost-equivalent.
   if (D > 0) {
