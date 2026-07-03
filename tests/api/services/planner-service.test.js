@@ -10,7 +10,7 @@ import { loadSettings, saveSettings } from '../../../api/services/settings-store
 import { loadData, saveData } from '../../../api/services/data-store.ts';
 import { refreshSeriesFromVrmAndPersist } from '../../../api/services/vrm-refresh.ts';
 import { setDynamicEssSchedule } from '../../../api/services/mqtt-service.ts';
-import { computePlan } from '../../../api/services/planner-service.ts';
+import { computePlan, planAndMaybeWrite } from '../../../api/services/planner-service.ts';
 import { FeedIn } from '../../../lib/dess-mapper.ts';
 
 const NOW_STRING = '2024-01-01T00:00:00Z';
@@ -131,6 +131,19 @@ describe('computePlan — rebalance bookkeeping', () => {
     const result = await computePlan();
 
     expect(result.rows[0].dess.feedin).toBe(FeedIn.allowed);
+  });
+
+  it('refuses to write to Victron when the solve is not optimal', async () => {
+    loadSettings.mockResolvedValue(baseSettings);
+    // Load far exceeds max grid import + max discharge + PV every slot → infeasible.
+    loadData.mockResolvedValue({
+      ...baseData,
+      load: { start: NOW_STRING, step: 60, values: [50000, 50000, 50000, 50000, 50000] },
+      pv: { start: NOW_STRING, step: 60, values: [0, 0, 0, 0, 0] },
+    });
+
+    await expect(planAndMaybeWrite({ writeToVictron: true })).rejects.toThrow(/solver status/i);
+    expect(setDynamicEssSchedule).not.toHaveBeenCalled();
   });
 
   it('includes original prediction values on rows when manual adjustments changed them', async () => {
