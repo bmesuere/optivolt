@@ -176,10 +176,11 @@ function renderEvTable(evRows, tableEl, stepSize_m = 15, evSettings = {}) {
   const departureIdxs = rowIdxSet(evSettings.departures);
 
   // Map each target deadline to the first row at/after it, so the target % shows on that row.
+  // When several targets land on the same row, show the highest — matching the solver's dedupe.
   const targetByRowIdx = new Map();
   for (const t of (evSettings.targets ?? [])) {
     const idx = rowIdxAtOrAfter(t.time);
-    if (idx >= 0 && !targetByRowIdx.has(idx)) targetByRowIdx.set(idx, t.soc_percent);
+    if (idx >= 0) targetByRowIdx.set(idx, Math.max(targetByRowIdx.get(idx) ?? 0, t.soc_percent));
   }
   const hasTarget = targetByRowIdx.size > 0;
 

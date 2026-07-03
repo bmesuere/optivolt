@@ -79,8 +79,10 @@ export function makeEvTargetPlugin(rows, targets) {
 
       for (const { time, soc_percent } of active) {
         const idx = findDepartureSlotIdx(rows, time);
-        // No matching slot (deadline at/after the horizon end): pin the corner to the right edge.
-        const xPx = idx >= 0 ? xScale.getPixelForValue(idx) : chartArea.right;
+        // Deadline beyond the horizon: the entry has no effect on this plan, so draw nothing
+        // (consistent with arrival/departure markers, which skip out-of-range times).
+        if (idx < 0) continue;
+        const xPx = xScale.getPixelForValue(idx);
         const yPx = yScale.getPixelForValue(soc_percent);
 
         // L-corner: stop both segments at the crossing so it's clear which level pairs with which time.

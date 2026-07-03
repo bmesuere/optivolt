@@ -334,7 +334,7 @@ describe('buildLP — EV charging (MILP)', () => {
       expect(lp).toContain(`c_ev_off_${t}: ev_on_${t} = 0`);
     }
     expect(lp).not.toContain('c_ev_target_');
-    expect(lp).not.toContain('c_ev_min_on:');
+    expect(lp).not.toContain('c_ev_min_on');
   });
 
   it('resets the SoC chain at a window start with resetSoc_Wh (forward-compat)', () => {
@@ -367,10 +367,39 @@ describe('buildLP — EV charging (MILP)', () => {
         targets: [{ slot: 4, soc_Wh: 48000 }],
       },
     });
-    const onLine = lp.split('\n').find((l) => l.trim().startsWith('c_ev_min_on:'));
+    const onLine = lp.split('\n').find((l) => l.trim().startsWith('c_ev_min_on_4:'));
     expect(onLine).toBeDefined();
     // The bound must not reference the forced-off slot 0, and must require all 4 remaining slots.
     expect(onLine).not.toMatch(/\bev_on_0\b/);
     expect(onLine).toMatch(/>= 4\b/);
+  });
+
+  it('anchors each cardinality bound to its own SoC chain segment', () => {
+    // Two windows; the second resets the chain to 90% (54000 Wh) at slot 3. Targets in each:
+    // slot 1 needs 31840 (deficit 1840 vs initial 30000), slot 4 needs 55840 (deficit 1840 vs
+    // the reset, NOT vs the initial SoC). perSlot = 0.25 * 3680 = 920 → kMin = 2 for both.
+    const lp = buildLP({
+      ...base,
+      ev: {
+        ...evCfg,
+        availabilityWindows: [
+          { startSlot: 0, endSlot: 2, resetSoc_Wh: 30000 },
+          { startSlot: 3, endSlot: T, resetSoc_Wh: 54000 },
+        ],
+        targets: [
+          { slot: 1, soc_Wh: 31840 },
+          { slot: 4, soc_Wh: 55840 },
+        ],
+      },
+    });
+    const firstLine = lp.split('\n').find((l) => l.trim().startsWith('c_ev_min_on_1:'));
+    expect(firstLine).toBeDefined();
+    expect(firstLine).toMatch(/ev_on_0 \+ ev_on_1 >= 2\b/);
+    // The second segment's bound must count only its own slots (3, 4) — charging in the first
+    // window is erased by the reset — and its deficit must be measured against the reset SoC.
+    const secondLine = lp.split('\n').find((l) => l.trim().startsWith('c_ev_min_on_4:'));
+    expect(secondLine).toBeDefined();
+    expect(secondLine).not.toMatch(/\bev_on_[012]\b/);
+    expect(secondLine).toMatch(/ev_on_3 \+ ev_on_4 >= 2\b/);
   });
 });

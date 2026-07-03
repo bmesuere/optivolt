@@ -283,25 +283,28 @@ export function buildLP({
       lines.push(` c_ev_target_${tg.slot}: ${evSocVar(tg.slot)} >= ${toNum(tg.soc_Wh)}`);
     }
 
-    // Cardinality lower bound: tightens the LP relaxation by telling the solver the minimum
-    // number of on-slots needed to meet the binding target. Without this, each ev_on_t floats
+    // Cardinality lower bounds: tighten the LP relaxation by telling the solver the minimum
+    // number of on-slots needed to meet each target. Without this, each ev_on_t floats
     // freely in [0,1] during LP relaxation, giving weak bounds and excessive MIP branching.
-    // Count only slots the EV can actually charge in (available, at or before the deadline).
+    // Each bound lives within the target's SoC chain segment: the deficit is measured against
+    // the most recent reset at/before the deadline, and only available slots in that segment
+    // count — charging before a reset is erased by it and cannot help meet the target.
     const evChargeWhPerSlot = evChargeWhPerW * evMaxPow_W;
-    if (evTargets.length > 0 && evChargeWhPerSlot > 0) {
-      let bestKMin = 0;
+    if (evChargeWhPerSlot > 0) {
       for (const tg of evTargets) {
-        const deficitWh = Math.max(0, tg.soc_Wh - evInitialWh);
+        let anchorSlot = 0;
+        let anchorWh = evInitialWh;
+        for (const [s, wh] of evResetAt) {
+          if (s > anchorSlot && s <= tg.slot) { anchorSlot = s; anchorWh = wh; }
+        }
+        const deficitWh = tg.soc_Wh - anchorWh;
         if (deficitWh <= 0) continue;
         const kMin = Math.ceil(deficitWh / evChargeWhPerSlot);
-        let chargeable = 0;
-        for (let t = 0; t <= tg.slot; t++) if (evAvailable[t]) chargeable++;
-        if (kMin >= 1 && kMin <= chargeable && kMin > bestKMin) bestKMin = kMin;
-      }
-      if (bestKMin >= 1) {
         const termParts: string[] = [];
-        for (let t = 0; t < T; t++) if (evAvailable[t]) termParts.push(` ${evOn(t)}`);
-        lines.push(` c_ev_min_on:${termParts.join(' +')} >= ${bestKMin}`);
+        for (let t = anchorSlot; t <= tg.slot; t++) if (evAvailable[t]) termParts.push(` ${evOn(t)}`);
+        if (kMin >= 1 && kMin <= termParts.length) {
+          lines.push(` c_ev_min_on_${tg.slot}:${termParts.join(' +')} >= ${kMin}`);
+        }
       }
     }
   }
