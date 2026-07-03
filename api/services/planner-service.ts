@@ -191,17 +191,22 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   return lastPlan;
 }
 
-export async function writePlanToVictron(rows: PlanRowWithDess[]): Promise<void> {
-  await setDynamicEssSchedule(rows, Math.min(DESS_SLOTS, rows.length));
+export async function writePlanToVictron(rows: PlanRowWithDess[], stepMin: number): Promise<void> {
+  await setDynamicEssSchedule(rows, Math.min(DESS_SLOTS, rows.length), stepMin * 60);
 }
 
 export async function planAndMaybeWrite({
   updateData = false,
   writeToVictron = false,
 } = {}): Promise<ComputePlanResult> {
-  const result = await computePlan({ updateData });
+  const plan = await computePlan({ updateData });
   if (writeToVictron) {
-    await writePlanToVictron(result.rows);
+    // Never push a non-optimal solve to the hardware: infeasible/unbounded solves yield
+    // all-zero (garbage) rows that would otherwise be written as a real schedule.
+    if (plan.result.Status !== 'Optimal') {
+      throw new Error(`Refusing to write schedule to Victron: solver status is "${plan.result.Status ?? 'unknown'}" (expected "Optimal")`);
+    }
+    await writePlanToVictron(plan.rows, plan.timing.stepMin);
   }
-  return result;
+  return plan;
 }

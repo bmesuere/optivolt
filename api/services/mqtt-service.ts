@@ -56,21 +56,24 @@ export async function readVictronSocLimits({ timeoutMs }: { timeoutMs?: number }
  *
  * rows: optimizer rows with DESS slot data
  * slotCount: how many slots to push (starting from rows[0])
+ * stepSeconds: slot duration; falls back to the row spacing (needs >= 2 rows) when omitted.
  */
-export async function setDynamicEssSchedule(rows: PlanRowWithDess[], slotCount: number): Promise<{ serial: string; slotsWritten: number }> {
+export async function setDynamicEssSchedule(rows: PlanRowWithDess[], slotCount: number, stepSeconds?: number): Promise<{ serial: string; slotsWritten: number }> {
   const client = getVictronClient();
   const serial = await client.getSerial();
 
   const nSlots = Math.min(slotCount, rows.length);
   const tasks = [];
-  const stepSeconds = (rows[1].timestampMs - rows[0].timestampMs) / 1000;
+  // Prefer the explicit slot duration; only fall back to the row delta when there are
+  // >= 2 rows, so a single-slot plan (end of the data horizon) doesn't crash on rows[1].
+  const slotSeconds = stepSeconds ?? (rows.length >= 2 ? (rows[1].timestampMs - rows[0].timestampMs) / 1000 : 900);
 
   for (let i = 0; i < nSlots; i += 1) {
     const row = rows[i];
 
     const slot = {
       startEpoch: Math.round(row.timestampMs / 1000),
-      durationSeconds: stepSeconds,
+      durationSeconds: slotSeconds,
       strategy: row.dess.strategy,
       flags: row.dess.flags,
       socTarget: Math.round(row.dess.socTarget_percent),
