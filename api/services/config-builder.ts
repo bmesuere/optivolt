@@ -70,7 +70,9 @@ export function buildSolverConfigFromSettings(
     terminalSocValuation:                 settings.terminalSocValuation,
     terminalSocCustomPrice_cents_per_kWh: settings.terminalSocCustomPrice_cents_per_kWh,
     evSocValue_cents_per_kWh:             settings.evSocValue_cents_per_kWh,
-    initialSoc_percent:                   data.soc.value,
+    // Clamp to maxSoc: a battery fuller than the configured ceiling (e.g. after lowering
+    // maxSoc) would otherwise force an infeasible one-slot discharge in the LP.
+    initialSoc_percent:                   Math.min(data.soc.value, settings.maxSoc_percent),
   };
 
   if (settings.rebalanceEnabled) {
