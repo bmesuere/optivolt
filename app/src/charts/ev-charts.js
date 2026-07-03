@@ -4,7 +4,7 @@ import {
 } from '../chart-tooltip.js';
 import { SOLUTION_COLORS, dim } from './colors.js';
 import { buildTimeAxisFromTimestamps, dsBar, getBaseOptions, getChartTheme, renderChart } from './core.js';
-import { makeEvDeparturePlugin, makeEvTargetPlugin } from './ev-annotations.js';
+import { makeEvArrivalPlugin, makeEvDeparturePlugin, makeEvTargetPlugin } from './ev-annotations.js';
 
 export function drawEvPowerChart(canvas, rows, _stepSize_m = 15, evSettings = {}) {
   const timestampsMs = rows.map(r => r.timestampMs);
@@ -86,13 +86,16 @@ export function drawEvPowerChart(canvas, rows, _stepSize_m = 15, evSettings = {}
     title: { display: false },
   };
 
-  const depPlugin = makeEvDeparturePlugin(rows, evSettings.departureTime);
+  const eventPlugins = [
+    makeEvArrivalPlugin(rows, evSettings.arrivals),
+    makeEvDeparturePlugin(rows, evSettings.departures),
+  ].filter(Boolean);
 
   renderChart(canvas, {
     type: "bar",
     data: { labels: axis.labels, datasets },
     options,
-    plugins: depPlugin ? [depPlugin] : [],
+    plugins: eventPlugins,
   });
 }
 
@@ -100,9 +103,11 @@ export function drawEvSocChartTab(canvas, rows, evSettings = {}) {
   const timestampsMs = rows.map(r => r.timestampMs);
   const axis = buildTimeAxisFromTimestamps(timestampsMs);
 
-  const { departureTime, targetSoc_percent } = evSettings;
-  const targetPlugin = makeEvTargetPlugin(rows, departureTime, targetSoc_percent);
-  const plugins = targetPlugin ? [targetPlugin] : [];
+  const plugins = [
+    makeEvArrivalPlugin(rows, evSettings.arrivals),
+    makeEvDeparturePlugin(rows, evSettings.departures),
+    makeEvTargetPlugin(rows, evSettings.targets),
+  ].filter(Boolean);
 
   renderChart(canvas, {
     type: "line",

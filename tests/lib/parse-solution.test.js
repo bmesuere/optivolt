@@ -74,8 +74,9 @@ describe('parseSolution — ev_charge_mode derivation', () => {
       evMaxChargePower_W: 3680,
       evBatteryCapacity_Wh: 60000,
       evInitialSoc_percent: 50,
-      evTargetSoc_percent: 80,
-      evDepartureSlot: 4,
+      evChargeEfficiency_percent: 100,
+      availabilityWindows: [{ startSlot: 0, endSlot: 1, resetSoc_Wh: 30000 }],
+      targets: [{ slot: 0, soc_Wh: 48000 }],
     },
   };
   const opts = { startMs: 1700000000000, stepMin: 15 };

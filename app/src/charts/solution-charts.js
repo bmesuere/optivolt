@@ -4,7 +4,7 @@ import {
 } from '../chart-tooltip.js';
 import { SOLUTION_COLORS, dim, toRGBA } from './colors.js';
 import { buildTimeAxisFromTimestamps, dsBar, getBaseOptions, getChartTheme, renderChart } from './core.js';
-import { makeEvDeparturePlugin, makeEvTargetPlugin } from './ev-annotations.js';
+import { makeEvArrivalPlugin, makeEvDeparturePlugin, makeEvTargetPlugin } from './ev-annotations.js';
 import {
   BUY_PRICE_STRIP_TICK_PADDING,
   makeBuyPriceStripPlugin,
@@ -103,8 +103,10 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, rebalance
   if (buyPriceStripPlugin) plugins.push(buyPriceStripPlugin);
   const negativeInjectionPlugin = makeNegativePriceInjectionPlugin(rows, h);
   if (negativeInjectionPlugin) plugins.push(negativeInjectionPlugin);
-  const depPlugin = evSettings?.departureTime
-    ? makeEvDeparturePlugin(rows, evSettings.departureTime)
+  const arrPlugin = evSettings?.arrivals?.length ? makeEvArrivalPlugin(rows, evSettings.arrivals) : null;
+  if (arrPlugin) plugins.push(arrPlugin);
+  const depPlugin = evSettings?.departures?.length
+    ? makeEvDeparturePlugin(rows, evSettings.departures)
     : null;
   if (depPlugin) plugins.push(depPlugin);
 
@@ -177,9 +179,11 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15, evSettings = null) 
     });
   }
 
-  const evTargetPlugin = evSettings
-    ? makeEvTargetPlugin(rows, evSettings.departureTime, evSettings.targetSoc_percent)
-    : null;
+  const evPlugins = [
+    makeEvArrivalPlugin(rows, evSettings?.arrivals),
+    makeEvDeparturePlugin(rows, evSettings?.departures),
+    evSettings ? makeEvTargetPlugin(rows, evSettings.targets) : null,
+  ].filter(Boolean);
 
   renderChart(canvas, {
     type: "line",
@@ -208,7 +212,7 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15, evSettings = null) 
       layout: hasEvSoc ? undefined : { padding: { bottom: 0 } },
       scales: { y: { max: 100 } }
     }),
-    plugins: evTargetPlugin ? [evTargetPlugin] : [],
+    plugins: evPlugins,
   });
 }
 

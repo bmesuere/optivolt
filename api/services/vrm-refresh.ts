@@ -146,6 +146,7 @@ export async function refreshSeriesFromVrmAndPersist(): Promise<void> {
     lastFullSocAt: baseData.lastFullSocAt,
     rebalanceState: baseData.rebalanceState,
     predictionAdjustments: baseData.predictionAdjustments,
+    evScheduleEntries: baseData.evScheduleEntries,
   };
 
   if (shouldFetchSoc && socPercent !== null) {

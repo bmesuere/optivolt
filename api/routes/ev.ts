@@ -1,7 +1,14 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
-import { HttpError } from '../http-errors.ts';
+import { HttpError, assertCondition, toHttpError } from '../http-errors.ts';
 import { getLastPlan } from '../services/planner-service.ts';
+import type { EvScheduleEntryInput } from '../services/ev-schedule-entries.ts';
+import {
+  createStoredEvScheduleEntry,
+  deleteStoredEvScheduleEntry,
+  loadActiveEvScheduleEntriesAndPrune,
+  updateStoredEvScheduleEntry,
+} from '../services/ev-schedule-store.ts';
 
 const router = express.Router();
 
@@ -70,6 +77,54 @@ router.get('/current', (req: Request, res: Response, next: NextFunction) => {
     });
   } catch (err) {
     next(err);
+  }
+});
+
+// ----------------------------- Schedule entries -------------------------
+// A list of typed (arrival/departure/target) schedule entries, persisted in data.json.
+
+router.get('/schedule-entries', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { entries } = await loadActiveEvScheduleEntriesAndPrune();
+    res.json({ entries });
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to read EV schedule entries'));
+  }
+});
+
+router.post('/schedule-entries', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    assertCondition(
+      req.body && typeof req.body === 'object' && !Array.isArray(req.body),
+      400,
+      'EV schedule entry payload must be an object',
+    );
+    const result = await createStoredEvScheduleEntry(req.body as EvScheduleEntryInput);
+    res.status(201).json(result);
+  } catch (error) {
+    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Failed to create EV schedule entry'));
+  }
+});
+
+router.patch('/schedule-entries/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    assertCondition(
+      req.body && typeof req.body === 'object' && !Array.isArray(req.body),
+      400,
+      'EV schedule entry payload must be an object',
+    );
+    const result = await updateStoredEvScheduleEntry(String(req.params.id), req.body as EvScheduleEntryInput);
+    res.json(result);
+  } catch (error) {
+    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Failed to update EV schedule entry'));
+  }
+});
+
+router.delete('/schedule-entries/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await deleteStoredEvScheduleEntry(String(req.params.id)));
+  } catch (error) {
+    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Failed to delete EV schedule entry'));
   }
 });
 
