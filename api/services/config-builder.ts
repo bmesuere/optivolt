@@ -192,7 +192,8 @@ export async function getSolverInputs(): Promise<{ cfg: SolverConfig; timing: { 
         fetchHaEntityState({ haUrl: settings.haUrl, haToken: settings.haToken, entityId: settings.evSocSensor }),
         fetchHaEntityState({ haUrl: settings.haUrl, haToken: settings.haToken, entityId: settings.evPlugSensor }),
       ]);
-      const soc_percent = parseFloat(socEntity.state);
+      // Clamp so a misreporting sensor (e.g. 255 for "unknown") cannot distort the plan; NaN passes through.
+      const soc_percent = Math.min(100, Math.max(0, parseFloat(socEntity.state)));
       const pluggedIn = plugEntity.state !== 'disconnected'
         && plugEntity.state !== 'unavailable'
         && plugEntity.state !== 'unknown'

@@ -31,6 +31,9 @@ function validateSettings(s: Settings): Settings {
     [s.minSoc_percent, s.maxSoc_percent] = [s.maxSoc_percent, s.minSoc_percent];
   }
 
+  // A negative valuation would invert the incentive and penalize EV charging.
+  s.evSocValue_cents_per_kWh = Math.max(0, s.evSocValue_cents_per_kWh);
+
   if (!Array.isArray(s.optimizerQuickSettings)) {
     s.optimizerQuickSettings = [];
   } else {
