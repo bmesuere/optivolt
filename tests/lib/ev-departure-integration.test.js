@@ -65,6 +65,37 @@ describe('EV charging stops at departure (end-to-end)', () => {
     expect(rows[T - 1].ev_soc_percent).toBeCloseTo(rows[2].ev_soc_percent, 6);
   });
 
+  it('values energy at every departure, charging in an earlier window even when a later one exists', () => {
+    // Plugged in now, leaves at slot 3, returns at slot 5 and stays to the horizon end.
+    // Each departure takes energy away, so the SoC valuation must reward charging in BOTH
+    // windows — not only the last one. Regression for: adding a later arrival made the
+    // first window's charging disappear (only ev_soc_lastAvailableSlot was valued).
+    const cfg = {
+      ...baseCfg,
+      ev: {
+        evMinChargePower_W: 1380,
+        evMaxChargePower_W: 3680,
+        evBatteryCapacity_Wh: 60000,
+        evInitialSoc_percent: 50,
+        evChargeEfficiency_percent: 100,
+        availabilityWindows: [
+          { startSlot: 0, endSlot: 3, resetSoc_Wh: 30000 }, // plugged in now, leaves at slot 3
+          { startSlot: 5, endSlot: T, resetSoc_Wh: 30000 }, // returns at slot 5, stays plugged in
+        ],
+        targets: [],
+      },
+    };
+    const result = highs.solve(buildLP(cfg), {});
+    const rows = parseSolution(result, cfg, { startMs: 0, stepMin: 15 });
+
+    // Charges in the first window (before the morning departure)...
+    expect(rows.slice(0, 3).some((r) => r.ev_charge > 0)).toBe(true);
+    // ...stays off while away...
+    for (let t = 3; t < 5; t++) expect(rows[t].ev_charge).toBe(0);
+    // ...and charges again in the second window.
+    expect(rows.slice(5, T).some((r) => r.ev_charge > 0)).toBe(true);
+  });
+
   it('keeps charging after an early target deadline when the car stays plugged in', () => {
     const cfg = {
       ...baseCfg,

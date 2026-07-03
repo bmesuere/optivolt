@@ -275,6 +275,26 @@ describe('buildLP — EV charging (MILP)', () => {
     expect(objLine).not.toMatch(/ev_soc_4\b/);
   });
 
+  it('values the last slot of every window when multiple windows exist', () => {
+    // Windows [0,2) and [3,5): the car drives away at slot 2 and again (or stays) at the end,
+    // so both ev_soc_1 and ev_soc_4 must be valued — not only the final window's slot.
+    const lp = buildLP({
+      ...base,
+      ev: {
+        ...evCfg,
+        availabilityWindows: [
+          { startSlot: 0, endSlot: 2, resetSoc_Wh: 30000 },
+          { startSlot: 3, endSlot: 5, resetSoc_Wh: 30000 },
+        ],
+        targets: [],
+      },
+      evSocValue_cents_per_kWh: 20,
+    });
+    const objLine = lp.split('\n').find((l) => l.trim().startsWith('obj:'));
+    expect(objLine).toMatch(/- 0\.02 ev_soc_1\b/);
+    expect(objLine).toMatch(/- 0\.02 ev_soc_4\b/);
+  });
+
   it('omits the EV SoC valuation term when no slot is available', () => {
     const lp = buildLP({
       ...base,
