@@ -1,6 +1,6 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
-import { toHttpError } from '../http-errors.ts';
+import { assertCondition, toHttpError } from '../http-errors.ts';
 import { planAndMaybeWrite } from '../services/planner-service.ts';
 
 const router = express.Router();
@@ -8,8 +8,16 @@ const router = express.Router();
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = req.body ?? {};
-    const shouldUpdateData = !!body.updateData;
-    const shouldWriteToVictron = !!body.writeToVictron;
+    assertCondition(
+      body && typeof body === 'object' && !Array.isArray(body),
+      400,
+      'calculate payload must be an object',
+    );
+    assertOptionalBoolean(body.updateData, 'updateData');
+    assertOptionalBoolean(body.writeToVictron, 'writeToVictron');
+
+    const shouldUpdateData = body.updateData ?? false;
+    const shouldWriteToVictron = body.writeToVictron ?? false;
 
     logCalculateCall(body, {
       updateData: shouldUpdateData,
@@ -37,6 +45,10 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     next(toHttpError(error, 500, 'Failed to calculate plan'));
   }
 });
+
+function assertOptionalBoolean(value: unknown, field: string): asserts value is boolean | undefined {
+  assertCondition(value === undefined || typeof value === 'boolean', 400, `${field} must be a boolean`);
+}
 
 function logCalculateCall(rawBody: unknown, parsed: { updateData: boolean; writeToVictron: boolean }): void {
   console.log('[calculate] request', {

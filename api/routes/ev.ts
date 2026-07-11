@@ -56,6 +56,30 @@ router.get('/current', (req: Request, res: Response, next: NextFunction) => {
 
     const nowMs = Date.now();
     const rows = plan.rows;
+    if (rows.length === 0) {
+      throw new HttpError(404, 'Computed plan has no slots');
+    }
+
+    const firstSlotMs = rows[0].timestampMs;
+    const planEndMs = rows[rows.length - 1].timestampMs + plan.timing.stepMin * 60_000;
+    if (nowMs < firstSlotMs || nowMs >= planEndMs) {
+      const reason = nowMs < firstSlotMs ? 'before_plan' : 'expired_plan';
+      res.json({
+        timestampMs: null,
+        ev_charge_W: 0,
+        ev_charge_A: 0,
+        ev_charge_mode: 'off',
+        g2ev_W: 0,
+        pv2ev_W: 0,
+        b2ev_W: 0,
+        ev_soc_percent: null,
+        is_charging: false,
+        plan_valid: false,
+        reason,
+      });
+      return;
+    }
+
     let row = rows[0];
     for (let i = rows.length - 1; i >= 0; i--) {
       if (rows[i].timestampMs <= nowMs) {
@@ -74,6 +98,7 @@ router.get('/current', (req: Request, res: Response, next: NextFunction) => {
       b2ev_W: row.b2ev,
       ev_soc_percent: row.ev_soc_percent,
       is_charging: row.ev_charge > 0,
+      plan_valid: true,
     });
   } catch (err) {
     next(err);

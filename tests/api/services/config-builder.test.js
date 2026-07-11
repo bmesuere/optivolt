@@ -94,6 +94,32 @@ describe('buildSolverConfigFromSettings — rebalancing', () => {
   });
 });
 
+describe('buildSolverConfigFromSettings — timeline normalization', () => {
+  it('resamples mixed source resolutions onto the configured solver step', () => {
+    const data = makeData();
+    data.load = { start: NOW_STRING, step: 60, values: Array(24).fill(400) };
+
+    const cfg = buildSolverConfigFromSettings(mockSettings, data, NOW_MS);
+
+    expect(cfg.load_W).toHaveLength(96);
+    expect(cfg.pv_W).toHaveLength(96);
+    expect(cfg.importPrice).toHaveLength(96);
+    expect(cfg.exportPrice).toHaveLength(96);
+    expect(cfg.load_W.slice(0, 4)).toEqual([400, 400, 400, 400]);
+  });
+
+  it('averages finer source slots when the solver step is coarser', () => {
+    const data = makeData();
+    data.load.values = [100, 200, 300, 400, ...Array(92).fill(0)];
+
+    const cfg = buildSolverConfigFromSettings({ ...mockSettings, stepSize_m: 60 }, data, NOW_MS);
+
+    expect(cfg.load_W[0]).toBe(250);
+    expect(cfg.load_W).toHaveLength(24);
+    expect(cfg.pv_W).toHaveLength(24);
+  });
+});
+
 // EV config (static fields only); schedule comes from data.evScheduleEntries.
 // Detailed EvConfig coverage lives in ev-config-builder.test.js; these are wiring checks.
 const evSettings = {

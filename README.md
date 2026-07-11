@@ -187,7 +187,7 @@ The **API** exposes:
     }
   }
   ```
-- `POST /calculate` — Builds and solves the LP with **HiGHS** from persisted settings/data. Optional body flags: `updateData` refreshes VRM series before solving, and `writeToVictron` attempts an MQTT DESS schedule write.
+- `POST /calculate` — Builds and solves the LP with **HiGHS** from persisted settings/data. Optional boolean body flags: `updateData` refreshes VRM series before solving, and `writeToVictron` attempts an MQTT DESS schedule write. All input series are resampled onto the configured solver step before solving.
 - `POST /vrm/refresh-settings` — Fetches latest Dynamic ESS limits/settings from VRM and persists.
 - `GET /predictions/config` — Reads prediction configuration plus `isAddon`.
 - `POST /predictions/config` — Saves prediction configuration. Home Assistant URL/token are intentionally stored in `/settings`, not this file.
@@ -200,6 +200,6 @@ The **API** exposes:
 - `POST /predictions/pv/forecast` — Runs the PV forecast when PV configuration is complete.
 - `POST /predictions/forecast` — Runs load and PV forecasts together, persists raw forecasts according to data-source settings, and returns adjusted forecasts.
 - `GET /predictions/forecast/now` — Same combined forecast path with recent comparison disabled.
-- `GET /ev/current` — Current time slot's EV charging decision (`ev_charge_mode`, `ev_charge_A`, source flows, EV SoC).
+- `GET /ev/current` — Current time slot's EV charging decision (`ev_charge_mode`, `ev_charge_A`, source flows, EV SoC). Outside the current plan horizon it returns a fail-safe `off` decision with `plan_valid: false`.
 - `GET /ev/schedule` — Full per-slot EV charging schedule from the last computed plan.
 - `GET /ha/entity/:entityId` — Fetch live entity state from Home Assistant (used to validate EV sensor configuration).

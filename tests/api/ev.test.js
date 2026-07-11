@@ -92,6 +92,7 @@ describe('GET /ev/current', () => {
     expect(res.body.timestampMs).toBe(START_MS);
     expect(res.body.ev_charge_W).toBe(1380);
     expect(res.body.is_charging).toBe(true);
+    expect(res.body.plan_valid).toBe(true);
   });
 
   it('selects the most recent past slot', async () => {
@@ -104,13 +105,37 @@ describe('GET /ev/current', () => {
     expect(res.body.is_charging).toBe(false);
   });
 
-  it('falls back to rows[0] when all timestamps are in the future', async () => {
+  it('returns a safe off command before the plan starts', async () => {
     getLastPlan.mockReturnValue(mockPlan);
     vi.setSystemTime(START_MS - 10_000); // before all slots
 
     const res = await request(app).get('/ev/current');
 
-    expect(res.body.timestampMs).toBe(START_MS);
+    expect(res.body).toMatchObject({
+      timestampMs: null,
+      ev_charge_W: 0,
+      ev_charge_A: 0,
+      ev_charge_mode: 'off',
+      is_charging: false,
+      plan_valid: false,
+      reason: 'before_plan',
+    });
+  });
+
+  it('returns a safe off command after the plan expires', async () => {
+    getLastPlan.mockReturnValue(mockPlan);
+    vi.setSystemTime(START_MS + 2_700_000);
+
+    const res = await request(app).get('/ev/current');
+
+    expect(res.body).toMatchObject({
+      timestampMs: null,
+      ev_charge_W: 0,
+      ev_charge_mode: 'off',
+      is_charging: false,
+      plan_valid: false,
+      reason: 'expired_plan',
+    });
   });
 });
 
