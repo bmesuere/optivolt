@@ -30,39 +30,51 @@ export interface PredictionResult {
  */
 export function getQuarterStart(date: Date | number | string = new Date(), stepMinutes = 15): number {
   const d = new Date(date);
-  const q = Math.floor(d.getMinutes() / stepMinutes) * stepMinutes;
-  d.setMinutes(q, 0, 0);
-  return d.getTime();
+  const stepMs = stepMinutes * 60 * 1000;
+  if (!Number.isFinite(stepMs) || stepMs <= 0) return NaN;
+  return Math.floor(d.getTime() / stepMs) * stepMs;
 }
 
 /**
- * Extracts a window of data from a source time series to match a target start time.
- * Missing slots are padded with 0.
+ * Resamples a source time series into a target window using overlap-weighted averages.
+ * Missing portions of target slots are padded with 0.
  */
-export function extractWindow(source: TimeSeries, targetStartMs: number, targetEndMs: number): number[] {
+export function extractWindow(
+  source: TimeSeries,
+  targetStartMs: number,
+  targetEndMs: number,
+  targetStepMinutes = source.step || 15,
+): number[] {
   const sourceStartMs = new Date(source.start).getTime();
-  const stepMs = (source.step || 15) * 60 * 1000;
-
-  // Calculate offset in slots
-  // If source starts BEFORE target, offset is positive (we skip some source data)
-  // If source starts AFTER target, offset is negative (we need padding)
-  const offsetMs = targetStartMs - sourceStartMs;
-  const offsetSlots = Math.floor(offsetMs / stepMs);
-
-  const targetDurationMs = targetEndMs - targetStartMs;
-  const targetSlots = Math.floor(targetDurationMs / stepMs);
+  const sourceStepMs = (source.step || 15) * 60 * 1000;
+  const targetStepMs = targetStepMinutes * 60 * 1000;
+  const targetSlots = Math.floor((targetEndMs - targetStartMs) / targetStepMs);
 
   const result: number[] = [];
 
   for (let i = 0; i < targetSlots; i++) {
-    const sourceIndex = offsetSlots + i;
+    const slotStartMs = targetStartMs + i * targetStepMs;
+    const slotEndMs = slotStartMs + targetStepMs;
+    let sourceIndex = Math.max(0, Math.floor((slotStartMs - sourceStartMs) / sourceStepMs));
+    let weightedValue = 0;
 
-    if (sourceIndex >= 0 && sourceIndex < source.values.length) {
-      result.push(source.values[sourceIndex]);
-    } else {
-      // Pad with 0 for missing data
-      result.push(0);
+    while (sourceIndex < source.values.length) {
+      const sourceSlotStartMs = sourceStartMs + sourceIndex * sourceStepMs;
+      const sourceSlotEndMs = sourceSlotStartMs + sourceStepMs;
+      if (sourceSlotStartMs >= slotEndMs) break;
+
+      const overlapMs = Math.max(
+        0,
+        Math.min(slotEndMs, sourceSlotEndMs) - Math.max(slotStartMs, sourceSlotStartMs),
+      );
+      if (overlapMs > 0) {
+        weightedValue += source.values[sourceIndex] * (overlapMs / targetStepMs);
+      }
+      sourceIndex += 1;
     }
+
+    // Uncovered parts of a target slot retain the historical zero-padding behavior.
+    result.push(weightedValue);
   }
 
   return result;

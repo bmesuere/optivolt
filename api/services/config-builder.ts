@@ -36,8 +36,13 @@ export function buildSolverConfigFromSettings(
   const importEndMs = getSeriesEndMs(data.importPrice);
   const exportEndMs = getSeriesEndMs(data.exportPrice);
   const endMs = Math.min(loadEndMs, pvEndMs, importEndMs, exportEndMs);
+  const stepMs = settings.stepSize_m * 60_000;
+  if (!Number.isFinite(stepMs) || stepMs <= 0) {
+    throw new HttpError(422, 'Invalid solver step size');
+  }
+  const slotCount = Math.floor((endMs - nowMs) / stepMs);
 
-  if (endMs <= nowMs) {
+  if (slotCount <= 0) {
     throw new HttpError(422, 'Insufficient future data', {
       details: {
         now:       new Date(nowMs).toISOString(),
@@ -49,11 +54,13 @@ export function buildSolverConfigFromSettings(
     });
   }
 
+  const alignedEndMs = nowMs + slotCount * stepMs;
+
   const base: SolverConfig = {
-    load_W:      extractWindow(data.load,        nowMs, endMs),
-    pv_W:        extractWindow(data.pv,          nowMs, endMs),
-    importPrice: extractWindow(data.importPrice, nowMs, endMs),
-    exportPrice: extractWindow(data.exportPrice, nowMs, endMs),
+    load_W:      extractWindow(data.load,        nowMs, alignedEndMs, settings.stepSize_m),
+    pv_W:        extractWindow(data.pv,          nowMs, alignedEndMs, settings.stepSize_m),
+    importPrice: extractWindow(data.importPrice, nowMs, alignedEndMs, settings.stepSize_m),
+    exportPrice: extractWindow(data.exportPrice, nowMs, alignedEndMs, settings.stepSize_m),
 
     stepSize_m:                           settings.stepSize_m,
     batteryCapacity_Wh:                   settings.batteryCapacity_Wh,

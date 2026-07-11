@@ -66,6 +66,24 @@ describe('Time Series Utils', () => {
       const result = extractWindow(source, start, end);
       expect(result).toEqual([50, 0, 0]);
     });
+
+    it('repeats coarser source values when resampling to a finer target step', () => {
+      const hourly = {
+        start: new Date(baseTime).toISOString(),
+        step: 60,
+        values: [100, 200],
+      };
+
+      const result = extractWindow(hourly, baseTime, baseTime + 2 * 60 * 60 * 1000, 15);
+
+      expect(result).toEqual([100, 100, 100, 100, 200, 200, 200, 200]);
+    });
+
+    it('averages finer source values when resampling to a coarser target step', () => {
+      const result = extractWindow(source, baseTime, baseTime + 60 * 60 * 1000, 60);
+
+      expect(result).toEqual([25]);
+    });
   });
 });
 

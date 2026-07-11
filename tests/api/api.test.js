@@ -34,22 +34,22 @@ const mockData = {
   // 5 hours of data
   load: {
     start: "2024-01-01T00:00:00.000Z",
-    step: 15,
+    step: 60,
     values: [500, 500, 500, 500, 500]
   },
   pv: {
     start: "2024-01-01T00:00:00.000Z",
-    step: 15,
+    step: 60,
     values: [0, 0, 0, 0, 0]
   },
   importPrice: {
     start: "2024-01-01T00:00:00.000Z",
-    step: 15,
+    step: 60,
     values: [10, 10, 10, 10, 10]
   },
   exportPrice: {
     start: "2024-01-01T00:00:00.000Z",
-    step: 15,
+    step: 60,
     values: [5, 5, 5, 5, 5]
   },
   soc: {
@@ -124,5 +124,17 @@ describe('Integration: API', () => {
 
     expect(res.status).toBe(200);
     expect(setDynamicEssSchedule).toHaveBeenCalled();
+  });
+
+  it.each(['updateData', 'writeToVictron'])('rejects non-boolean %s values', async (field) => {
+    vi.useRealTimers();
+    const res = await request(app)
+      .post('/calculate')
+      .send({ [field]: 'false' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe(`${field} must be a boolean`);
+    expect(refreshSeriesFromVrmAndPersist).not.toHaveBeenCalled();
+    expect(setDynamicEssSchedule).not.toHaveBeenCalled();
   });
 });
