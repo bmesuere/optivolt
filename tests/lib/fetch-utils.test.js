@@ -26,12 +26,33 @@ describe('fetchWithTimeout', () => {
   });
 
   it('maps aborts to a stable timeout error', async () => {
-    global.fetch.mockRejectedValue(new DOMException('timed out', 'TimeoutError'));
+    global.fetch.mockImplementation((_input, { signal }) => new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    }));
 
     await expect(fetchWithTimeout('https://example.com', {}, {
-      timeoutMs: 20,
+      timeoutMs: 5,
       label: 'Example request',
-    })).rejects.toThrow('Example request timed out after 20ms');
+    })).rejects.toThrow('Example request timed out after 5ms');
+  });
+
+  it('preserves caller-initiated aborts', async () => {
+    const controller = new AbortController();
+    global.fetch.mockImplementation((_input, { signal }) => new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    }));
+
+    const request = fetchWithTimeout(
+      'https://example.com',
+      { signal: controller.signal },
+      { timeoutMs: 1000, label: 'Example request' },
+    );
+    controller.abort(new DOMException('Caller cancelled', 'AbortError'));
+
+    await expect(request).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'Caller cancelled',
+    });
   });
 
   it('preserves non-timeout failures', async () => {

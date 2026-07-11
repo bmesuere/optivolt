@@ -28,10 +28,12 @@ describe('Open-Meteo HTTP client', () => {
   });
 
   it('reports forecast timeouts with operation context', async () => {
-    global.fetch.mockRejectedValue(new DOMException('timed out', 'TimeoutError'));
+    global.fetch.mockImplementation((_input, { signal }) => new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    }));
 
     await expect(
-      fetchForecastIrradiance(51, 4, undefined, 60, 50),
-    ).rejects.toThrow('Open-Meteo Forecast API request timed out after 50ms');
+      fetchForecastIrradiance(51, 4, undefined, 60, 5),
+    ).rejects.toThrow('Open-Meteo Forecast API request timed out after 5ms');
   });
 });

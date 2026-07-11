@@ -23,9 +23,11 @@ describe('VRMClient HTTP requests', () => {
   });
 
   it('reports a clear timeout error', async () => {
-    global.fetch.mockRejectedValue(new DOMException('timed out', 'TimeoutError'));
-    const client = new VRMClient({ installationId: '123', token: 'secret', timeoutMs: 75 });
+    global.fetch.mockImplementation((_input, { signal }) => new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    }));
+    const client = new VRMClient({ installationId: '123', token: 'secret', timeoutMs: 5 });
 
-    await expect(client._fetch('/test')).rejects.toThrow('VRM API request timed out after 75ms');
+    await expect(client._fetch('/test')).rejects.toThrow('VRM API request timed out after 5ms');
   });
 });

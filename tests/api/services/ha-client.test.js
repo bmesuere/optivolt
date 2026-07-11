@@ -96,15 +96,17 @@ describe('fetchHaEntityState', () => {
   });
 
   it('reports a clear timeout error', async () => {
-    global.fetch.mockRejectedValue(new DOMException('timed out', 'TimeoutError'));
+    global.fetch.mockImplementation((_input, { signal }) => new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    }));
 
     await expect(
       fetchHaEntityState({
         haUrl: 'ws://homeassistant.local:8123/api/websocket',
         haToken: 'test-token',
         entityId: 'sensor.slow',
-        timeoutMs: 25,
+        timeoutMs: 5,
       }),
-    ).rejects.toThrow('Home Assistant entity request timed out after 25ms');
+    ).rejects.toThrow('Home Assistant entity request timed out after 5ms');
   });
 });

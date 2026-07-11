@@ -27,7 +27,7 @@ export async function fetchWithTimeout(
   try {
     return await fetch(input, { ...init, signal });
   } catch (error) {
-    if (isAbortError(error)) {
+    if (timeoutSignal.aborted && isAbortError(error)) {
       throw new Error(`${label} timed out after ${timeoutMs}ms`, { cause: error });
     }
     throw error;
