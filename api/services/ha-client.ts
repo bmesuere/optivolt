@@ -7,6 +7,9 @@
  */
 
 import type { HaReading } from '../../lib/ha-postprocess.ts';
+import { fetchWithTimeout } from '../../lib/fetch-utils.ts';
+
+const HA_ENTITY_TIMEOUT_MS = 5000;
 
 // ----------------------------- REST: entity state -----------------------------
 
@@ -22,6 +25,7 @@ interface FetchHaEntityStateOptions {
   haUrl: string;
   haToken: string;
   entityId: string;
+  timeoutMs?: number;
 }
 
 /**
@@ -44,15 +48,18 @@ export async function fetchHaEntityState({
   haUrl,
   haToken,
   entityId,
+  timeoutMs = HA_ENTITY_TIMEOUT_MS,
 }: FetchHaEntityStateOptions): Promise<HaEntityState> {
   const isAddon = !!process.env.SUPERVISOR_TOKEN;
   const baseUrl = isAddon ? 'http://supervisor/core' : wsUrlToHttp(haUrl);
   const token: string = isAddon ? process.env.SUPERVISOR_TOKEN! : haToken;
 
   const url = `${baseUrl}/api/states/${encodeURIComponent(entityId)}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const res = await fetchWithTimeout(
+    url,
+    { headers: { Authorization: `Bearer ${token}` } },
+    { timeoutMs, label: 'Home Assistant entity request' },
+  );
 
   if (!res.ok) {
     throw new Error(`HA returned ${res.status} for entity "${entityId}"`);
