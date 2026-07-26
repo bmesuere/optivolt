@@ -41,12 +41,21 @@ interface SegmentTippingPoints {
 
 export interface DessMapperOptions {
   blockFeedInOnNegativePrices?: boolean;
+  rebalanceWindow?: {
+    startIdx: number;
+    endIdx: number;
+  };
 }
 
 function feedInForRow(row: PlanRow, options: DessMapperOptions): number {
   return options.blockFeedInOnNegativePrices !== false && row.ec < 0
     ? FeedIn.blocked
     : FeedIn.allowed;
+}
+
+function isRebalanceSlot(index: number, options: DessMapperOptions): boolean {
+  const window = options.rebalanceWindow;
+  return window != null && index >= window.startIdx && index <= window.endIdx;
 }
 
 export function mapRowsToDess(rows: PlanRow[], cfg: SolverConfig, options: DessMapperOptions = {}): DessResult {
@@ -181,12 +190,13 @@ export function mapRowsToDess(rows: PlanRow[], cfg: SolverConfig, options: DessM
       restrictions = Restrictions.both;
     }
 
+    const rebalancing = isRebalanceSlot(t, options);
     perSlot[t] = {
       feedin,               // FeedIn.allowed | FeedIn.blocked
       restrictions,         // Restrictions.*
-      strategy,             // Strategy.* or unknown
+      strategy: rebalancing ? Strategy.proBattery : strategy,
       flags: 0,
-      socTarget_percent,
+      socTarget_percent: rebalancing ? 100 : socTarget_percent,
     };
   }
 
@@ -426,12 +436,13 @@ export function mapRowsToDessV2(rows: PlanRow[], cfg: SolverConfig, options: Des
       restrictions = Restrictions.both;
     }
 
+    const rebalancing = isRebalanceSlot(t, options);
     perSlot[t] = {
       feedin,
       restrictions,
-      strategy,
+      strategy: rebalancing ? Strategy.proBattery : strategy,
       flags: 0,
-      socTarget_percent,
+      socTarget_percent: rebalancing ? 100 : socTarget_percent,
     };
   }
 

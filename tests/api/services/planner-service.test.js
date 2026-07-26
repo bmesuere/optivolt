@@ -11,7 +11,7 @@ import { loadData, saveData } from '../../../api/services/data-store.ts';
 import { refreshSeriesFromVrmAndPersist } from '../../../api/services/vrm-refresh.ts';
 import { setDynamicEssSchedule } from '../../../api/services/mqtt-service.ts';
 import { computePlan, planAndMaybeWrite } from '../../../api/services/planner-service.ts';
-import { FeedIn } from '../../../lib/dess-mapper.ts';
+import { FeedIn, Strategy } from '../../../lib/dess-mapper.ts';
 
 const NOW_STRING = '2024-01-01T00:00:00Z';
 const NOW_MS = new Date(NOW_STRING).getTime();
@@ -78,12 +78,20 @@ describe('computePlan — rebalance bookkeeping', () => {
     loadSettings.mockResolvedValue({ ...baseSettings, rebalanceEnabled: true });
     loadData.mockResolvedValue({ ...baseData, soc: { timestamp: NOW_STRING, value: 100 }, rebalanceState: { startMs: null } });
 
-    await computePlan();
+    const result = await computePlan();
 
     // saveData should have been called with startMs set to NOW_MS
     expect(saveData).toHaveBeenCalledWith(
       expect.objectContaining({ rebalanceState: { startMs: NOW_MS } })
     );
+    expect(result.rebalanceWindow).toEqual({ startIdx: 0, endIdx: 1 });
+    expect(result.rows.slice(0, 2).map((row) => ({
+      strategy: row.dess.strategy,
+      socTarget_percent: row.dess.socTarget_percent,
+    }))).toEqual([
+      { strategy: Strategy.proBattery, socTarget_percent: 100 },
+      { strategy: Strategy.proBattery, socTarget_percent: 100 },
+    ]);
   });
 
   it('returns a rebalance nudge in the computed plan', async () => {

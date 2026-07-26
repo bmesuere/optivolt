@@ -638,4 +638,34 @@ describe('mapRowsToDessV2', () => {
     expect(v2Result.diagnostics).toHaveProperty('pvExportTippingPoint_cents_per_kWh');
     expect(v2Result.diagnostics.pvExportTippingPoint_cents_per_kWh).toBe(25);
   });
+
+  it('uses pro-battery with a 100% target throughout the rebalance window', () => {
+    const rows = [
+      makeRow({ ic: 100, ec: 30 }),
+      makeRow({ ic: 100, ec: 30 }),
+      makeRow({ ic: 100, ec: 30 }),
+      makeRow({ ic: 100, ec: 30 }),
+    ];
+
+    const { perSlot } = mapRowsToDessV2(rows, cfg, {
+      rebalanceWindow: { startIdx: 1, endIdx: 2 },
+    });
+
+    expect(perSlot[0]).toMatchObject({
+      strategy: Strategy.selfConsumption,
+      socTarget_percent: 50,
+    });
+    expect(perSlot[1]).toMatchObject({
+      strategy: Strategy.proBattery,
+      socTarget_percent: 100,
+    });
+    expect(perSlot[2]).toMatchObject({
+      strategy: Strategy.proBattery,
+      socTarget_percent: 100,
+    });
+    expect(perSlot[3]).toMatchObject({
+      strategy: Strategy.selfConsumption,
+      socTarget_percent: 50,
+    });
+  });
 });
