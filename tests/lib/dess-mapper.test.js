@@ -653,19 +653,44 @@ describe('mapRowsToDessV2', () => {
 
     expect(perSlot[0]).toMatchObject({
       strategy: Strategy.selfConsumption,
+      restrictions: Restrictions.both,
       socTarget_percent: 50,
     });
     expect(perSlot[1]).toMatchObject({
       strategy: Strategy.proBattery,
+      restrictions: Restrictions.batteryToGrid,
       socTarget_percent: 100,
     });
     expect(perSlot[2]).toMatchObject({
       strategy: Strategy.proBattery,
+      restrictions: Restrictions.batteryToGrid,
       socTarget_percent: 100,
     });
     expect(perSlot[3]).toMatchObject({
       strategy: Strategy.selfConsumption,
+      restrictions: Restrictions.both,
       socTarget_percent: 50,
     });
+  });
+
+  it('allows grid→battery during rebalance even when the price signal says pro-grid', () => {
+    // High export price would normally yield proGrid + Restrictions.gridToBattery,
+    // which blocks the grid charging the rebalance needs.
+    const rows = [
+      makeRow({ ic: 30, ec: 100, b2g: 1000 }),
+      makeRow({ ic: 30, ec: 100, b2g: 1000 }),
+    ];
+
+    const { perSlot } = mapRowsToDessV2(rows, cfg, {
+      rebalanceWindow: { startIdx: 0, endIdx: 1 },
+    });
+
+    for (const slot of perSlot) {
+      expect(slot).toMatchObject({
+        strategy: Strategy.proBattery,
+        restrictions: Restrictions.batteryToGrid,
+        socTarget_percent: 100,
+      });
+    }
   });
 });

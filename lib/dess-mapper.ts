@@ -193,7 +193,8 @@ export function mapRowsToDess(rows: PlanRow[], cfg: SolverConfig, options: DessM
     const rebalancing = isRebalanceSlot(t, options);
     perSlot[t] = {
       feedin,               // FeedIn.allowed | FeedIn.blocked
-      restrictions,         // Restrictions.*
+      // While rebalancing we must be able to top up from grid and must not drain to grid
+      restrictions: rebalancing ? Restrictions.batteryToGrid : restrictions,
       strategy: rebalancing ? Strategy.proBattery : strategy,
       flags: 0,
       socTarget_percent: rebalancing ? 100 : socTarget_percent,
@@ -439,7 +440,8 @@ export function mapRowsToDessV2(rows: PlanRow[], cfg: SolverConfig, options: Des
     const rebalancing = isRebalanceSlot(t, options);
     perSlot[t] = {
       feedin,
-      restrictions,
+      // While rebalancing we must be able to top up from grid and must not drain to grid
+      restrictions: rebalancing ? Restrictions.batteryToGrid : restrictions,
       strategy: rebalancing ? Strategy.proBattery : strategy,
       flags: 0,
       socTarget_percent: rebalancing ? 100 : socTarget_percent,
