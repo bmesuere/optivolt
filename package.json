@@ -33,7 +33,7 @@
   "devDependencies": {
     "@eslint/css": "^1.2.0",
     "@eslint/js": "^10.0.1",
-    "@eslint/markdown": "^8.0.1",
+    "@eslint/markdown": "^8.0.2",
     "@types/express": "^5.0.6",
     "dotenv-cli": "^11.0.0",
     "eslint": "^10.3.0",
