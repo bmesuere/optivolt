@@ -158,8 +158,14 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const rows = attachOriginalPredictionValues(parseSolution(result, cfg, timing), data);
 
+  const rebalanceWindow = extractRebalanceWindow(
+    result.Columns ?? {},
+    cfg.rebalanceRemainingSlots ?? 0,
+  );
+
   const { perSlot, diagnostics } = mapRowsToDessV2(rows, cfg, {
     blockFeedInOnNegativePrices: settings.blockFeedInOnNegativePrices !== false,
+    rebalanceWindow,
   });
 
   const rowsWithDess: PlanRowWithDess[] = rows.map((row, i) => ({ ...row, dess: perSlot[i] }));
@@ -179,11 +185,6 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   } : undefined;
 
   const summary = buildPlanSummary(rowsWithDess, cfg, diagnostics, rebalanceCtx);
-
-  const rebalanceWindow = extractRebalanceWindow(
-    result.Columns ?? {},
-    cfg.rebalanceRemainingSlots ?? 0,
-  );
 
   const rebalanceNudge = getRebalanceNudge(data);
 
