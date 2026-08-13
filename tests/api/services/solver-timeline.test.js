@@ -74,4 +74,47 @@ describe('Solver Timeline Logic (Refactored)', () => {
     const configFull = buildSolverConfigFromSettings(mockSettings, longData);
     expect(configFull.load_W.length).toBe(96); // 24h * 4
   });
+
+  it('rejects load and price series that start after the plan window begins', () => {
+    const baseData = {
+      load: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(100) },
+      pv: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(0) },
+      importPrice: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(10) },
+      exportPrice: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(5) },
+      soc: { timestamp: '2024-01-01T12:00:00Z', value: 50 }
+    };
+
+    // extractWindow would zero-pad the leading slots of these series, which
+    // for load/prices means planning against free energy.
+    for (const key of ['load', 'importPrice', 'exportPrice']) {
+      const data = {
+        ...baseData,
+        [key]: { ...baseData[key], start: '2024-01-01T12:30:00Z' }, // after now (12:00)
+      };
+      expect(() => buildSolverConfigFromSettings(mockSettings, data))
+        .toThrowError(new RegExp(`'${key}' starts after`));
+    }
+
+    // A series starting exactly at the window start is fine.
+    const exactStart = {
+      ...baseData,
+      importPrice: { ...baseData.importPrice, start: '2024-01-01T12:00:00Z' },
+    };
+    expect(() => buildSolverConfigFromSettings(mockSettings, exactStart)).not.toThrow();
+  });
+
+  it('allows a PV series that starts after the plan window begins (leading zeros = no sun)', () => {
+    const data = {
+      load: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(100) },
+      pv: { start: '2024-01-01T14:00:00Z', step: 15, values: Array(84).fill(500) },
+      importPrice: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(10) },
+      exportPrice: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(5) },
+      soc: { timestamp: '2024-01-01T12:00:00Z', value: 50 }
+    };
+
+    const config = buildSolverConfigFromSettings(mockSettings, data);
+    // Slots between 12:00 and 14:00 are zero-padded PV.
+    expect(config.pv_W.slice(0, 8).every(v => v === 0)).toBe(true);
+    expect(config.pv_W[8]).toBe(500);
+  });
 });

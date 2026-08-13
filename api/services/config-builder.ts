@@ -36,6 +36,28 @@ export function buildSolverConfigFromSettings(
   const importEndMs = getSeriesEndMs(data.importPrice);
   const exportEndMs = getSeriesEndMs(data.exportPrice);
   const endMs = Math.min(loadEndMs, pvEndMs, importEndMs, exportEndMs);
+
+  // A series that starts after the plan window begins would be silently
+  // zero-padded by extractWindow for the leading slots. Zero PV just means
+  // "no sun yet" and is legitimate (e.g. a forecast that starts at sunrise),
+  // but zero load or zero prices would make the solver plan against free
+  // energy, so reject those outright.
+  const mustCoverStart: Array<[string, TimeSeries]> = [
+    ['load',        data.load],
+    ['importPrice', data.importPrice],
+    ['exportPrice', data.exportPrice],
+  ];
+  for (const [name, series] of mustCoverStart) {
+    const seriesStartMs = new Date(series.start).getTime();
+    if (seriesStartMs > nowMs) {
+      throw new HttpError(422, `Series '${name}' starts after the plan window begins`, {
+        details: {
+          now:         new Date(nowMs).toISOString(),
+          seriesStart: new Date(seriesStartMs).toISOString(),
+        },
+      });
+    }
+  }
   const stepMs = settings.stepSize_m * 60_000;
   if (!Number.isFinite(stepMs) || stepMs <= 0) {
     throw new HttpError(422, 'Invalid solver step size');

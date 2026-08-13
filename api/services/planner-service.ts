@@ -16,6 +16,10 @@ import type { PlanRowWithDess, Data } from '../types.ts';
 
 // How many slots we push into Dynamic ESS
 const DESS_SLOTS = 4;
+// Upper bound on a single HiGHS solve, in seconds. Current ~100-slot MILPs
+// solve well under a second; this only kicks in when something degenerates
+// (or once longer horizons multiply the binary count).
+const SOLVE_TIME_LIMIT_S = 30;
 
 // Lazy, shared HiGHS instance
 type HighsInstance = Awaited<ReturnType<typeof highsFactory>>;
@@ -132,7 +136,12 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   const lpText = buildLP(cfg);
   const highs = await getHighsInstance();
   const hasBinaries = cfg.ev != null || (cfg.rebalanceRemainingSlots ?? 0) > 0;
-  const solveOptions = hasBinaries ? { mip_rel_gap: 0.005, mip_abs_gap: 0.01 } : {};
+  // The solve runs synchronously on the event loop, so a runaway MIP would
+  // block every HTTP request; the time limit bounds that. A limited solve
+  // comes back with a non-Optimal status and is refused for hardware writes.
+  const solveOptions = hasBinaries
+    ? { mip_rel_gap: 0.005, mip_abs_gap: 0.01, time_limit: SOLVE_TIME_LIMIT_S }
+    : { time_limit: SOLVE_TIME_LIMIT_S };
   let result: ReturnType<typeof highs.solve>;
   const t0 = performance.now();
   try {
@@ -154,6 +163,7 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
     ev: evInfo,
     rebalance: (cfg.rebalanceRemainingSlots ?? 0) > 0,
     solveMs: Math.round(solveMs),
+    status: result.Status,
   });
 
   const rows = attachOriginalPredictionValues(parseSolution(result, cfg, timing), data);
