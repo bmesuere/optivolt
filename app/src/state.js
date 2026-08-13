@@ -47,6 +47,7 @@ export function snapshotUI(els) {
     evBatteryCapacity_kWh: num(els.evBatteryCapacity?.value),
     evChargeEfficiency_percent: num(els.evChargeEfficiency?.value),
     evSocValue_cents_per_kWh: num(els.evSocValuation?.value),
+    evTripSocBuffer_percent: num(els.evTripSocBuffer?.value),
     evSocSensor: els.evSocSensor?.value ?? '',
     evPlugSensor: els.evPlugSensor?.value ?? '',
 
@@ -114,6 +115,7 @@ export function hydrateUI(els, obj = {}) {
   setIfDef(els.evBatteryCapacity, obj.evBatteryCapacity_kWh);
   setIfDef(els.evChargeEfficiency, obj.evChargeEfficiency_percent);
   setIfDef(els.evSocValuation, obj.evSocValue_cents_per_kWh);
+  setIfDef(els.evTripSocBuffer, obj.evTripSocBuffer_percent);
   setIfDef(els.evSocSensor, obj.evSocSensor);
   setIfDef(els.evPlugSensor, obj.evPlugSensor);
 

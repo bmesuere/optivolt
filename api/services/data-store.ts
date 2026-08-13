@@ -56,6 +56,18 @@ export function validateData(d: Data): Data {
       validateEvScheduleEntry(entry);
     }
   }
+  if (d.evLastState !== undefined) {
+    const s = d.evLastState;
+    if (!s || typeof s !== 'object' || typeof s.pluggedIn !== 'boolean') {
+      throw new Error('Invalid evLastState: pluggedIn must be a boolean');
+    }
+    if (s.soc_percent !== null && !Number.isFinite(s.soc_percent)) {
+      throw new Error('Invalid evLastState: soc_percent must be null or a finite number');
+    }
+    if (Number.isNaN(new Date(s.observedAt).getTime())) {
+      throw new Error(`Invalid evLastState: observedAt is not a valid timestamp (${s.observedAt})`);
+    }
+  }
   return d;
 }
 

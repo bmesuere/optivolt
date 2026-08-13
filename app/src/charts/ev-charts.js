@@ -4,7 +4,7 @@ import {
 } from '../chart-tooltip.js';
 import { SOLUTION_COLORS, dim } from './colors.js';
 import { buildTimeAxisFromTimestamps, dsBar, getBaseOptions, getChartTheme, renderChart } from './core.js';
-import { makeEvArrivalPlugin, makeEvDeparturePlugin, makeEvTargetPlugin } from './ev-annotations.js';
+import { makeEvArrivalPlugin, makeEvAwayBandPlugin, makeEvDeparturePlugin, makeEvTargetPlugin } from './ev-annotations.js';
 
 export function drawEvPowerChart(canvas, rows, _stepSize_m = 15, evSettings = {}) {
   const timestampsMs = rows.map(r => r.timestampMs);
@@ -87,6 +87,7 @@ export function drawEvPowerChart(canvas, rows, _stepSize_m = 15, evSettings = {}
   };
 
   const eventPlugins = [
+    makeEvAwayBandPlugin(rows, evSettings.trips),
     makeEvArrivalPlugin(rows, evSettings.arrivals),
     makeEvDeparturePlugin(rows, evSettings.departures),
   ].filter(Boolean);
@@ -104,6 +105,7 @@ export function drawEvSocChartTab(canvas, rows, evSettings = {}) {
   const axis = buildTimeAxisFromTimestamps(timestampsMs);
 
   const plugins = [
+    makeEvAwayBandPlugin(rows, evSettings.trips),
     makeEvArrivalPlugin(rows, evSettings.arrivals),
     makeEvDeparturePlugin(rows, evSettings.departures),
     makeEvTargetPlugin(rows, evSettings.targets),

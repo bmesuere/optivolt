@@ -14,7 +14,7 @@ const NUMERIC_FIELDS: (keyof Settings)[] = [
   'dischargeEfficiency_percent', 'batteryCost_cent_per_kWh', 'idleDrain_W',
   'terminalSocCustomPrice_cents_per_kWh', 'rebalanceHoldHours',
   'evMinChargeCurrent_A', 'evMaxChargeCurrent_A', 'evBatteryCapacity_kWh',
-  'evChargeEfficiency_percent', 'evSocValue_cents_per_kWh',
+  'evChargeEfficiency_percent', 'evSocValue_cents_per_kWh', 'evTripSocBuffer_percent',
 ];
 
 function validateSettings(s: Settings): Settings {
@@ -33,6 +33,9 @@ function validateSettings(s: Settings): Settings {
 
   // A negative valuation would invert the incentive and penalize EV charging.
   s.evSocValue_cents_per_kWh = Math.max(0, s.evSocValue_cents_per_kWh);
+
+  // Trip buffer is a SoC share on top of the trip usage; clamp to a sane [0, 100].
+  s.evTripSocBuffer_percent = Math.max(0, Math.min(100, s.evTripSocBuffer_percent));
 
   if (!Array.isArray(s.optimizerQuickSettings)) {
     s.optimizerQuickSettings = [];

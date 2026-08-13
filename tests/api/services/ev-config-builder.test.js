@@ -12,6 +12,7 @@ const base = {
   evMaxChargeCurrent_A: 16,
   evBatteryCapacity_kWh: 60,
   evChargeEfficiency_percent: 100,
+  evTripSocBuffer_percent: 20,
 };
 
 const pluggedIn = { pluggedIn: true, soc_percent: 50 };
@@ -138,5 +139,87 @@ describe('buildEvConfig — targets', () => {
   it('emits no targets when none are configured', () => {
     const ev = buildEvConfig(base, [entry('departure', T14)], pluggedIn, NOW_MS, T);
     expect(ev.targets).toEqual([]);
+  });
+});
+
+describe('buildEvConfig — trips', () => {
+  const trip = (time, endTime, usage_percent) => ({
+    id: `t${seq++}`,
+    type: 'trip',
+    time,
+    endTime,
+    ...(usage_percent != null ? { usage_percent } : {}),
+    createdAt: time,
+    updatedAt: time,
+  });
+
+  it('splits into a reset window and a drop window (usage stays relative to departure SoC)', () => {
+    const ev = buildEvConfig(base, [trip(T14, T16, 20)], pluggedIn, NOW_MS, T);
+    expect(ev.availabilityWindows).toEqual([
+      { startSlot: 0, endSlot: 8, resetSoc_Wh: 30000 },
+      { startSlot: 16, endSlot: T, drop_Wh: 12000 }, // 20% of 60 kWh, no fixed reset
+    ]);
+  });
+
+  it('derives a departure target of usage + buffer', () => {
+    // usage 60% + buffer 20% = 80% (48 000 Wh), clamped to what 8 slots can charge:
+    // 30 000 + 8 × 920 = 37 360 Wh, pinned at the slot before departure.
+    const ev = buildEvConfig(base, [trip(T14, T16, 60)], pluggedIn, NOW_MS, T);
+    expect(ev.targets).toEqual([{ slot: 7, soc_Wh: 37360 }]);
+  });
+
+  it('caps the derived target at 100%', () => {
+    const ev = buildEvConfig({ ...base, evMaxChargeCurrent_A: 320 }, [trip(T14, T16, 90)], pluggedIn, NOW_MS, T);
+    // 90 + 20 → clamped to 100% = 60 000 Wh (capacity), reachable with the inflated charger.
+    expect(ev.targets).toEqual([{ slot: 7, soc_Wh: 60000 }]);
+  });
+
+  it('derives no target when the trip has no usage estimate, and chains the window', () => {
+    const ev = buildEvConfig(base, [trip(T14, T16)], pluggedIn, NOW_MS, T);
+    expect(ev.targets).toEqual([]);
+    expect(ev.availabilityWindows[1]).toEqual({ startSlot: 16, endSlot: T }); // neither reset nor drop
+  });
+
+  it('clamps the drop to the maximum SoC reachable by departure (keeps the LP feasible)', () => {
+    // 10% initial (6 000 Wh) + 4 slots × 920 Wh = 9 680 Wh max at departure < 50% usage (30 000).
+    const ev = buildEvConfig(base, [trip(T13, T16, 50)], { pluggedIn: true, soc_percent: 10 }, NOW_MS, T);
+    expect(ev.availabilityWindows[1].drop_Wh).toBe(9680);
+  });
+
+  it('keeps a post-trip target even below the pre-trip SoC (no fixed floor after a drop)', () => {
+    // Target 30% at 17:00 (slot 20) sits in the drop window; with a fixed-reset window this
+    // would be skipped as redundant, but after a trip the floor depends on solver decisions.
+    const entries = [trip(T14, T16, 20), entry('target', '2024-01-01T17:00:00Z', 30)];
+    const ev = buildEvConfig(base, entries, pluggedIn, NOW_MS, T);
+    expect(ev.targets).toContainEqual({ slot: 19, soc_Wh: 18000 });
+  });
+
+  it('drops only the departure when the arrival lies beyond the horizon', () => {
+    const ev = buildEvConfig(base, [trip(T14, '2030-01-01T00:00:00Z', 60)], pluggedIn, NOW_MS, T);
+    expect(ev.availabilityWindows).toEqual([{ startSlot: 0, endSlot: 8, resetSoc_Wh: 30000 }]);
+    expect(ev.targets).toEqual([{ slot: 7, soc_Wh: 37360 }]); // 60 + 20 → 80%, achievability-clamped
+  });
+
+  it('skips a derived target already below the departure-window reset', () => {
+    // usage 20% + buffer 20% = 40% < the 50% the car already holds → redundant, no constraint.
+    const ev = buildEvConfig(base, [trip(T14, T16, 20)], pluggedIn, NOW_MS, T);
+    expect(ev.targets).toEqual([]);
+  });
+});
+
+describe('buildEvConfig — overdue entries', () => {
+  it('treats an overdue departure as departing at the next slot, target pinned to slot 0', () => {
+    // Normalization keeps a past-due departure only while the car is still plugged in; the
+    // builder must keep charging toward its target rather than dropping it.
+    const past = entry('departure', '2024-01-01T09:00:00Z', 80);
+    const ev = buildEvConfig(base, [past], pluggedIn, NOW_MS, T);
+    expect(ev.availabilityWindows).toEqual([{ startSlot: 0, endSlot: 1, resetSoc_Wh: 30000 }]);
+    expect(ev.targets).toEqual([{ slot: 0, soc_Wh: 30920 }]); // one slot of charging above 50%
+  });
+
+  it('treats an overdue arrival as arriving at the next slot while away', () => {
+    const past = entry('arrival', '2024-01-01T09:00:00Z', 40);
+    const ev = buildEvConfig(base, [past], { pluggedIn: false, soc_percent: NaN }, NOW_MS, T);
+    expect(ev.availabilityWindows).toEqual([{ startSlot: 1, endSlot: T, resetSoc_Wh: 24000 }]);
   });
 });

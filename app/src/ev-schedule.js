@@ -7,11 +7,13 @@ import {
 } from "./api/api.js";
 
 const TYPE_BADGE = {
+  trip:      "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
   arrival:   "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400",
   departure: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
   target:    "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
 };
 const SOC_LABEL = {
+  trip:      "Estimated trip usage (%)",
   arrival:   "Assumed SoC on arrival (%)",
   departure: "Target SoC at departure (%)",
   target:    "Required SoC (%)",
@@ -19,18 +21,23 @@ const SOC_LABEL = {
 const TYPE_ACTIVE = ["bg-white", "text-sky-700", "shadow-sm", "dark:bg-slate-900", "dark:text-sky-400"];
 const TYPE_INACTIVE = ["text-slate-500", "dark:text-slate-400"];
 
+const DEFAULT_TRIP_BUFFER_PERCENT = 20;
+
 const blockNowMs = () => Math.floor(Date.now() / (15 * 60 * 1000)) * (15 * 60 * 1000);
 const fromDatetimeLocal = (value) => {
   const ms = new Date(value).getTime();
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 };
 const fmtEntryTime = new Intl.DateTimeFormat([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+const fmtEntryTimeShort = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit", hour12: false });
 
 /**
- * Controller for the EV schedule entry list + inline editor (arrival / departure / target),
- * mirroring the manual prediction-adjustment editor. Entries are server-owned (CRUD via /ev),
- * sorted by time, and may be entered outside the current horizon. `onChange` fires after any
- * mutation so the caller can trigger a re-solve.
+ * Controller for the EV schedule entry list + inline editor (trip / arrival / departure /
+ * target), mirroring the manual prediction-adjustment editor. Entries are server-owned (CRUD
+ * via /ev), sorted by time, and may be entered outside the current horizon. A trip is a
+ * departure + arrival pair with an optional usage estimate; the required SoC at departure
+ * (usage + the global trip buffer) is derived, not stored. `onChange` fires after any mutation
+ * so the caller can trigger a re-solve.
  */
 export function createEvScheduleController({ els, getPlanRows = () => [], onChange = () => {} }) {
   let entries = [];
@@ -38,6 +45,13 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
   let horizonMs = null;
 
   const getEntries = () => entries;
+
+  const tripBufferPercent = () => {
+    const n = Number(els.evTripSocBuffer?.value);
+    return Number.isFinite(n) ? n : DEFAULT_TRIP_BUFFER_PERCENT;
+  };
+  const derivedTripTarget = (usage_percent) =>
+    Math.min(100, Math.round(usage_percent + tripBufferPercent()));
 
   function setEntries(next) {
     entries = Array.isArray(next) ? next : [];
@@ -59,6 +73,14 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     return [...entries].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
   }
 
+  // "Jun 17 12:45 → 18:00" (same-day arrival shows time only).
+  function fmtTripSpan(entry) {
+    const dep = new Date(entry.time);
+    const arr = new Date(entry.endTime);
+    const sameDay = dep.toDateString() === arr.toDateString();
+    return `${fmtEntryTime.format(dep)} → ${(sameDay ? fmtEntryTimeShort : fmtEntryTime).format(arr)}`;
+  }
+
   function renderList() {
     const list = els.evScheduleEntriesList;
     if (!list) return;
@@ -72,20 +94,46 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
       list.innerHTML = `<li class="py-1.5 text-xs text-slate-400 dark:text-slate-500">No schedule entries.</li>`;
       return;
     }
+    const nowMs = Date.now();
     list.innerHTML = sorted.map((e) => {
-      const soc = Number.isFinite(e.soc_percent) ? `<span class="ml-2 font-mono text-xs text-slate-400 dark:text-slate-500">${e.soc_percent}%</span>` : "";
-      const label = escapeHtml(fmtEntryTime.format(new Date(e.time)));
+      const isTrip = e.type === "trip";
+      const label = isTrip
+        ? escapeHtml(fmtTripSpan(e))
+        : escapeHtml(fmtEntryTime.format(new Date(e.time)));
+      let extras = "";
+      if (isTrip && Number.isFinite(e.usage_percent)) {
+        extras += `<span class="ml-2 font-mono text-xs text-slate-400 dark:text-slate-500" title="Estimated trip usage">−${e.usage_percent}%</span>`;
+        extras += `<span class="ml-1.5 font-mono text-xs text-emerald-600 dark:text-emerald-400" title="Required SoC at departure (usage + ${tripBufferPercent()}% buffer)">≥${derivedTripTarget(e.usage_percent)}%</span>`;
+      } else if (Number.isFinite(e.soc_percent)) {
+        extras += `<span class="ml-2 font-mono text-xs text-slate-400 dark:text-slate-500">${e.soc_percent}%</span>`;
+      }
+      // A departure/trip whose departure time passed but that the server still keeps means the
+      // car is still plugged in: it keeps charging toward its target until it actually leaves.
+      if ((isTrip || e.type === "departure") && new Date(e.time).getTime() < nowMs) {
+        extras += `<span class="ml-1.5 inline-block rounded px-1 py-0.5 text-[9px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" title="Departure time has passed but the car is still connected">overdue</span>`;
+      }
       return `<li data-entry-id="${escapeHtml(e.id)}" class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 dark:border-white/10 dark:bg-slate-800/50">
         <button type="button" data-edit class="flex flex-1 items-center gap-2 text-left">
           <span class="inline-block w-20 shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-medium capitalize ${TYPE_BADGE[e.type] ?? ""}">${escapeHtml(e.type)}</span>
           <span class="font-mono text-xs text-slate-600 dark:text-slate-300">${label}</span>
-          ${soc}
+          ${extras}
         </button>
         <button type="button" data-remove title="Remove" aria-label="Remove entry" class="shrink-0 text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
         </button>
       </li>`;
     }).join("");
+  }
+
+  function updateTripHint() {
+    const hint = els.evEntryTripHint;
+    if (!hint) return;
+    const usage = Number(els.evEntrySoc?.value);
+    const show = draft?.type === "trip" && els.evEntrySoc?.value !== "" && Number.isFinite(usage) && usage >= 0 && usage <= 100;
+    hint.classList.toggle("hidden", !show);
+    if (show) {
+      hint.textContent = `Requires ≥ ${derivedTripTarget(usage)}% at departure (usage + ${tripBufferPercent()}% buffer).`;
+    }
   }
 
   function refreshTypeSegments() {
@@ -95,8 +143,12 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
       btn.classList.remove(...TYPE_ACTIVE, ...TYPE_INACTIVE);
       btn.classList.add(...(active ? TYPE_ACTIVE : TYPE_INACTIVE));
     });
+    const isTrip = draft?.type === "trip";
+    if (els.evEntryTimeLabel) els.evEntryTimeLabel.textContent = isTrip ? "Departure" : "Time";
+    if (els.evEntryEndRow) els.evEntryEndRow.classList.toggle("hidden", !isTrip);
     if (els.evEntrySocLabel) els.evEntrySocLabel.textContent = SOC_LABEL[draft?.type] ?? "SoC (%)";
-    if (els.evEntrySoc) els.evEntrySoc.placeholder = draft?.type === "target" ? "required" : "none";
+    if (els.evEntrySoc) els.evEntrySoc.placeholder = draft?.type === "target" ? "required" : (isTrip ? "optional" : "none");
+    updateTripHint();
   }
 
   function setType(type) {
@@ -115,9 +167,13 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
   function openEditor(entry) {
     draft = entry
       ? { id: entry.id, type: entry.type }
-      : { type: "departure" };
+      : { type: "trip" };
     if (els.evEntryTime) els.evEntryTime.value = entry?.time ? toDatetimeLocal(new Date(entry.time)) : "";
-    if (els.evEntrySoc) els.evEntrySoc.value = Number.isFinite(entry?.soc_percent) ? String(entry.soc_percent) : "";
+    if (els.evEntryEndTime) els.evEntryEndTime.value = entry?.endTime ? toDatetimeLocal(new Date(entry.endTime)) : "";
+    if (els.evEntrySoc) {
+      const value = entry?.type === "trip" ? entry?.usage_percent : entry?.soc_percent;
+      els.evEntrySoc.value = Number.isFinite(value) ? String(value) : "";
+    }
     if (els.evEntryDelete) els.evEntryDelete.classList.toggle("hidden", !entry);
     clearError();
     refreshTypeSegments();
@@ -133,17 +189,26 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     if (!draft) return null;
     const type = draft.type;
     const time = fromDatetimeLocal(els.evEntryTime?.value ?? "");
-    if (!time) { showError("Pick a valid date and time."); return null; }
+    if (!time) { showError(type === "trip" ? "Pick a valid departure date and time." : "Pick a valid date and time."); return null; }
     const socRaw = els.evEntrySoc?.value ?? "";
     const hasSoc = socRaw !== "";
     let soc_percent;
     if (hasSoc) {
       soc_percent = Number(socRaw);
       if (!Number.isFinite(soc_percent) || soc_percent < 0 || soc_percent > 100) {
-        showError("SoC must be between 0 and 100."); return null;
+        showError(type === "trip" ? "Usage must be between 0 and 100." : "SoC must be between 0 and 100."); return null;
       }
     } else if (type === "target") {
       showError("A target needs a required SoC."); return null;
+    }
+    if (type === "trip") {
+      const endTime = fromDatetimeLocal(els.evEntryEndTime?.value ?? "");
+      if (!endTime) { showError("Pick a valid arrival date and time."); return null; }
+      if (new Date(endTime).getTime() <= new Date(time).getTime()) {
+        showError("Arrival must be after departure."); return null;
+      }
+      // Always send usage_percent (null when cleared) so an edit can remove a previously-set value.
+      return { type, time, endTime, usage_percent: soc_percent ?? null };
     }
     // Always send soc_percent (null when cleared) so an edit can remove a previously-set value.
     return { type, time, soc_percent: soc_percent ?? null };
@@ -171,14 +236,15 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     } catch { /* leave the list as-is on failure */ }
   }
 
-  // Enable/disable the "horizon end" quick-set from the latest plan's last row.
+  // Enable/disable the "horizon end" quick-sets from the latest plan's last row.
   function refreshHorizonQuickSet(rows = getPlanRows()) {
-    const btn = els.evEntryTimeHorizon;
     const last = rows?.[rows.length - 1];
     horizonMs = last?.timestampMs ?? null;
-    if (!btn) return;
-    btn.disabled = horizonMs == null;
-    btn.title = horizonMs == null ? "Run a plan first" : "Set to end of current plan";
+    for (const btn of [els.evEntryTimeHorizon, els.evEntryEndHorizon]) {
+      if (!btn) continue;
+      btn.disabled = horizonMs == null;
+      btn.title = horizonMs == null ? "Run a plan first" : "Set to end of current plan";
+    }
   }
 
   function wireEditor() {
@@ -198,6 +264,11 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     els.evEntryTimeHorizon?.addEventListener("click", () => {
       if (horizonMs != null && els.evEntryTime) els.evEntryTime.value = toDatetimeLocal(new Date(horizonMs));
     });
+    els.evEntryEndClear?.addEventListener("click", () => { if (els.evEntryEndTime) els.evEntryEndTime.value = ""; });
+    els.evEntryEndHorizon?.addEventListener("click", () => {
+      if (horizonMs != null && els.evEntryEndTime) els.evEntryEndTime.value = toDatetimeLocal(new Date(horizonMs));
+    });
+    els.evEntrySoc?.addEventListener("input", updateTripHint);
 
     els.evScheduleEntriesList?.addEventListener("click", (event) => {
       const li = event.target.closest("[data-entry-id]");
