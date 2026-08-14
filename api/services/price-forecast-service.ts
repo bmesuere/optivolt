@@ -48,51 +48,88 @@ function tzOffsetMs(utcMs: number): number {
 }
 
 /**
- * Parse a feed timestamp to epoch ms. Timestamps with an explicit offset (or
- * Z) are parsed directly; bare "YYYY-MM-DD HH:MM:SS" strings are interpreted
- * as Europe/Brussels wall-clock time.
+ * All UTC instants whose FEED_TZ wall-clock rendering matches the given wall
+ * time (passed as its components read as UTC). Ascending; 0, 1, or 2 results:
+ * a normal time yields one, the repeated hour at the autumn DST transition
+ * yields two, and a nonexistent spring-forward time yields none.
  */
-export function parseFeedTimestamp(value: string): number {
-  if (typeof value !== 'string') return NaN;
+function wallTimeToUtcCandidates(wallAsUtc: number): number[] {
+  // The zone's offsets on either side of a possible transition near this time.
+  const probeOffsets = new Set([
+    tzOffsetMs(wallAsUtc - 12 * 3_600_000),
+    tzOffsetMs(wallAsUtc + 12 * 3_600_000),
+  ]);
+  const candidates = new Set<number>();
+  for (const offset of probeOffsets) {
+    const ts = wallAsUtc - offset;
+    if (tzOffsetMs(ts) === offset) candidates.add(ts); // round-trips → real occurrence
+  }
+  return [...candidates].sort((a, b) => a - b);
+}
+
+/**
+ * Parse a feed timestamp to every epoch-ms instant it can denote. Timestamps
+ * with an explicit offset (or Z) are unambiguous; bare "YYYY-MM-DD HH:MM:SS"
+ * strings are interpreted as Europe/Brussels wall-clock time, which is
+ * ambiguous during the repeated hour at the autumn DST transition (both
+ * occurrences are returned, ascending). Empty when unparseable.
+ */
+export function feedTimestampCandidates(value: string): number[] {
+  if (typeof value !== 'string') return [];
   if (/(?:Z|[+-]\d{2}:?\d{2})$/.test(value)) {
-    return new Date(value).getTime();
+    const ts = new Date(value).getTime();
+    return Number.isFinite(ts) ? [ts] : [];
   }
   const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim());
-  if (!m) return NaN;
+  if (!m) return [];
   const [y, mo, d, h, mi, s] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6] ?? 0)];
-  // Wall-clock → UTC: guess the offset at the wall time read as UTC, then
-  // re-evaluate once at the corrected instant. This converges except inside a
-  // DST transition, where either candidate is at most an hour off.
   const wallAsUtc = Date.UTC(y, mo - 1, d, h, mi, s);
-  let ts = wallAsUtc - tzOffsetMs(wallAsUtc);
-  ts = wallAsUtc - tzOffsetMs(ts);
-  return ts;
+  const candidates = wallTimeToUtcCandidates(wallAsUtc);
+  if (candidates.length > 0) return candidates;
+  // Nonexistent local time (spring-forward gap): best-effort single instant.
+  return [wallAsUtc - tzOffsetMs(wallAsUtc)];
+}
+
+/** Parse a feed timestamp to epoch ms, taking the earlier occurrence when ambiguous. NaN when unparseable. */
+export function parseFeedTimestamp(value: string): number {
+  return feedTimestampCandidates(value)[0] ?? NaN;
 }
 
 /**
  * Convert a list of feed points into a contiguous 15-min TimeSeries.
- * Points are sorted by time; the series is truncated at the first gap or
- * non-finite value so a malformed feed can never fabricate prices.
+ * Points are consumed in feed order; the series is truncated at the first
+ * gap, out-of-order timestamp, or invalid price, so a malformed feed can
+ * never fabricate prices. DST-ambiguous wall times resolve to whichever
+ * occurrence continues the sequence, keeping the autumn repeated hour
+ * contiguous.
  */
 export function pointsToSeries(points: ForecastFeedPoint[]): TimeSeries | null {
   const stepMs = STEP_MINUTES * 60_000;
-  const parsed = points
-    .map(p => ({ timeMs: parseFeedTimestamp(p.time), price: Number(p.price) }))
-    .filter(p => Number.isFinite(p.timeMs))
-    .sort((a, b) => a.timeMs - b.timeMs);
-  if (parsed.length === 0) return null;
-
   const values: number[] = [];
-  let expectedMs = parsed[0].timeMs;
-  for (const p of parsed) {
-    if (p.timeMs !== expectedMs || !Number.isFinite(p.price)) break;
+  let startMs: number | null = null;
+  let expectedMs: number = NaN;
+
+  for (const p of points) {
+    // Strict price check: JSON null / '' / booleans coerce to 0 via Number(),
+    // which would read as free electricity — only accept real finite numbers.
+    if (typeof p?.price !== 'number' || !Number.isFinite(p.price)) break;
+    const candidates = feedTimestampCandidates(p?.time as string);
+    if (candidates.length === 0) break;
+    const timeMs: number = startMs == null
+      ? candidates[0]
+      : (candidates.includes(expectedMs) ? expectedMs : candidates[0]);
+    if (startMs == null) {
+      startMs = timeMs;
+    } else if (timeMs !== expectedMs) {
+      break;
+    }
     values.push(p.price);
-    expectedMs += stepMs;
+    expectedMs = timeMs + stepMs;
   }
-  if (values.length === 0) return null;
+  if (startMs == null || values.length === 0) return null;
 
   return {
-    start: new Date(parsed[0].timeMs).toISOString(),
+    start: new Date(startMs).toISOString(),
     step: STEP_MINUTES,
     values,
   };
