@@ -357,13 +357,13 @@ export function aggregateLoadPvBuckets(rows, stepSize_m = 15) {
   const hourMap = new Map();
 
   for (const row of rows) {
-    const dt = new Date(row.timestampMs);
-    dt.setMinutes(0, 0, 0);
-    const hourMs = dt.getTime();
+    // Absolute-hour bucketing (epoch floor): local wall-clock would collapse
+    // the repeated hour at the autumn DST transition into one bucket.
+    const hourMs = Math.floor(row.timestampMs / 3_600_000) * 3_600_000;
 
     if (!hourMap.has(hourMs)) {
       hourMap.set(hourMs, {
-        dtHour: dt,
+        dtHour: new Date(hourMs),
         loadKWh: 0,
         pvKWh: 0,
         originalLoadKWh: 0,

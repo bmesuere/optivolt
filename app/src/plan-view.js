@@ -10,9 +10,11 @@ const VIEW_RANGE_KEY = "optivolt:viewRange";
 const FLOWS_RES_KEY = "optivolt:flowsResolution";
 
 /**
- * End of the "standard" view for a plan starting at the given timestamp: the
- * classic day-ahead window (local midnight tonight before 13:00, midnight
- * tomorrow after), mirroring the server's forecast windows.
+ * Fallback end of the "standard" view for a plan starting at the given
+ * timestamp: the classic day-ahead window (local midnight tonight before
+ * 13:00, midnight tomorrow after). Only used when the server didn't provide
+ * `standardWindowEndMs` — the browser's timezone may differ from the one the
+ * plan was made in, so the server value is authoritative.
  */
 export function standardViewEndMs(firstTimestampMs) {
   const d = new Date(firstTimestampMs);
@@ -20,18 +22,26 @@ export function standardViewEndMs(firstTimestampMs) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + dayOffset, 0, 0, 0, 0).getTime();
 }
 
-/** Rows within the standard window (a prefix of the plan, so slot indices are preserved). */
-export function sliceRowsToStandardView(rows) {
+function resolveStandardEndMs(rows, standardEndMs) {
+  return Number.isFinite(standardEndMs) ? standardEndMs : standardViewEndMs(rows[0].timestampMs);
+}
+
+/**
+ * Rows within the standard window (a prefix of the plan, so slot indices are
+ * preserved). `standardEndMs` is the server-provided boundary; without it the
+ * browser-local fallback applies.
+ */
+export function sliceRowsToStandardView(rows, standardEndMs = null) {
   if (!Array.isArray(rows) || rows.length === 0) return rows ?? [];
-  const endMs = standardViewEndMs(rows[0].timestampMs);
+  const endMs = resolveStandardEndMs(rows, standardEndMs);
   const idx = rows.findIndex((r) => r.timestampMs >= endMs);
   return idx < 0 ? rows : rows.slice(0, idx);
 }
 
 /** True when the plan extends beyond the standard window (i.e. a view toggle is useful). */
-export function planExceedsStandardView(rows) {
+export function planExceedsStandardView(rows, standardEndMs = null) {
   if (!Array.isArray(rows) || rows.length === 0) return false;
-  return rows[rows.length - 1].timestampMs >= standardViewEndMs(rows[0].timestampMs);
+  return rows[rows.length - 1].timestampMs >= resolveStandardEndMs(rows, standardEndMs);
 }
 
 /** Span of the given rows in hours (0 for empty/single-row input). */
@@ -72,9 +82,10 @@ export function aggregateRowsHourly(rows, stepSize_m = 15) {
   const buckets = new Map();
 
   for (const row of rows) {
-    const dt = new Date(row.timestampMs);
-    dt.setMinutes(0, 0, 0);
-    const hourMs = dt.getTime();
+    // Bucket by absolute hour (epoch floor), not local wall-clock: at the
+    // autumn DST transition the repeated local hour would otherwise collapse
+    // two physical hours into one bucket.
+    const hourMs = Math.floor(row.timestampMs / 3_600_000) * 3_600_000;
     if (!buckets.has(hourMs)) {
       buckets.set(hourMs, { rows: [], hourMs });
     }

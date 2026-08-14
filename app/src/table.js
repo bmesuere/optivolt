@@ -197,7 +197,10 @@ export function renderTable({ rows, cfg, targets, showKwh, showDess = false, reb
     return `${dt.getFullYear()}-${dt.getMonth() + 1}-${dt.getDate()}`;
   };
 
-  const bodyParts = [];
+  // Each day after the first becomes its own <tbody> with a header row whose
+  // <button> toggles the section — a real button so the disclosure is
+  // keyboard-operable, with aria-expanded/aria-controls exposing its state.
+  const sections = [{ headerHtml: null, id: null, rowParts: [] }];
   let currentDayKey = rows.length ? dayKeyOf(rows[0].timestampMs) : null;
   let inSection = false;
 
@@ -207,12 +210,19 @@ export function renderTable({ rows, cfg, targets, showKwh, showDess = false, reb
       if (key !== currentDayKey) {
         currentDayKey = key;
         inSection = true;
-        bodyParts.push(
-          `<tr class="cursor-pointer select-none bg-slate-100/80 dark:bg-slate-800/80" data-day-toggle="${key}">`
-          + `<td colspan="${cols.length}" class="px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">`
-          + `<span class="day-chevron inline-block transition-transform">▾</span> ${fmtDay.format(new Date(r.timestampMs))}`
-          + `</td></tr>`
-        );
+        const sectionId = `schedule-day-${key}`;
+        const dayLabel = fmtDay.format(new Date(r.timestampMs));
+        sections.push({
+          id: sectionId,
+          headerHtml:
+            `<tr class="select-none bg-slate-100/80 dark:bg-slate-800/80">`
+            + `<td colspan="${cols.length}" class="p-0">`
+            + `<button type="button" data-day-toggle="${key}" aria-expanded="true" aria-controls="${sectionId}"`
+            + ` class="flex w-full cursor-pointer items-center gap-1.5 px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">`
+            + `<span class="day-chevron inline-block transition-transform" aria-hidden="true">▾</span> ${dayLabel}`
+            + `</button></td></tr>`,
+          rowParts: [],
+        });
       }
     }
 
@@ -238,29 +248,30 @@ export function renderTable({ rows, cfg, targets, showKwh, showDess = false, reb
     const rowBg = isRebalancing ? "bg-sky-100 dark:bg-sky-900/50" : "";
     const isDeparture = departureIdxs.has(ri);
     const dayAttr = inSection ? ` data-day="${currentDayKey}"` : "";
-    bodyParts.push(`<tr${dayAttr} class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 ${rowBg}${isDeparture ? ' ring-1 ring-inset ring-emerald-200 dark:ring-emerald-800/50' : ''}">${tds}</tr>`);
+    sections[sections.length - 1].rowParts.push(`<tr${dayAttr} class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 ${rowBg}${isDeparture ? ' ring-1 ring-inset ring-emerald-200 dark:ring-emerald-800/50' : ''}">${tds}</tr>`);
   });
 
-  const tbody = `
-    <tbody>
-      ${bodyParts.join("")}
-    </tbody>`;
+  const tbody = sections
+    .map((s) => `<tbody${s.id ? ` id="${s.id}"` : ""}>${s.headerHtml ?? ""}${s.rowParts.join("")}</tbody>`)
+    .join("");
 
   table.innerHTML = thead + tbody;
   if (tableUnit) tableUnit.textContent = showKwh ? "kWh" : "W";
 
-  // Collapse/expand a day's rows by clicking its header (delegated; assigning
-  // onclick keeps a single handler across re-renders).
+  // Collapse/expand a day's rows via its header button (delegated; assigning
+  // onclick keeps a single handler across re-renders). The button provides
+  // native keyboard activation (Enter/Space); we only track expanded state.
   table.onclick = (event) => {
-    const header = event.target.closest?.("[data-day-toggle]");
-    if (!header || !table.contains(header)) return;
-    const key = header.getAttribute("data-day-toggle");
-    const collapsed = header.classList.toggle("day-collapsed");
+    const button = event.target.closest?.("button[data-day-toggle]");
+    if (!button || !table.contains(button)) return;
+    const key = button.getAttribute("data-day-toggle");
+    const collapsed = button.getAttribute("aria-expanded") === "true";
+    button.setAttribute("aria-expanded", String(!collapsed));
     // key is our own "YYYY-M-D" string — digits and dashes, no escaping needed.
     for (const tr of table.querySelectorAll(`tr[data-day="${key}"]`)) {
       tr.classList.toggle("hidden", collapsed);
     }
-    const chevron = header.querySelector(".day-chevron");
+    const chevron = button.querySelector(".day-chevron");
     if (chevron) chevron.style.transform = collapsed ? "rotate(-90deg)" : "";
   };
 
