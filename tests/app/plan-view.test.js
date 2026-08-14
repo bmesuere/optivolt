@@ -113,3 +113,38 @@ describe('mapRebalanceWindowToRows', () => {
     expect(mapRebalanceWindowToRows(null, rows, hourly)).toBeNull();
   });
 });
+
+describe('server-provided standard boundary', () => {
+  it('prefers the explicit boundary over the browser-local rule', () => {
+    const rows = makeRows(new Date(2026, 4, 1, 14, 0), 384);
+    // A server in another timezone hands us a different cutoff than the
+    // local 34 h rule (136 slots): e.g. 24 h → 96 slots.
+    const serverEndMs = rows[0].timestampMs + 24 * 3_600_000;
+    expect(sliceRowsToStandardView(rows, serverEndMs)).toHaveLength(96);
+    expect(planExceedsStandardView(rows, serverEndMs)).toBe(true);
+    // Non-finite boundary falls back to the local rule.
+    expect(sliceRowsToStandardView(rows, null)).toHaveLength(136);
+  });
+});
+
+describe('aggregateRowsHourly — DST fall-back', () => {
+  it('keeps the two occurrences of the repeated autumn hour in separate buckets', () => {
+    // Brussels/Amsterdam falls back at 2026-10-25T01:00Z: local 02:00–02:59
+    // happens twice. 8 slots covering 00:00Z–02:00Z are two physical hours.
+    const startMs = Date.UTC(2026, 9, 25, 0, 0);
+    const rows = Array.from({ length: 8 }, (_, i) => ({
+      tIdx: i,
+      timestampMs: startMs + i * 15 * 60_000,
+      load: 400, pv: 0, ic: 20, ec: 8,
+      g2l: 1000, g2b: 0, pv2l: 0, pv2b: 0, pv2g: 0, b2l: 0, b2g: 0,
+      imp: 1000, exp: 0,
+      importCost_cents: 1, exportCost_cents: 0,
+      soc_percent: 50,
+    }));
+
+    const hourly = aggregateRowsHourly(rows, 15);
+    expect(hourly).toHaveLength(2); // local-hour bucketing would collapse them into one
+    expect(hourly.map(h => h.g2l)).toEqual([1000, 1000]);
+    expect(hourly.map(h => h.timestampMs)).toEqual([startMs, startMs + 3_600_000]);
+  });
+});

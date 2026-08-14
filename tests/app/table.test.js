@@ -111,17 +111,24 @@ describe('renderTable — multi-day day sections', () => {
 
     renderTable({ rows, cfg, targets: { table }, showKwh: false });
 
-    const headers = table.querySelectorAll('[data-day-toggle]');
-    expect(headers).toHaveLength(2); // one per day after the first
+    // A real, focusable button per day after the first, wired to its section.
+    const buttons = table.querySelectorAll('button[data-day-toggle]');
+    expect(buttons).toHaveLength(2);
+    const button = buttons[0];
+    expect(button.getAttribute('type')).toBe('button');
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    const sectionId = button.getAttribute('aria-controls');
+    expect(table.querySelector(`tbody[id="${sectionId}"]`)?.contains(button)).toBe(true);
 
-    // Clicking a header collapses that day's rows.
-    const header = headers[0];
-    const key = header.getAttribute('data-day-toggle');
+    // Activating the button collapses that day's rows and updates the state.
+    const key = button.getAttribute('data-day-toggle');
     const dayRows = table.querySelectorAll(`tr[data-day="${key}"]`);
     expect(dayRows).toHaveLength(96);
-    header.querySelector('td').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(button.getAttribute('aria-expanded')).toBe('false');
     expect([...dayRows].every(tr => tr.classList.contains('hidden'))).toBe(true);
-    header.querySelector('td').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(button.getAttribute('aria-expanded')).toBe('true');
     expect([...dayRows].some(tr => tr.classList.contains('hidden'))).toBe(false);
   });
 

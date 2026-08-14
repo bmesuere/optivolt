@@ -49,6 +49,7 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
   let lastTableRows = [];
   let lastTableRebalanceWindow = null;
   let lastPricesKnownUntilMs = null;
+  let lastStandardWindowEndMs = null;
 
   const debounceRun = deps.debounce(onRun, 250);
   const persistConfigDebounced = deps.debounce((cfg) => {
@@ -93,6 +94,7 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
       lastTableRows = rows;
       lastTableRebalanceWindow = result.rebalanceWindow ?? null;
       lastPricesKnownUntilMs = result.pricesKnownUntilMs ?? null;
+      lastStandardWindowEndMs = result.standardWindowEndMs ?? null;
 
       renderVisuals();
       deps.updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m, evSettings);
@@ -123,11 +125,14 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
   }
 
   // The rows currently shown: the full plan, or its standard-window prefix.
+  // The boundary comes from the server (plan timezone); browser-local fallback.
   function getVisibleRows() {
     if (!lastTableRows.length) return { rows: [], view: "standard", hasExtended: false };
-    const hasExtended = planExceedsStandardView(lastTableRows);
+    const hasExtended = planExceedsStandardView(lastTableRows, lastStandardWindowEndMs);
     const view = hasExtended ? getStoredViewRange() : "standard";
-    const rows = view === "full" ? lastTableRows : sliceRowsToStandardView(lastTableRows);
+    const rows = view === "full"
+      ? lastTableRows
+      : sliceRowsToStandardView(lastTableRows, lastStandardWindowEndMs);
     return { rows, view, hasExtended };
   }
 

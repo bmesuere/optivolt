@@ -2,6 +2,7 @@ import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { assertCondition, toHttpError } from '../http-errors.ts';
 import { planAndMaybeWrite } from '../services/planner-service.ts';
+import { getForecastTimeRange } from '../../lib/time-series-utils.ts';
 
 const router = express.Router();
 
@@ -41,6 +42,9 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       rebalanceNudge,
       // Extended horizon: prices past this instant are forecast, not actuals.
       pricesKnownUntilMs: cfg.pricesKnownUntilMs ?? null,
+      // Canonical end of the classic day-ahead window, computed in the
+      // server's timezone so every client slices the "Standard" view alike.
+      standardWindowEndMs: new Date(getForecastTimeRange(timing.startMs).endIso).getTime(),
     });
   } catch (error) {
     logCalculateError(error);
