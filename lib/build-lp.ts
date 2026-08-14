@@ -37,6 +37,7 @@ export function buildLP({
   // rebalancing (MILP)
   rebalanceRemainingSlots,
   rebalanceTargetSoc_percent,
+  rebalanceMaxStartSlot,
   ev,
 }: SolverConfig): string {
   const T = load_W.length;
@@ -85,6 +86,13 @@ export function buildLP({
   const rebalanceTargetSoc_Wh = D > 0
     ? (safeTargetSoc_percent / 100) * batteryCapacity_Wh
     : 0;
+  // Latest allowed start position for the window. Defaults to T - D (any start
+  // that still fits); rebalanceMaxStartSlot caps it so a multi-day horizon
+  // cannot defer the hold days out. Clamped to >= 0 so at least k=0 exists.
+  const KMAX = Math.min(
+    T - D,
+    rebalanceMaxStartSlot != null ? Math.max(0, Math.trunc(rebalanceMaxStartSlot)) : Infinity,
+  );
   const startBalance = (k: number) => `start_balance_${k}`;
 
   // EV variable name helpers
@@ -199,7 +207,7 @@ export function buildLP({
   }
   // Rebalancing symmetry-breaking: escalating penalty prefers earlier windows when cost-equivalent.
   if (D > 0) {
-    for (let k = 0; k <= T - D; k++) {
+    for (let k = 0; k <= KMAX; k++) {
       objTerms.push(` + ${toNum(TIEBREAK.rebalanceStartPerSlot * (k + 1))} ${startBalance(k)}`);
     }
   }
@@ -251,7 +259,7 @@ export function buildLP({
   if (D > 0) {
     // Exactly-one-start constraint: exactly one window starting position is chosen
     const startVars: string[] = [];
-    for (let k = 0; k <= T - D; k++) {
+    for (let k = 0; k <= KMAX; k++) {
       startVars.push(startBalance(k));
     }
     lines.push(` c_balance_start: ${startVars.join(' + ')} = 1`);
@@ -259,7 +267,7 @@ export function buildLP({
     // Per-slot SoC forcing: soc_t >= rebalanceTargetSoc_Wh when slot t is in the chosen window
     for (let t = 0; t < T; t++) {
       const kLow = Math.max(0, t - D + 1);
-      const kHigh = Math.min(t, T - D);
+      const kHigh = Math.min(t, KMAX);
       if (kLow > kHigh) continue; // no valid start position covers this slot
       const terms: string[] = [];
       for (let k = kLow; k <= kHigh; k++) {
@@ -373,7 +381,7 @@ export function buildLP({
   if (D > 0 || evActive) {
     lines.push("Binaries");
     if (D > 0) {
-      for (let k = 0; k <= T - D; k++) {
+      for (let k = 0; k <= KMAX; k++) {
         lines.push(` start_balance_${k}`);
       }
     }

@@ -130,6 +130,23 @@ describe('Solver Timeline Logic (Refactored)', () => {
     expect(extended.pricesKnownUntilMs).toBe(new Date('2024-01-01T14:00:00Z').getTime());
   });
 
+  it('caps rebalance window starts to day 1 only on the extended horizon', () => {
+    const data = {
+      load: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(100) },
+      pv: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(0) },
+      importPrice: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(10) },
+      exportPrice: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(5) },
+      soc: { timestamp: '2024-01-01T12:00:00Z', value: 50 }
+    };
+    const rebalanceSettings = { ...mockSettings, rebalanceEnabled: true, rebalanceHoldHours: 3 };
+
+    const standard = buildSolverConfigFromSettings(rebalanceSettings, data);
+    expect(standard.rebalanceMaxStartSlot).toBeUndefined();
+
+    const extended = buildSolverConfigFromSettings({ ...rebalanceSettings, extendedHorizonDays: 2 }, data);
+    expect(extended.rebalanceMaxStartSlot).toBe(95); // 24 h of 15-min slots, 0-indexed
+  });
+
   it('ignores a forecast that leaves a gap after the actual prices', () => {
     const data = {
       load: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(100) },

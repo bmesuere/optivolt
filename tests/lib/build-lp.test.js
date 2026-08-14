@@ -132,6 +132,28 @@ describe('buildLP — MILP rebalancing', () => {
     expect(lp).toContain('c_balance_start: start_balance_0 = 1');
   });
 
+  it('caps window start positions at rebalanceMaxStartSlot', () => {
+    // T=8, D=3 → starts would be 0..5; cap at 2 → only 0..2
+    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: 100, rebalanceMaxStartSlot: 2 });
+    expect(lp).toContain('start_balance_2');
+    expect(lp).not.toContain('start_balance_3');
+    expect(lp).toContain('c_balance_start: start_balance_0 + start_balance_1 + start_balance_2 = 1');
+    // Slots past the last reachable window slot (cap + D - 1 = 4) get no forcing constraint
+    expect(lp).toContain('c_rebalance_4:');
+    expect(lp).not.toContain('c_rebalance_5:');
+  });
+
+  it('ignores a rebalanceMaxStartSlot beyond T - D', () => {
+    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: 100, rebalanceMaxStartSlot: 99 });
+    expect(lp).toContain(`start_balance_${T - D}`);
+    expect(lp).not.toContain(`start_balance_${T - D + 1}`);
+  });
+
+  it('clamps a negative rebalanceMaxStartSlot so k=0 always exists', () => {
+    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: 100, rebalanceMaxStartSlot: -5 });
+    expect(lp).toContain('c_balance_start: start_balance_0 = 1');
+  });
+
   it('truncates fractional rebalanceRemainingSlots to integer', () => {
     // 2.9 should be treated as 2, not 3
     const lp = buildLP({ ...mockData, rebalanceRemainingSlots: 2.9, rebalanceTargetSoc_percent: 100 });
@@ -512,5 +534,50 @@ describe('buildLP — EV trips (drop windows)', () => {
       ev: { ...evCfg, availabilityWindows: [{ startSlot: 0, endSlot: T, drop_Wh: 5000 }] },
     });
     expect(lp).toMatch(/c_ev_soc_0:.*= 30000\b/);
+  });
+});
+
+describe('buildLP — multi-day horizon (~384 slots)', () => {
+  // 4 days at 15-min slots. Exercises the extended-horizon shape: EV binaries
+  // for every slot plus rebalance binaries capped to day 1.
+  const T = 384;
+  const base = {
+    load_W: Array(T).fill(500),
+    pv_W: Array(T).fill(0),
+    importPrice: Array(T).fill(10),
+    exportPrice: Array(T).fill(5),
+    batteryCapacity_Wh: 10000,
+    maxSoc_percent: 100,
+  };
+  const ev = {
+    evMinChargePower_W: 1380,
+    evMaxChargePower_W: 3680,
+    evBatteryCapacity_Wh: 60000,
+    evInitialSoc_percent: 50,
+    evChargeEfficiency_percent: 90,
+    availabilityWindows: [{ startSlot: 0, endSlot: T }],
+    targets: [{ slot: 300, soc_Wh: 48000 }],
+  };
+
+  it('keeps the escalating symmetry-break penalties well below real cost coefficients', () => {
+    const lp = buildLP({ ...base, ev, rebalanceRemainingSlots: 12, rebalanceTargetSoc_percent: 100, rebalanceMaxStartSlot: 95 });
+
+    // Largest EV symmetry penalty: 1e-6 × 384 = 0.000384 c€ on the last slot.
+    expect(lp).toContain('0.000384 ev_on_383');
+    // Largest rebalance start penalty: capped at day 1 → 1e-6 × 96.
+    expect(lp).toContain('0.000096 start_balance_95');
+    expect(lp).not.toContain('start_balance_96');
+
+    // Real per-slot cost scale for comparison: 10 c€/kWh × 0.25 h / 1000 = 0.0025 c€ per W.
+    // The largest tiebreak (0.000384) stays an order of magnitude below it.
+    expect(lp).toContain('0.0025 grid_to_load_0');
+
+    // toNum must never emit scientific notation, which the LP parser rejects.
+    expect(lp).not.toMatch(/\d[eE][+-]\d/);
+  });
+
+  it('keeps a far-out EV target constraint in the LP', () => {
+    const lp = buildLP({ ...base, ev });
+    expect(lp).toContain('c_ev_target_300: ev_soc_300 >= 48000');
   });
 });

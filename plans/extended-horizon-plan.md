@@ -61,14 +61,26 @@ timestamp separating published day-ahead prices from model predictions.
   extended it yields the requested horizon and remains the safety net when a
   source falls short.
 
-## Phase 2 — Solver & EV review
+## Phase 2 — Solver & EV review (this branch)
 
 - EV targets need no new code: entries beyond the old horizon stop being
-  filtered by `ev-config-builder.ts` once the horizon covers them.
-- Rebalancing: restrict `start_balance_k` to day-1 slots so "hold once" keeps
-  its current meaning over a multi-day horizon (and caps that binary count).
-- Verify the escalating symmetry-break penalties (`build-lp.ts`) stay
-  numerically sane at ~384 slots.
+  filtered by `ev-config-builder.ts` once the horizon covers them (covered by
+  a regression test).
+- Rebalancing: `rebalanceMaxStartSlot` restricts `start_balance_k` to day-1
+  slots on extended horizons, so "hold once" keeps its current meaning (and
+  the binary count is capped at one day's worth). Standard horizons are
+  untouched.
+- Symmetry-break penalties verified at 384 slots: the largest escalating
+  coefficient (1e-6 × 384 = 3.84e-4 c€) stays an order of magnitude below the
+  smallest real cost coefficient (~2.5e-3 c€ per W at 10 c€/kWh), and far
+  above solver tolerance.
+- Synthetic 4-day solve benchmark (M-series Mac, WASM HiGHS, gap 0.5%):
+  LP-only 0.13 s, EV binaries 0.55 s, rebalance capped 3.1 s,
+  EV + rebalance capped 18.5 s (uncapped 25.8 s; 7.5 s at gap 2%). All
+  Optimal within the 30 s limit — but EV × rebalance on a 4-day horizon is
+  the combination to watch on slower hardware; fallbacks if the phase-4
+  shadow period shows timeouts: loosen the MIP gap for large horizons, or
+  coarsen far-out slots.
 
 ## Phase 3 — Dashboard
 

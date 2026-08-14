@@ -137,6 +137,12 @@ export function buildSolverConfigFromSettings(
     base.rebalanceHoldSlots = holdSlots;
     base.rebalanceRemainingSlots = remainingSlots;
     base.rebalanceTargetSoc_percent = settings.maxSoc_percent;
+    // On an extended horizon, keep "hold once" a day-1 decision: the window
+    // must start within the first 24 h instead of drifting days out. This also
+    // caps the start_balance binary count at one day's worth of slots.
+    if (settings.extendedHorizonDays > 0) {
+      base.rebalanceMaxStartSlot = Math.max(0, Math.floor((24 * 60) / settings.stepSize_m) - 1);
+    }
   }
 
   const ev = buildEvConfig(settings, data.evScheduleEntries ?? [], evState, nowMs, base.load_W.length);

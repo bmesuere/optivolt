@@ -223,3 +223,18 @@ describe('buildEvConfig — overdue entries', () => {
     expect(ev.availabilityWindows).toEqual([{ startSlot: 1, endSlot: T, resetSoc_Wh: 24000 }]);
   });
 });
+
+describe('buildEvConfig — multi-day horizon', () => {
+  it('activates a target beyond the standard horizon once T covers it', () => {
+    // Target 3 days out (2024-01-04 12:00 = slot 288 from 2024-01-01 12:00).
+    const entries = [entry('target', '2024-01-04T12:00:00Z', 80)];
+
+    // Standard 24 h horizon: beyond T → ignored (but persisted upstream).
+    const standard = buildEvConfig(base, entries, pluggedIn, NOW_MS, 96);
+    expect(standard.targets).toEqual([]);
+
+    // 4-day horizon: the same entry becomes a real deadline, no re-staging needed.
+    const extended = buildEvConfig(base, entries, pluggedIn, NOW_MS, 384);
+    expect(extended.targets).toEqual([{ slot: 287, soc_Wh: 48000 }]);
+  });
+});
