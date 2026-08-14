@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { buildSolverConfigFromSettings } from '../../api/services/config-builder.ts';
+import { selectSolveOptions } from '../../api/services/planner-service.ts';
 import { buildLP } from '../../lib/build-lp.ts';
 import { parseSolution } from '../../lib/parse-solution.ts';
 import highsFactory from '../../vendor/highs-build/highs.js';
@@ -102,14 +103,17 @@ describe('extended horizon — full pipeline with real HiGHS solve', () => {
     expect(cfg.ev).toBeDefined();
     expect(cfg.ev.targets).toEqual([{ slot: 283, soc_Wh: 48000 }]);
 
+    // Solve with the production option selector (EV binaries, no rebalance →
+    // the tight gap). No duration assertion here: fake timers are active, so
+    // performance.now() would not measure anything real anyway.
+    const solveOptions = selectSolveOptions(cfg);
+    expect(solveOptions).toEqual({ mip_rel_gap: 0.005, mip_abs_gap: 0.01, time_limit: 30 });
+
     const highs = await highsFactory({});
     const lp = buildLP(cfg);
-    const t0 = performance.now();
-    const result = highs.solve(lp, { mip_rel_gap: 0.005, mip_abs_gap: 0.01, time_limit: 30 });
-    const solveMs = performance.now() - t0;
+    const result = highs.solve(lp, solveOptions);
 
     expect(result.Status).toBe('Optimal');
-    expect(solveMs).toBeLessThan(20_000);
 
     const rows = parseSolution(result, cfg, { startMs: nowMs, stepMin: 15 });
     expect(rows).toHaveLength(T);

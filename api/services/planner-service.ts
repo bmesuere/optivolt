@@ -112,6 +112,25 @@ function attachOriginalPredictionValues(rows: PlanRow[], data: Data): PlanRow[] 
   });
 }
 
+/**
+ * Solver options for a config. The solve runs synchronously on the event
+ * loop, so a runaway MIP would block every HTTP request; the time limit
+ * bounds that (a limited solve comes back non-Optimal and is refused for
+ * hardware writes). The EV × rebalance combination on a multi-day horizon
+ * gets the loosened MIP gap; everything else keeps the tight default.
+ */
+export function selectSolveOptions(cfg: SolverConfig): { mip_rel_gap?: number; mip_abs_gap?: number; time_limit: number } {
+  const hasEv = cfg.ev != null;
+  const hasRebalance = (cfg.rebalanceRemainingSlots ?? 0) > 0;
+  if (!hasEv && !hasRebalance) return { time_limit: SOLVE_TIME_LIMIT_S };
+  const largeMilpCombo = hasEv && hasRebalance && cfg.load_W.length > LARGE_MILP_SLOTS;
+  return {
+    mip_rel_gap: largeMilpCombo ? MIP_REL_GAP_LARGE : MIP_REL_GAP,
+    mip_abs_gap: 0.01,
+    time_limit: SOLVE_TIME_LIMIT_S,
+  };
+}
+
 // Cache of the last computed plan, used by /ev/* endpoints
 let lastPlan: ComputePlanResult | undefined;
 
@@ -154,20 +173,8 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const lpText = buildLP(cfg);
   const highs = await getHighsInstance();
-  const hasEv = cfg.ev != null;
   const hasRebalance = (cfg.rebalanceRemainingSlots ?? 0) > 0;
-  const hasBinaries = hasEv || hasRebalance;
-  const largeMilpCombo = hasEv && hasRebalance && cfg.load_W.length > LARGE_MILP_SLOTS;
-  // The solve runs synchronously on the event loop, so a runaway MIP would
-  // block every HTTP request; the time limit bounds that. A limited solve
-  // comes back with a non-Optimal status and is refused for hardware writes.
-  const solveOptions = hasBinaries
-    ? {
-        mip_rel_gap: largeMilpCombo ? MIP_REL_GAP_LARGE : MIP_REL_GAP,
-        mip_abs_gap: 0.01,
-        time_limit: SOLVE_TIME_LIMIT_S,
-      }
-    : { time_limit: SOLVE_TIME_LIMIT_S };
+  const solveOptions = selectSolveOptions(cfg);
   let result: ReturnType<typeof highs.solve>;
   const t0 = performance.now();
   try {

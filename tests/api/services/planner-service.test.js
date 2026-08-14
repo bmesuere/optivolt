@@ -10,7 +10,7 @@ import { loadSettings, saveSettings } from '../../../api/services/settings-store
 import { loadData, saveData } from '../../../api/services/data-store.ts';
 import { refreshSeriesFromVrmAndPersist } from '../../../api/services/vrm-refresh.ts';
 import { setDynamicEssSchedule } from '../../../api/services/mqtt-service.ts';
-import { computePlan, planAndMaybeWrite } from '../../../api/services/planner-service.ts';
+import { computePlan, planAndMaybeWrite, selectSolveOptions } from '../../../api/services/planner-service.ts';
 import { FeedIn, Strategy } from '../../../lib/dess-mapper.ts';
 
 const NOW_STRING = '2024-01-01T00:00:00Z';
@@ -193,5 +193,40 @@ describe('computePlan — rebalance bookkeeping', () => {
     });
     expect(result.rows[1].originalLoad).toBeUndefined();
     expect(result.rows[1].originalPv).toBeUndefined();
+  });
+});
+
+describe('selectSolveOptions', () => {
+  const baseCfg = (slots) => ({
+    load_W: Array(slots).fill(400),
+    pv_W: Array(slots).fill(0),
+    importPrice: Array(slots).fill(10),
+    exportPrice: Array(slots).fill(5),
+  });
+  const ev = {
+    evMinChargePower_W: 1380, evMaxChargePower_W: 3680,
+    evBatteryCapacity_Wh: 60000, evInitialSoc_percent: 50,
+    evChargeEfficiency_percent: 90,
+    availabilityWindows: [], targets: [],
+  };
+
+  it('uses only a time limit for pure LPs', () => {
+    expect(selectSolveOptions(baseCfg(384))).toEqual({ time_limit: 30 });
+  });
+
+  it('keeps the tight gap for a single binary family, even on large horizons', () => {
+    expect(selectSolveOptions({ ...baseCfg(384), ev }).mip_rel_gap).toBe(0.005);
+    expect(selectSolveOptions({ ...baseCfg(384), rebalanceRemainingSlots: 12 }).mip_rel_gap).toBe(0.005);
+  });
+
+  it('loosens the gap only for EV × rebalance beyond 200 slots', () => {
+    const combo = (slots) => selectSolveOptions({ ...baseCfg(slots), ev, rebalanceRemainingSlots: 12 });
+    expect(combo(200).mip_rel_gap).toBe(0.005); // boundary: 200 is still tight
+    expect(combo(201).mip_rel_gap).toBe(0.02);  // boundary: first loosened size
+    expect(combo(384)).toEqual({ mip_rel_gap: 0.02, mip_abs_gap: 0.01, time_limit: 30 });
+  });
+
+  it('treats a completed rebalance (0 remaining slots) as no rebalance', () => {
+    expect(selectSolveOptions({ ...baseCfg(384), ev, rebalanceRemainingSlots: 0 }).mip_rel_gap).toBe(0.005);
   });
 });
