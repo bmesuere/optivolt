@@ -99,10 +99,20 @@ timestamp separating published day-ahead prices from model predictions.
 - Schedule table groups days after the first into collapsible day sections on
   views spanning > 48 h; the standard layout is untouched.
 
-## Phase 4 — Validation
+## Phase 4 — Validation (this branch)
 
-- Unit tests: merge priority, leading-gap guard, horizon setting variations,
-  multi-day EV targets/windows, day-1 rebalance restriction.
-- Synthetic 4-day solve benchmark before relying on the MILP at ~384 slots.
-- Shadow period: run `extendedHorizonDays: 3` with calculation only (no
-  hardware writes) comparing `solveMs` and plan quality.
+- Unit tests for merge priority, the leading-gap guard, horizon settings,
+  multi-day EV targets, and the day-1 rebalance restriction shipped with
+  phases 0–3. This phase adds a full-pipeline integration test: persisted
+  data with a forecast price tail → config-builder merge → LP → a real HiGHS
+  solve → parsed rows, asserting the merged horizon, `pricesKnownUntilMs`,
+  and that a 3-days-out EV target is actually met.
+- Guardrail from the phase-2 benchmark: the EV × rebalance combination on a
+  multi-day horizon loosens `mip_rel_gap` from 0.5% to 2% (18.5 s → 7.5 s on
+  the benchmark), so slow hardware degrades to a slightly-less-optimal plan
+  instead of a timed-out solve — which would block hardware writes every
+  cycle. All other solves keep the tight gap. The gap is included in the
+  `[calculate] solve` log line for the shadow period.
+- Remaining (operational): shadow period — run `extendedHorizonDays: 3` with
+  calculation only (`writeToVictron: false`), watching `solveMs`, `status`,
+  and `mipRelGap` in the logs before enabling writes.

@@ -21,6 +21,14 @@ const DESS_SLOTS = 4;
 // solve well under a second; this only kicks in when something degenerates
 // (or once longer horizons multiply the binary count).
 const SOLVE_TIME_LIMIT_S = 30;
+// MIP gap tuning. The EV × rebalance combination on a multi-day horizon is
+// the one slow case (4-day benchmark: 18.5 s at 0.5% gap vs 7.5 s at 2% on an
+// M-series Mac — slower add-on hardware could hit the time limit, and a
+// timed-out solve blocks hardware writes entirely). Loosen the gap for that
+// combination only; everything else keeps the tight default.
+const MIP_REL_GAP = 0.005;
+const MIP_REL_GAP_LARGE = 0.02;
+const LARGE_MILP_SLOTS = 200;
 
 // Lazy, shared HiGHS instance
 type HighsInstance = Awaited<ReturnType<typeof highsFactory>>;
@@ -146,12 +154,19 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const lpText = buildLP(cfg);
   const highs = await getHighsInstance();
-  const hasBinaries = cfg.ev != null || (cfg.rebalanceRemainingSlots ?? 0) > 0;
+  const hasEv = cfg.ev != null;
+  const hasRebalance = (cfg.rebalanceRemainingSlots ?? 0) > 0;
+  const hasBinaries = hasEv || hasRebalance;
+  const largeMilpCombo = hasEv && hasRebalance && cfg.load_W.length > LARGE_MILP_SLOTS;
   // The solve runs synchronously on the event loop, so a runaway MIP would
   // block every HTTP request; the time limit bounds that. A limited solve
   // comes back with a non-Optimal status and is refused for hardware writes.
   const solveOptions = hasBinaries
-    ? { mip_rel_gap: 0.005, mip_abs_gap: 0.01, time_limit: SOLVE_TIME_LIMIT_S }
+    ? {
+        mip_rel_gap: largeMilpCombo ? MIP_REL_GAP_LARGE : MIP_REL_GAP,
+        mip_abs_gap: 0.01,
+        time_limit: SOLVE_TIME_LIMIT_S,
+      }
     : { time_limit: SOLVE_TIME_LIMIT_S };
   let result: ReturnType<typeof highs.solve>;
   const t0 = performance.now();
@@ -172,7 +187,8 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   console.log('[calculate] solve', {
     slots: cfg.load_W.length,
     ev: evInfo,
-    rebalance: (cfg.rebalanceRemainingSlots ?? 0) > 0,
+    rebalance: hasRebalance,
+    ...('mip_rel_gap' in solveOptions ? { mipRelGap: solveOptions.mip_rel_gap } : {}),
     solveMs: Math.round(solveMs),
     status: result.Status,
   });

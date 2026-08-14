@@ -12,6 +12,7 @@ Plan and control a home energy system with forecasts, dynamic tariffs, and a day
 - Server-side VRM integration for forecasts/prices and system limits
 - Optional Dynamic ESS schedule pushes over MQTT (first 4 slots)
 - EV charging integration: LP-optimized schedule with departure deadline, target SoC, and per-slot charge mode classification
+- Optional extended planning horizon (up to 6 extra days) with forecast prices, so multi-day EV targets ("80% in 3 days") become real constraints
 - Static, build-free web UI served by the same Express process
 - Persistent settings + time-series data under a configurable data directory
 
@@ -130,7 +131,36 @@ rest_command:
       }
 ```
 
-### 5. EV Charger Control via REST Sensor (Optional)
+### 5. Extended Planning Horizon (Optional)
+
+By default the plan covers the classic day-ahead window (~12–36 h, bounded by
+published prices and forecasts). Two settings in the UI's **Data Sources** card
+extend it to multiple days, so long-range EV targets ("80% in 3 days") become
+real solver constraints instead of manually staged intermediate targets:
+
+- **Extra horizon (days)** (`extendedHorizonDays`, 0–6, default 0 = off):
+  extends the load, PV, and price windows by that many days. Load predictions
+  extrapolate from history; PV forecasts come from Open-Meteo (ICON seamless
+  beyond 2 days); VRM forecasts are clamped to whatever VRM actually returns.
+- **Price forecast URL** (`priceForecastUrl`, default empty): a JSON feed of
+  predicted prices in the `energieprijs` `forecast.json` format
+  (`consumption_data` / `injection_data` arrays of `{time, price}` in
+  c€/kWh, 15-minute steps). OptiVolt pulls it during each `/calculate` update
+  and stores it separately from the actual prices.
+
+**Published prices always win.** Forecast values only extend the tail past the
+end of the actual price series; the dashboard draws that region as a dashed
+line with a shaded "forecast" zone. The plan itself is still bounded by the
+shortest available series, so a missing forecast simply shrinks the horizon
+back to today's behaviour. On multi-day plans the dashboard adds a
+"Standard | Full horizon" view toggle, hourly bar aggregation, and collapsible
+day sections in the schedule table.
+
+Note that only the first 4 slots are ever pushed to Victron — the extra days
+influence *today's* decisions (e.g. charging the EV during tomorrow's cheap
+valley instead of tonight) without changing what gets written to hardware.
+
+### 6. EV Charger Control via REST Sensor (Optional)
 
 Poll the `/ev/current` endpoint every minute to get the current slot's EV charging decision. Add this to your HA `configuration.yaml`:
 
