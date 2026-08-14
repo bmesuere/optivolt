@@ -178,7 +178,7 @@ export class VRMClient {
  * We do the time arithmetic in local time first — because "midnight" in your
  * billing world is local midnight — then call .getTime() to convert to UTC ms.
  */
-  static windowOptimizationHorizon(): VRMWindow {
+  static windowOptimizationHorizon(extraDays = 0): VRMWindow {
     const nowLocal = new Date(); // browser local time
     const y = nowLocal.getFullYear();
     const m = nowLocal.getMonth();
@@ -192,7 +192,8 @@ export class VRMClient {
     // --- End = local midnight depending on cutoff ---
     // Before 13:00 → up to midnight tonight (= start of tomorrow)
     // After / at 13:00 → up to midnight tomorrow (= start of day after tomorrow)
-    const dayOffset = (hr < 13) ? 1 : 2;
+    // extraDays pushes the end further out for the extended horizon.
+    const dayOffset = ((hr < 13) ? 1 : 2) + extraDays;
     const endLocal = new Date(y, m, d + dayOffset, 0, 0, 0, 0);
 
     // Convert both local times to absolute UTC timestamps
@@ -279,7 +280,7 @@ export class VRMClient {
    * This converts each hourly kWh spike into a constant average power over that hour in W,
    * and fills all 4×15-min slots of the hour with that W.
    */
-  async fetchForecasts(opts: Partial<VRMWindow> = {}): Promise<VRMForecasts> {
+  async fetchForecasts(opts: Partial<VRMWindow> = {}, { clampEndToData = false } = {}): Promise<VRMForecasts> {
     if (!this.installationId) throw new Error('Missing installationId');
 
     const win = ensureWindow(opts);
@@ -299,7 +300,21 @@ export class VRMClient {
     const loadWSeries = toSeries(rec['vrm_consumption_fc']);   // ms -> W
     const pvWSeries = toSeries(rec['solar_yield_forecast']); // ms -> W
 
-    const timeline = VRMClient.buildTimeline15Min(win.startMs, win.endMs);
+    // When a window beyond VRM's own horizon is requested, truncate at the
+    // last returned data point (+1h, values are hourly): slots past that would
+    // be zero-filled, and zero load reads as "free energy" to the solver.
+    let endMs = win.endMs;
+    if (clampEndToData) {
+      const lastDataMs = Math.max(
+        loadWSeries.size > 0 ? Math.max(...loadWSeries.keys()) : -Infinity,
+        pvWSeries.size > 0 ? Math.max(...pvWSeries.keys()) : -Infinity,
+      );
+      if (Number.isFinite(lastDataMs)) {
+        endMs = Math.min(endMs, lastDataMs + 3_600_000);
+      }
+    }
+
+    const timeline = VRMClient.buildTimeline15Min(win.startMs, endMs);
 
     const load_W = fillHourlyWAcrossQuarterHours(loadWSeries, timeline);
     const pv_W = fillHourlyWAcrossQuarterHours(pvWSeries, timeline);

@@ -79,7 +79,11 @@ export async function runPvForecast(config: PredictionRunConfig): Promise<PvFore
       period: is15MinMode ? '5minute' : 'hour',
     }),
     fetchArchiveIrradiance(latitude, longitude, startDate, endDate),
-    fetchForecastIrradiance(latitude, longitude, undefined, forecastResolution),
+    fetchForecastIrradiance(
+      latitude, longitude, undefined, forecastResolution,
+      // Standard window needs 2 days; Open-Meteo serves at most 16.
+      Math.min(16, 2 + (config.extendedHorizonDays ?? 0)),
+    ),
   ]);
 
   let data = postprocess(rawData, sensors, derived);
@@ -154,7 +158,7 @@ export async function runPvForecast(config: PredictionRunConfig): Promise<PvFore
 
   // 6. Build 15-min series for the solver (from future points only)
   const now = new Date();
-  const { startIso, endIso } = getForecastTimeRange(now.getTime());
+  const { startIso, endIso } = getForecastTimeRange(now.getTime(), config.extendedHorizonDays ?? 0);
 
   const mappedFuturePoints = futurePoints.map(p => ({
     time: p.time,

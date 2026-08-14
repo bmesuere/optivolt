@@ -87,19 +87,20 @@ export function extractWindow(
  * >= 13:00 -> until midnight tomorrow
  *
  * @param nowMs The current time in milliseconds (defaults to Date.now())
+ * @param extraDays Additional whole days beyond the standard window (extended horizon)
  * @returns An object containing the startIso (aligned to 15m) and endIso (midnight)
  */
-export function getForecastTimeRange(nowMs = Date.now()): { startIso: string; endIso: string } {
+export function getForecastTimeRange(nowMs = Date.now(), extraDays = 0): { startIso: string; endIso: string } {
   const now = new Date(nowMs);
   const currentHour = now.getHours();
 
   const end = new Date(now);
   end.setMinutes(0, 0, 0);
   if (currentHour < 13) {
-    end.setDate(end.getDate() + 1);
+    end.setDate(end.getDate() + 1 + extraDays);
     end.setHours(0, 0, 0, 0);
   } else {
-    end.setDate(end.getDate() + 2);
+    end.setDate(end.getDate() + 2 + extraDays);
     end.setHours(0, 0, 0, 0);
   }
 
@@ -162,6 +163,38 @@ export function buildForecastSeries(
   }
 
   return { start: startIso, step: 15, values };
+}
+
+/**
+ * Extend an actual time series with the tail of a forecast series.
+ *
+ * Actual values always win: the forecast contributes only slots strictly after
+ * the end of the actual series. Returns the actual series unchanged when the
+ * forecast is missing, does not reach past the actual data, or starts after
+ * the actual series ends (a gap would otherwise be zero-filled).
+ */
+export function extendSeriesWithForecast(actual: TimeSeries, forecast?: TimeSeries): TimeSeries {
+  if (!forecast || !Array.isArray(forecast.values) || forecast.values.length === 0) return actual;
+
+  const step = actual.step ?? 15;
+  const stepMs = step * 60_000;
+  const actualEndMs = new Date(actual.start).getTime() + actual.values.length * stepMs;
+  const forecastStartMs = new Date(forecast.start).getTime();
+  const forecastEndMs = forecastStartMs + forecast.values.length * (forecast.step ?? 15) * 60_000;
+
+  if (!Number.isFinite(actualEndMs) || !Number.isFinite(forecastStartMs) || !Number.isFinite(forecastEndMs)) return actual;
+  if (forecastEndMs <= actualEndMs) return actual;
+  if (forecastStartMs > actualEndMs) return actual; // gap between actual and forecast
+
+  const tailSlots = Math.floor((forecastEndMs - actualEndMs) / stepMs);
+  if (tailSlots <= 0) return actual;
+
+  const tail = extractWindow(forecast, actualEndMs, actualEndMs + tailSlots * stepMs, step);
+  return {
+    start: actual.start,
+    step,
+    values: [...actual.values, ...tail],
+  };
 }
 
 // ---------------------------------------------------------------------------

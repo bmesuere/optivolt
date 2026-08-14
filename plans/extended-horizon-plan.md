@@ -38,7 +38,7 @@ timestamp separating published day-ahead prices from model predictions.
   non-Optimal status and is already refused for hardware writes.
 - `status` added to the `[calculate] solve` log line.
 
-## Phase 1 — Server data plumbing
+## Phase 1 — Server data plumbing (this branch)
 
 - Settings: `extendedHorizonDays` (0 = off), `priceForecastUrl`.
 - New `price-forecast-service.ts`: fetch and parse `forecast.json`
@@ -54,8 +54,9 @@ timestamp separating published day-ahead prices from model predictions.
   `extendedHorizonDays + 2` (Open-Meteo serves up to 16). For `pv: 'vrm'`,
   extend `windowOptimizationHorizon` (`lib/vrm-api.ts`) the same way and clamp
   to what VRM returns.
-- Timestamps in `forecast.json` are Brussels wall-clock; either parse with an
-  explicit timezone or add UTC timestamps to the feed first (preferred).
+- Timestamps in `forecast.json` are Brussels wall-clock; parsed with an
+  explicit `Europe/Brussels` timezone conversion (Intl-based, DST-safe), with
+  ISO-with-offset timestamps also accepted should the feed ever add them.
 - The `min()` horizon rule in `config-builder.ts` stays: with all four series
   extended it yields the requested horizon and remains the safety net when a
   source falls short.

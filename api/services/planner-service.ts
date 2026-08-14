@@ -10,6 +10,7 @@ import { saveSettings } from './settings-store.ts';
 import { saveData } from './data-store.ts';
 import { applyPredictionAdjustmentsToData } from './prediction-adjustments.ts';
 import { refreshSeriesFromVrmAndPersist } from './vrm-refresh.ts';
+import { refreshPriceForecastAndPersist } from './price-forecast-service.ts';
 import { setDynamicEssSchedule } from './mqtt-service.ts';
 import { getRebalanceNudge, type RebalanceNudge } from './rebalance-nudge.ts';
 import type { PlanRowWithDess, Data } from '../types.ts';
@@ -118,6 +119,16 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
       console.error(
         'Failed to refresh VRM data before calculation:',
         vrmError instanceof Error ? vrmError.message : String(vrmError),
+      );
+    }
+    try {
+      // No-op unless extendedHorizonDays > 0 and a priceForecastUrl is set.
+      // On failure the previously stored forecast is kept and simply ages out.
+      await refreshPriceForecastAndPersist();
+    } catch (forecastError) {
+      console.error(
+        'Failed to refresh price forecast before calculation:',
+        forecastError instanceof Error ? forecastError.message : String(forecastError),
       );
     }
   }

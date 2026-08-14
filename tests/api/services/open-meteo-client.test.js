@@ -33,7 +33,7 @@ describe('Open-Meteo HTTP client', () => {
     }));
 
     await expect(
-      fetchForecastIrradiance(51, 4, undefined, 60, 5),
+      fetchForecastIrradiance(51, 4, undefined, 60, 2, 5),
     ).rejects.toThrow('Open-Meteo Forecast API request timed out after 5ms');
   });
 });

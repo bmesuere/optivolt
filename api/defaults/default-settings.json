@@ -33,5 +33,7 @@
   "evPlugSensor": "",
   "evChargeEfficiency_percent": 90,
   "evSocValue_cents_per_kWh": 0,
-  "evTripSocBuffer_percent": 20
+  "evTripSocBuffer_percent": 20,
+  "extendedHorizonDays": 0,
+  "priceForecastUrl": ""
 }

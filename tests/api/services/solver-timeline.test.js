@@ -103,6 +103,50 @@ describe('Solver Timeline Logic (Refactored)', () => {
     expect(() => buildSolverConfigFromSettings(mockSettings, exactStart)).not.toThrow();
   });
 
+  it('extends prices with the forecast tail when the extended horizon is enabled', () => {
+    // Actual prices end at 14:00; load/pv run much longer.
+    const data = {
+      load: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(100) },
+      pv: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(0) },
+      importPrice: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(16).fill(10) },
+      exportPrice: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(16).fill(5) },
+      importPriceForecast: { start: '2024-01-01T13:00:00Z', step: 15, values: Array(40).fill(20) },
+      exportPriceForecast: { start: '2024-01-01T13:00:00Z', step: 15, values: Array(40).fill(15) },
+      soc: { timestamp: '2024-01-01T12:00:00Z', value: 50 }
+    };
+
+    // Without the setting: forecast ignored, horizon ends at 14:00 (8 slots from 12:00).
+    const base = buildSolverConfigFromSettings(mockSettings, data);
+    expect(base.importPrice.length).toBe(8);
+    expect(base.pricesKnownUntilMs).toBeUndefined();
+
+    // With the setting: horizon runs to the forecast end (13:00 + 40×15min = 23:00 → 44 slots from 12:00),
+    // actual values win up to 14:00, forecast values fill the tail.
+    const extended = buildSolverConfigFromSettings({ ...mockSettings, extendedHorizonDays: 2 }, data);
+    expect(extended.importPrice.length).toBe(44);
+    expect(extended.importPrice.slice(0, 8).every(v => v === 10)).toBe(true);
+    expect(extended.importPrice.slice(8).every(v => v === 20)).toBe(true);
+    expect(extended.exportPrice.slice(8).every(v => v === 15)).toBe(true);
+    expect(extended.pricesKnownUntilMs).toBe(new Date('2024-01-01T14:00:00Z').getTime());
+  });
+
+  it('ignores a forecast that leaves a gap after the actual prices', () => {
+    const data = {
+      load: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(100) },
+      pv: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(0) },
+      importPrice: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(16).fill(10) },
+      exportPrice: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(16).fill(5) },
+      // Starts 15:00, actual ends 14:00 → gap → must be ignored, not zero-filled.
+      importPriceForecast: { start: '2024-01-01T15:00:00Z', step: 15, values: Array(40).fill(20) },
+      exportPriceForecast: { start: '2024-01-01T15:00:00Z', step: 15, values: Array(40).fill(15) },
+      soc: { timestamp: '2024-01-01T12:00:00Z', value: 50 }
+    };
+
+    const config = buildSolverConfigFromSettings({ ...mockSettings, extendedHorizonDays: 2 }, data);
+    expect(config.importPrice.length).toBe(8);
+    expect(config.pricesKnownUntilMs).toBeUndefined();
+  });
+
   it('allows a PV series that starts after the plan window begins (leading zeros = no sun)', () => {
     const data = {
       load: { start: '2024-01-01T10:00:00Z', step: 15, values: Array(100).fill(100) },

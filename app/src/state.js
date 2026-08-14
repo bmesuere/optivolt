@@ -32,6 +32,9 @@ export function snapshotUI(els) {
       soc: els.sourceSoc?.value || "mqtt",
     },
 
+    extendedHorizonDays: num(els.extendedHorizonDays?.value),
+    priceForecastUrl: els.priceForecastUrl?.value ?? '',
+
     // ALGORITHM
     rebalanceEnabled: !!els.rebalanceEnabled?.checked,
     rebalanceHoldHours: num(els.rebalanceHoldHours?.value),
@@ -98,6 +101,10 @@ export function hydrateUI(els, obj = {}) {
     els.rebalanceEnabled.checked = !!obj.rebalanceEnabled;
   }
   setIfDef(els.rebalanceHoldHours, obj.rebalanceHoldHours);
+
+  // Data / extended horizon
+  setIfDef(els.extendedHorizonDays, obj.extendedHorizonDays);
+  setIfDef(els.priceForecastUrl, obj.priceForecastUrl);
 
   // HOME ASSISTANT
   setIfDef(els.haUrl, obj.haUrl);

@@ -3,7 +3,7 @@ import { loadSettings } from './settings-store.ts';
 import { loadData, saveData } from './data-store.ts';
 import { applyPredictionAdjustmentsToData, pruneExpiredPredictionAdjustments } from './prediction-adjustments.ts';
 import { recordFullSocObservation } from './rebalance-nudge.ts';
-import { extractWindow, getQuarterStart } from '../../lib/time-series-utils.ts';
+import { extractWindow, extendSeriesWithForecast, getQuarterStart } from '../../lib/time-series-utils.ts';
 import { fetchHaEntityState } from './ha-client.ts';
 import { buildEvConfig } from './ev-config-builder.ts';
 import { normalizeEvScheduleEntries, recordEvLastState } from './ev-schedule-entries.ts';
@@ -31,10 +31,24 @@ export function buildSolverConfigFromSettings(
   nowMs = getQuarterStart(new Date(), settings.stepSize_m),
   evState?: { pluggedIn: boolean; soc_percent: number },
 ): SolverConfig {
+  // Extended horizon: append forecast prices past the end of the actual price
+  // series. Actual values always win — the forecast never overrides them, and
+  // pricesKnownUntilMs marks where actuals end so the UI can flag the rest.
+  let importPrice = data.importPrice;
+  let exportPrice = data.exportPrice;
+  let pricesKnownUntilMs: number | undefined;
+  if (settings.extendedHorizonDays > 0) {
+    importPrice = extendSeriesWithForecast(data.importPrice, data.importPriceForecast);
+    exportPrice = extendSeriesWithForecast(data.exportPrice, data.exportPriceForecast);
+    if (importPrice !== data.importPrice || exportPrice !== data.exportPrice) {
+      pricesKnownUntilMs = Math.min(getSeriesEndMs(data.importPrice), getSeriesEndMs(data.exportPrice));
+    }
+  }
+
   const loadEndMs   = getSeriesEndMs(data.load);
   const pvEndMs     = getSeriesEndMs(data.pv);
-  const importEndMs = getSeriesEndMs(data.importPrice);
-  const exportEndMs = getSeriesEndMs(data.exportPrice);
+  const importEndMs = getSeriesEndMs(importPrice);
+  const exportEndMs = getSeriesEndMs(exportPrice);
   const endMs = Math.min(loadEndMs, pvEndMs, importEndMs, exportEndMs);
 
   // A series that starts after the plan window begins would be silently
@@ -44,8 +58,8 @@ export function buildSolverConfigFromSettings(
   // energy, so reject those outright.
   const mustCoverStart: Array<[string, TimeSeries]> = [
     ['load',        data.load],
-    ['importPrice', data.importPrice],
-    ['exportPrice', data.exportPrice],
+    ['importPrice', importPrice],
+    ['exportPrice', exportPrice],
   ];
   for (const [name, series] of mustCoverStart) {
     const seriesStartMs = new Date(series.start).getTime();
@@ -79,10 +93,10 @@ export function buildSolverConfigFromSettings(
   const alignedEndMs = nowMs + slotCount * stepMs;
 
   const base: SolverConfig = {
-    load_W:      extractWindow(data.load,        nowMs, alignedEndMs, settings.stepSize_m),
-    pv_W:        extractWindow(data.pv,          nowMs, alignedEndMs, settings.stepSize_m),
-    importPrice: extractWindow(data.importPrice, nowMs, alignedEndMs, settings.stepSize_m),
-    exportPrice: extractWindow(data.exportPrice, nowMs, alignedEndMs, settings.stepSize_m),
+    load_W:      extractWindow(data.load,   nowMs, alignedEndMs, settings.stepSize_m),
+    pv_W:        extractWindow(data.pv,     nowMs, alignedEndMs, settings.stepSize_m),
+    importPrice: extractWindow(importPrice, nowMs, alignedEndMs, settings.stepSize_m),
+    exportPrice: extractWindow(exportPrice, nowMs, alignedEndMs, settings.stepSize_m),
 
     stepSize_m:                           settings.stepSize_m,
     batteryCapacity_Wh:                   settings.batteryCapacity_Wh,
@@ -103,6 +117,11 @@ export function buildSolverConfigFromSettings(
     // maxSoc) would otherwise force an infeasible one-slot discharge in the LP.
     initialSoc_percent:                   Math.min(data.soc.value, settings.maxSoc_percent),
   };
+
+  // Only meaningful when forecast slots actually made it into the window.
+  if (pricesKnownUntilMs != null && pricesKnownUntilMs < alignedEndMs) {
+    base.pricesKnownUntilMs = pricesKnownUntilMs;
+  }
 
   if (settings.rebalanceEnabled) {
     // Math.ceil ensures the hold is never shorter than requested; Math.max(1, …) prevents 0-slot holds

@@ -104,7 +104,7 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
   if (activeType === 'fixed') {
     const load_W = fixedPredictor!.load_W;
     const nowMs = Date.now();
-    const { startIso, endIso } = getForecastTimeRange(nowMs);
+    const { startIso, endIso } = getForecastTimeRange(nowMs, config.extendedHorizonDays ?? 0);
     const startMs = new Date(startIso).getTime();
     const endMs = new Date(endIso).getTime();
     const nSlots = Math.round((endMs - startMs) / (15 * 60 * 1000));
@@ -156,7 +156,7 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
   const data = postprocess(rawData, sensors, derived);
 
   const now = new Date();
-  const { startIso, endIso } = getForecastTimeRange(now.getTime());
+  const { startIso, endIso } = getForecastTimeRange(now.getTime(), config.extendedHorizonDays ?? 0);
   const end = new Date(endIso);
 
   const recentStart = now.getTime() - 7 * 24 * 60 * 60 * 1000;

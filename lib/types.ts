@@ -95,6 +95,10 @@ export interface SolverConfig {
   // Initial state
   initialSoc_percent: number;
 
+  // Extended horizon: instant after which price slots come from a forecast
+  // feed instead of published actuals (absent when all prices are actual).
+  pricesKnownUntilMs?: number;
+
   // Rebalancing (optional — only present when rebalanceEnabled is true)
   rebalanceHoldSlots?: number;
   rebalanceRemainingSlots?: number;
