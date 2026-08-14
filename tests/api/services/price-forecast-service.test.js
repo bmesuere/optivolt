@@ -40,6 +40,11 @@ describe('parseFeedTimestamp', () => {
     expect(ts).toBeLessThanOrEqual(upper);
   });
 
+  it('returns the earlier occurrence for an ambiguous fall-back wall time', () => {
+    // 02:30 on 2026-10-25 exists as 00:30Z (CEST) and 01:30Z (CET).
+    expect(parseFeedTimestamp('2026-10-25 02:30:00')).toBe(new Date('2026-10-25T00:30:00Z').getTime());
+  });
+
   it('returns NaN for unparseable input', () => {
     expect(parseFeedTimestamp('not a date')).toBeNaN();
     expect(parseFeedTimestamp(undefined)).toBeNaN();
@@ -49,15 +54,52 @@ describe('parseFeedTimestamp', () => {
 describe('pointsToSeries', () => {
   const point = (iso, price) => ({ time: iso, price });
 
-  it('builds a contiguous 15-min series sorted by time', () => {
+  it('builds a contiguous 15-min series from feed-ordered points', () => {
     const series = pointsToSeries([
-      point('2026-01-15T10:15:00Z', 2),
       point('2026-01-15T10:00:00Z', 1),
+      point('2026-01-15T10:15:00Z', 2),
       point('2026-01-15T10:30:00Z', 3),
     ]);
     expect(series.start).toBe('2026-01-15T10:00:00.000Z');
     expect(series.step).toBe(15);
     expect(series.values).toEqual([1, 2, 3]);
+  });
+
+  it('truncates at an out-of-order timestamp instead of reordering the feed', () => {
+    const series = pointsToSeries([
+      point('2026-01-15T10:15:00Z', 2),
+      point('2026-01-15T10:00:00Z', 1),
+      point('2026-01-15T10:30:00Z', 3),
+    ]);
+    expect(series.start).toBe('2026-01-15T10:15:00.000Z');
+    expect(series.values).toEqual([2]);
+  });
+
+  it('truncates at null, empty-string, and boolean prices (Number() would coerce them to 0)', () => {
+    for (const bad of [null, '', true, '5']) {
+      const series = pointsToSeries([
+        point('2026-01-15T10:00:00Z', 1),
+        point('2026-01-15T10:15:00Z', bad),
+        point('2026-01-15T10:30:00Z', 3),
+      ]);
+      expect(series.values).toEqual([1]);
+    }
+    // A feed starting with a null price yields no series at all, not a zero price.
+    expect(pointsToSeries([point('2026-01-15T10:00:00Z', null)])).toBeNull();
+  });
+
+  it('keeps the repeated hour contiguous across the autumn DST transition', () => {
+    // Brussels falls back 03:00 CEST → 02:00 CET on 2026-10-25 (01:00 UTC):
+    // wall times 02:00–02:45 occur twice; the sequence disambiguates them.
+    const walls = [
+      '2026-10-25 01:45:00',
+      '2026-10-25 02:00:00', '2026-10-25 02:15:00', '2026-10-25 02:30:00', '2026-10-25 02:45:00',
+      '2026-10-25 02:00:00', '2026-10-25 02:15:00', '2026-10-25 02:30:00', '2026-10-25 02:45:00',
+      '2026-10-25 03:00:00',
+    ];
+    const series = pointsToSeries(walls.map((w, i) => point(w, i + 1)));
+    expect(series.start).toBe('2026-10-24T23:45:00.000Z'); // 01:45 CEST
+    expect(series.values).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 
   it('truncates at the first gap so missing slots never become fabricated prices', () => {

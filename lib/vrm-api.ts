@@ -301,17 +301,18 @@ export class VRMClient {
     const pvWSeries = toSeries(rec['solar_yield_forecast']); // ms -> W
 
     // When a window beyond VRM's own horizon is requested, truncate at the
-    // last returned data point (+1h, values are hourly): slots past that would
-    // be zero-filled, and zero load reads as "free energy" to the solver.
+    // last returned LOAD data point (+1h, values are hourly): slots past that
+    // would be zero-filled, and zero load reads as "free energy" to the
+    // solver. PV coverage deliberately doesn't count — missing PV is safely
+    // zero (no sun), but a PV series outlasting load must not stretch the
+    // timeline over fabricated zero-load hours. No load data at all yields an
+    // empty timeline, which callers treat as a failed fetch (previous data is
+    // kept) rather than an all-zero forecast.
     let endMs = win.endMs;
     if (clampEndToData) {
-      const lastDataMs = Math.max(
-        loadWSeries.size > 0 ? Math.max(...loadWSeries.keys()) : -Infinity,
-        pvWSeries.size > 0 ? Math.max(...pvWSeries.keys()) : -Infinity,
-      );
-      if (Number.isFinite(lastDataMs)) {
-        endMs = Math.min(endMs, lastDataMs + 3_600_000);
-      }
+      endMs = loadWSeries.size > 0
+        ? Math.min(endMs, Math.max(...loadWSeries.keys()) + 3_600_000)
+        : win.startMs;
     }
 
     const timeline = VRMClient.buildTimeline15Min(win.startMs, endMs);
