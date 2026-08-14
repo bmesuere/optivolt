@@ -116,3 +116,33 @@ timestamp separating published day-ahead prices from model predictions.
 - Remaining (operational): shadow period — run `extendedHorizonDays: 3` with
   calculation only (`writeToVictron: false`), watching `solveMs`, `status`,
   and `mipRelGap` in the logs before enabling writes.
+
+## Phase 5 — Cleanup (after the stack merges)
+
+Deliberately deferred so the stacked PRs stay reviewable; tracked in a GitHub
+issue. Do these as one small cleanup PR (items 2–4) plus a two-repo pair for
+item 1.
+
+1. **UTC timestamps in `forecast.json`, then shrink the parser.** The Intl
+   offset probing, DST candidate disambiguation, and sequence-aware
+   repeated-hour logic in `price-forecast-service.ts` exist only because the
+   feed emits bare Brussels wall-clock timestamps. Emit ISO-with-offset from
+   `epex_forecast.sh` (energieprijs repo) — the parser already accepts them —
+   then reduce the wall-clock path to a legacy fallback or delete it.
+2. **Stop rebuilding `Data` from an explicit key list in `vrm-refresh.ts`.**
+   Spread `...baseData` and override the fetched keys. The current list is a
+   field-drop trap: it silently drops `evLastState` every refresh (latent
+   ev-trips bug) and forced manual addition of the forecast keys.
+3. **One source of truth for the day-ahead window rule.** The 13:00/midnight
+   rule lives in `getForecastTimeRange`, `VRMClient.windowOptimizationHorizon`,
+   and the client fallback `standardViewEndMs`. Unify the two server copies;
+   keep (or delete) the client fallback once `standardWindowEndMs` is always
+   provided.
+4. **Unify the two hourly aggregators.** `aggregateRowsHourly` (plan-view)
+   and `aggregateLoadPvBuckets` (solution-charts) bucket near-identically —
+   the same DST bug was fixed in both, which is the sign they should be one
+   function.
+
+Explicitly not planned: splitting `table.js` / `config-builder.ts` (long but
+linear), and a schema-driven settings system (worthwhile someday, but a
+horizontal refactor that shouldn't couple to this feature).
