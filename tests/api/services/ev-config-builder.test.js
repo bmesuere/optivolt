@@ -200,6 +200,32 @@ describe('buildEvConfig — trips', () => {
     expect(ev.targets).toEqual([{ slot: 7, soc_Wh: 37360 }]); // 60 + 20 → 80%, achievability-clamped
   });
 
+  it('merges back-to-back trips into one away interval with the summed drop', () => {
+    // Trip 1 returns at 14:00 exactly when trip 2 departs: the car never plugs in between, so
+    // availability must stay closed from 13:00 to 15:00 and both drops apply.
+    const entries = [trip(T13, T14, 10), trip(T14, T15, 20)];
+    const ev = buildEvConfig(base, entries, pluggedIn, NOW_MS, T);
+    expect(ev.availabilityWindows).toEqual([
+      { startSlot: 0, endSlot: 4, resetSoc_Wh: 30000 },
+      { startSlot: 12, endSlot: T, drop_Wh: 18000 }, // (10% + 20%) of 60 kWh
+    ]);
+  });
+
+  it('merges overlapping trips the same way (order-independent)', () => {
+    const entries = [trip(T14, T16, 20), trip(T13, T15, 10)];
+    const ev = buildEvConfig(base, entries, pluggedIn, NOW_MS, T);
+    expect(ev.availabilityWindows).toEqual([
+      { startSlot: 0, endSlot: 4, resetSoc_Wh: 30000 },
+      { startSlot: 16, endSlot: T, drop_Wh: 18000 },
+    ]);
+  });
+
+  it('keeps availability closed when a chained trip ends beyond the horizon', () => {
+    const entries = [trip(T13, T14, 10), trip(T14, '2030-01-01T00:00:00Z', 20)];
+    const ev = buildEvConfig(base, entries, pluggedIn, NOW_MS, T);
+    expect(ev.availabilityWindows).toEqual([{ startSlot: 0, endSlot: 4, resetSoc_Wh: 30000 }]);
+  });
+
   it('skips a derived target already below the departure-window reset', () => {
     // usage 20% + buffer 20% = 40% < the 50% the car already holds → redundant, no constraint.
     const ev = buildEvConfig(base, [trip(T14, T16, 20)], pluggedIn, NOW_MS, T);

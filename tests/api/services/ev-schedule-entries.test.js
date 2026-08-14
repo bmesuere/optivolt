@@ -260,6 +260,52 @@ describe('normalizeEvScheduleEntries — trip conversion', () => {
   });
 });
 
+describe('normalizeEvScheduleEntries — stale plug state', () => {
+  // Observed before the entries' scheduled times, so it cannot attest whether they happened
+  // (e.g. the browser loading entries before the day's first solve refreshes the plug state).
+  const stale = (pluggedIn, soc_percent = null) =>
+    ({ pluggedIn, soc_percent, observedAt: '2024-01-01T07:00:00Z' });
+
+  it('keeps a past trip instead of converting when the "unplugged" observation predates the departure', () => {
+    const overdue = createEvScheduleEntry({ type: 'trip', time: PAST, endTime: FUTURE, usage_percent: 25 }, NOW_MS - 10_000);
+    const result = normalizeEvScheduleEntries({ evScheduleEntries: [overdue], evLastState: stale(false, 60) }, NOW_MS);
+    expect(result.changed).toBe(false);
+    expect(result.entries).toEqual([overdue]);
+  });
+
+  it('keeps past departures and arrivals when the observation predates them', () => {
+    const departure = createEvScheduleEntry({ type: 'departure', time: PAST }, NOW_MS - 10_000);
+    const arrival = createEvScheduleEntry({ type: 'arrival', time: PAST, soc_percent: 40 }, NOW_MS - 10_000);
+    for (const pluggedIn of [true, false]) {
+      const result = normalizeEvScheduleEntries(
+        { evScheduleEntries: [departure, arrival], evLastState: stale(pluggedIn, 50) },
+        NOW_MS,
+      );
+      expect(result.changed).toBe(false);
+      expect(result.entries).toEqual([departure, arrival]);
+    }
+  });
+
+  it('still drops past targets under a stale observation', () => {
+    const past = createEvScheduleEntry({ type: 'target', time: PAST, soc_percent: 80 }, NOW_MS - 10_000);
+    const result = normalizeEvScheduleEntries({ evScheduleEntries: [past], evLastState: stale(true, 50) }, NOW_MS);
+    expect(result.entries).toEqual([]);
+  });
+
+  it('lets a fresh reading override the stale persisted state (the solve path)', () => {
+    const overdue = createEvScheduleEntry({ type: 'trip', time: PAST, endTime: FUTURE, usage_percent: 25 }, NOW_MS - 10_000);
+    const data = { evScheduleEntries: [overdue], evLastState: stale(false, 60) };
+
+    const plugged = normalizeEvScheduleEntries(data, NOW_MS, { pluggedIn: true, soc_percent: 55 });
+    expect(plugged.changed).toBe(false);
+    expect(plugged.entries).toEqual([overdue]); // car still here → overdue trip
+
+    const departed = normalizeEvScheduleEntries(data, NOW_MS, { pluggedIn: false, soc_percent: NaN });
+    expect(departed.entries).toHaveLength(1);
+    expect(departed.entries[0]).toMatchObject({ type: 'arrival', soc_percent: 35 }); // 60 at unplug − 25 usage
+  });
+});
+
 describe('normalizeEvScheduleEntries', () => {
   it('drops entries with time < now and keeps the rest', () => {
     const past = createEvScheduleEntry({ type: 'departure', time: PAST }, NOW_MS - 10_000);

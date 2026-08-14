@@ -167,8 +167,8 @@ export function recordEvLastState(
 }
 
 /**
- * Prune expired entries and convert departed trips, using the persisted plug state
- * (`data.evLastState`) to decide whether a past-due event has actually happened:
+ * Prune expired entries and convert departed trips, using the plug state to decide whether a
+ * past-due event has actually happened:
  *
  * - departure in the past, car still plugged in → kept ("overdue": it can still charge, and could
  *   leave any moment, so the departure target stays active).
@@ -179,25 +179,47 @@ export function recordEvLastState(
  *   arrival entry (see convertDepartedTrip), which then follows the arrival rules above.
  * - target in the past → dropped.
  *
- * With no recorded plug state, past events are assumed to have happened (the pre-plug-state
- * behavior): past entries are pruned, and past trips are converted using no SoC estimate.
+ * Dropping or converting is irreversible, so it needs a plug state that can *attest* the event:
+ * either `freshEvState` (a reading taken just now — the solve path refreshes HA first and passes
+ * it in), or the persisted `data.evLastState` when it was observed at/after the entry's scheduled
+ * time. An older observation cannot tell whether the event has happened since (e.g. the browser
+ * loading entries before the day's first solve refreshes the plug state), so the entry is kept
+ * unchanged until a fresh observation settles it.
+ *
+ * With no recorded plug state at all (no plug sensor configured), past events are assumed to have
+ * happened (the pre-plug-state behavior): past entries are pruned, and past trips are converted
+ * using no SoC estimate.
  */
 export function normalizeEvScheduleEntries(
   data: Data,
   nowMs = Date.now(),
+  freshEvState?: { pluggedIn: boolean; soc_percent: number },
 ): { data: Data; changed: boolean; entries: EvScheduleEntry[] } {
   const entries = data.evScheduleEntries ?? [];
-  const pluggedIn = data.evLastState?.pluggedIn;
-  const socAtUnplug = data.evLastState?.soc_percent ?? null;
+  const last = data.evLastState;
+  const observedAtMs = last ? new Date(last.observedAt).getTime() : NaN;
+  const socAtUnplug = last?.soc_percent ?? null;
+
+  // Plug state usable to decide whether the event scheduled at `eventMs` took place: true/false
+  // when attested, 'stale' when the only observation predates the event, undefined when no plug
+  // state was ever recorded.
+  const plugStateAt = (eventMs: number): boolean | 'stale' | undefined => {
+    if (freshEvState) return freshEvState.pluggedIn;
+    if (!last) return undefined;
+    return Number.isFinite(observedAtMs) && observedAtMs >= eventMs ? last.pluggedIn : 'stale';
+  };
 
   let changed = false;
   const next: EvScheduleEntry[] = [];
   for (const entry of entries) {
-    if (toTimestamp(entry.time, 'time') >= nowMs) { next.push(entry); continue; }
+    const timeMs = toTimestamp(entry.time, 'time');
+    if (timeMs >= nowMs) { next.push(entry); continue; }
+    const pluggedIn = entry.type === 'target' ? undefined : plugStateAt(timeMs);
 
-    if (entry.type === 'departure' && pluggedIn === true) { next.push(entry); continue; }
-    if (entry.type === 'arrival' && pluggedIn === false) { next.push(entry); continue; }
+    if (entry.type === 'departure' && (pluggedIn === true || pluggedIn === 'stale')) { next.push(entry); continue; }
+    if (entry.type === 'arrival' && (pluggedIn === false || pluggedIn === 'stale')) { next.push(entry); continue; }
     if (entry.type === 'trip') {
+      if (pluggedIn === 'stale') { next.push(entry); continue; } // defer until a fresh observation
       const endMs = toTimestamp(entry.endTime ?? entry.time, 'endTime');
       if (pluggedIn === true) {
         // Still plugged past the departure: overdue trip, unless the arrival also passed —

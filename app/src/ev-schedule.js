@@ -269,6 +269,9 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
       if (horizonMs != null && els.evEntryEndTime) els.evEntryEndTime.value = toDatetimeLocal(new Date(horizonMs));
     });
     els.evEntrySoc?.addEventListener("input", updateTripHint);
+    // The derived "≥ x%" targets in the list and the editor hint both depend on the global trip
+    // buffer setting, so a buffer change must refresh them too (persistence is wired elsewhere).
+    els.evTripSocBuffer?.addEventListener("input", () => { renderList(); updateTripHint(); });
 
     els.evScheduleEntriesList?.addEventListener("click", (event) => {
       const li = event.target.closest("[data-entry-id]");

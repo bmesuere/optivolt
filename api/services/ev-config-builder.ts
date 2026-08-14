@@ -35,6 +35,8 @@ export function departureTimeToSlot(
  * front would both misstate the return SoC and remove the incentive to charge before leaving.
  * A trip with a usage estimate also derives a departure target of usage + evTripSocBuffer.
  * The drop is clamped to the maximum SoC reachable by departure so the plan stays feasible.
+ * Trips that touch or overlap in time are merged into a single away interval carrying the sum
+ * of their drops (the car never plugs in between them).
  *
  * Entries beyond the horizon are ignored here; they remain persisted so they take effect once
  * the horizon reaches them. Past-due entries that survived normalization (an overdue departure
@@ -62,6 +64,8 @@ export function buildEvConfig(
   // --- Map entries to open/close events and deadline requests (skipping beyond-horizon ones) ---
   type SweepEvent = { slot: number; kind: 'open' | 'close'; soc_percent?: number; drop_percent?: number };
   const events: SweepEvent[] = [];
+  type TripInterval = { dep: number; arr: number; drop_percent: number };
+  const tripIntervals: TripInterval[] = [];
   type TargetRequest = { boundary: number; soc_percent: number };
   const targetRequests: TargetRequest[] = [];
   const tripBuffer_percent = settings.evTripSocBuffer_percent ?? 0;
@@ -85,12 +89,32 @@ export function buildEvConfig(
       if (dep > T) continue; // entirely beyond the horizon
       // A trip shorter than one slot still needs a departure/arrival ordering; stretch to one slot.
       const arr = Math.max(toSlot(e.endTime ?? ''), dep + 1);
-      events.push({ slot: dep, kind: 'close' });
-      if (arr <= T) events.push({ slot: arr, kind: 'open', drop_percent: e.usage_percent ?? 0 });
+      tripIntervals.push({ dep, arr, drop_percent: e.usage_percent ?? 0 });
       if (e.usage_percent != null) {
         targetRequests.push({ boundary: dep, soc_percent: Math.min(100, e.usage_percent + tripBuffer_percent) });
       }
     }
+  }
+
+  // Merge touching/overlapping trips into one away interval with the summed drop before emitting
+  // sweep events. Two trips sharing a boundary (return 14:00, leave again 14:00) would otherwise
+  // race in the sweep: the second departure lands while the sweep is already closed (a no-op) and
+  // the first return would reopen availability mid-trip carrying only the first drop. Summing is
+  // exact for chained trips and conservative for genuinely overlapping (contradictory) ones.
+  tripIntervals.sort((a, b) => a.dep - b.dep);
+  const mergedTrips: TripInterval[] = [];
+  for (const t of tripIntervals) {
+    const last = mergedTrips[mergedTrips.length - 1];
+    if (last && t.dep <= last.arr) {
+      last.arr = Math.max(last.arr, t.arr);
+      last.drop_percent += t.drop_percent;
+    } else {
+      mergedTrips.push({ ...t });
+    }
+  }
+  for (const t of mergedTrips) {
+    events.push({ slot: t.dep, kind: 'close' });
+    if (t.arr <= T) events.push({ slot: t.arr, kind: 'open', drop_percent: t.drop_percent });
   }
   events.sort((x, y) => x.slot - y.slot || (x.kind === 'close' ? -1 : 1)); // close before open at a tie
 

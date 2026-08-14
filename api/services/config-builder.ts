@@ -133,7 +133,9 @@ export async function getSolverInputs(): Promise<{ cfg: SolverConfig; timing: { 
 
   const withEvState = recordEvLastState(loadedData, evState, startMs);
   const pruned = pruneExpiredPredictionAdjustments(withEvState, startMs);
-  const prunedEv = normalizeEvScheduleEntries(pruned.data, startMs);
+  // Pass the just-fetched EV state: the persisted evLastState's observedAt only moves on state
+  // changes, so normalization would otherwise treat a long-unchanged plug state as stale.
+  const prunedEv = normalizeEvScheduleEntries(pruned.data, startMs, evState);
   let data = prunedEv.data;
   let shouldSaveData = withEvState !== loadedData || pruned.changed || prunedEv.changed;
 
