@@ -185,9 +185,37 @@ export function renderTable({ rows, cfg, targets, showKwh, showDess = false, reb
       <tr class="border-t border-slate-100 dark:border-slate-800/60">${totalsRow}</tr>
     </thead>`;
 
-  const tbody = `
-    <tbody>
-      ${rows.map((r, ri) => {
+  // On multi-day (extended-horizon) views, group rows after the first day
+  // into collapsible day sections so the table stays navigable.
+  const spanH = rows.length > 1
+    ? (rows[rows.length - 1].timestampMs - rows[0].timestampMs) / 3_600_000
+    : 0;
+  const useDaySections = spanH > 48;
+  const fmtDay = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "2-digit", month: "short" });
+  const dayKeyOf = (ms) => {
+    const dt = new Date(ms);
+    return `${dt.getFullYear()}-${dt.getMonth() + 1}-${dt.getDate()}`;
+  };
+
+  const bodyParts = [];
+  let currentDayKey = rows.length ? dayKeyOf(rows[0].timestampMs) : null;
+  let inSection = false;
+
+  rows.forEach((r, ri) => {
+    if (useDaySections && ri > 0) {
+      const key = dayKeyOf(r.timestampMs);
+      if (key !== currentDayKey) {
+        currentDayKey = key;
+        inSection = true;
+        bodyParts.push(
+          `<tr class="cursor-pointer select-none bg-slate-100/80 dark:bg-slate-800/80" data-day-toggle="${key}">`
+          + `<td colspan="${cols.length}" class="px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">`
+          + `<span class="day-chevron inline-block transition-transform">▾</span> ${fmtDay.format(new Date(r.timestampMs))}`
+          + `</td></tr>`
+        );
+      }
+    }
+
     const timeLabel = cols[0].fmt(null, ri); // "time" column
     const isMidnightRow = /^\d{2}\/\d{2}$/.test(timeLabel);
 
@@ -209,12 +237,32 @@ export function renderTable({ rows, cfg, targets, showKwh, showDess = false, reb
     const isRebalancing = rebalanceWindow != null && ri >= rebalanceWindow.startIdx && ri <= rebalanceWindow.endIdx;
     const rowBg = isRebalancing ? "bg-sky-100 dark:bg-sky-900/50" : "";
     const isDeparture = departureIdxs.has(ri);
-    return `<tr class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 ${rowBg}${isDeparture ? ' ring-1 ring-inset ring-emerald-200 dark:ring-emerald-800/50' : ''}">${tds}</tr>`;
-  }).join("")}
+    const dayAttr = inSection ? ` data-day="${currentDayKey}"` : "";
+    bodyParts.push(`<tr${dayAttr} class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 ${rowBg}${isDeparture ? ' ring-1 ring-inset ring-emerald-200 dark:ring-emerald-800/50' : ''}">${tds}</tr>`);
+  });
+
+  const tbody = `
+    <tbody>
+      ${bodyParts.join("")}
     </tbody>`;
 
   table.innerHTML = thead + tbody;
   if (tableUnit) tableUnit.textContent = showKwh ? "kWh" : "W";
+
+  // Collapse/expand a day's rows by clicking its header (delegated; assigning
+  // onclick keeps a single handler across re-renders).
+  table.onclick = (event) => {
+    const header = event.target.closest?.("[data-day-toggle]");
+    if (!header || !table.contains(header)) return;
+    const key = header.getAttribute("data-day-toggle");
+    const collapsed = header.classList.toggle("day-collapsed");
+    // key is our own "YYYY-M-D" string — digits and dashes, no escaping needed.
+    for (const tr of table.querySelectorAll(`tr[data-day="${key}"]`)) {
+      tr.classList.toggle("hidden", collapsed);
+    }
+    const chevron = header.querySelector(".day-chevron");
+    if (chevron) chevron.style.transform = collapsed ? "rotate(-90deg)" : "";
+  };
 
   // helpers (module-local)
   function fmtEnergy(x, { dash = true } = {}) {

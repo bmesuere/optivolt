@@ -109,7 +109,7 @@ describe('optimizer controller', () => {
     expect(tableArgs.targets).toEqual({ table: els.table, tableUnit: els.tableUnit });
     expect(tableArgs.showKwh).toBe(true);
     expect(tableArgs.showDess).toBe(false);
-    expect(tableArgs.rebalanceWindow).toBe(rebalanceWindow);
+    expect(tableArgs.rebalanceWindow).toEqual(rebalanceWindow);
     expect(tableArgs.evSettings).toEqual({
       arrivals: [],
       departures: ['2026-05-01T18:30'],
@@ -125,7 +125,7 @@ describe('optimizer controller', () => {
       tableArgs.evSettings,
     );
     expect(services.drawSocChart).toHaveBeenCalledWith(els.soc, rows, 30, tableArgs.evSettings);
-    expect(services.drawPricesStepLines).toHaveBeenCalledWith(els.prices, rows, 30);
+    expect(services.drawPricesStepLines).toHaveBeenCalledWith(els.prices, rows, 30, null);
     expect(services.drawLoadPvGrouped).toHaveBeenCalledWith(els.loadpv, rows, 30);
     expect(services.updateEvPanel).toHaveBeenCalledWith(els, rows, summary, 30, tableArgs.evSettings);
     expect(els.status.textContent).toBe('Plan updated');

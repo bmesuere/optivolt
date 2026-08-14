@@ -134,6 +134,8 @@ async function boot() {
     onSave: optimizer.queuePersistSnapshot,
     onRun: optimizer.onRun,
     onTableDisplayChange: optimizer.onTableDisplayChange,
+    onViewRangeChange: optimizer.onViewRangeChange,
+    onFlowsResolutionChange: optimizer.onFlowsResolutionChange,
     updateTerminalCustomUI: () => updateTerminalCustomUI(els),
   });
 

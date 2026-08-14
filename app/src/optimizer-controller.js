@@ -15,6 +15,18 @@ import {
   updateRebalanceNudgeUI,
   updateSummaryUI,
 } from "./state.js";
+import {
+  aggregateRowsHourly,
+  clampRebalanceWindow,
+  getStoredFlowsResolution,
+  getStoredViewRange,
+  mapRebalanceWindowToRows,
+  planExceedsStandardView,
+  rowsSpanHours,
+  sliceRowsToStandardView,
+  storeFlowsResolution,
+  storeViewRange,
+} from "./plan-view.js";
 
 export function createOptimizerController({ els, services = {}, getEvEntries = () => [], onPlanRows = () => {} }) {
   const deps = {
@@ -36,6 +48,7 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
 
   let lastTableRows = [];
   let lastTableRebalanceWindow = null;
+  let lastPricesKnownUntilMs = null;
 
   const debounceRun = deps.debounce(onRun, 250);
   const persistConfigDebounced = deps.debounce((cfg) => {
@@ -79,9 +92,9 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
 
       lastTableRows = rows;
       lastTableRebalanceWindow = result.rebalanceWindow ?? null;
-      renderScheduleTable();
+      lastPricesKnownUntilMs = result.pricesKnownUntilMs ?? null;
 
-      renderAllCharts(rows, cfgForViz, result.rebalanceWindow ?? null, evSettings);
+      renderVisuals();
       deps.updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m, evSettings);
       onPlanRows(rows);
     } catch (err) {
@@ -109,25 +122,89 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
     }
   }
 
+  // The rows currently shown: the full plan, or its standard-window prefix.
+  function getVisibleRows() {
+    if (!lastTableRows.length) return { rows: [], view: "standard", hasExtended: false };
+    const hasExtended = planExceedsStandardView(lastTableRows);
+    const view = hasExtended ? getStoredViewRange() : "standard";
+    const rows = view === "full" ? lastTableRows : sliceRowsToStandardView(lastTableRows);
+    return { rows, view, hasExtended };
+  }
+
   function renderScheduleTable() {
     if (!lastTableRows.length) return false;
+    const { rows } = getVisibleRows();
     deps.renderTable({
-      rows: lastTableRows,
+      rows,
       cfg: getVizConfig(),
       targets: { table: els.table, tableUnit: els.tableUnit },
       showKwh: !!els.tableKwh?.checked,
       showDess: !!els.tableDess?.checked,
-      rebalanceWindow: lastTableRebalanceWindow,
+      rebalanceWindow: clampRebalanceWindow(lastTableRebalanceWindow, rows.length),
       evSettings: getEvSettings(),
     });
     return true;
   }
 
-  function renderAllCharts(rows, cfg, rebalanceWindow = null, evSettings = null) {
-    deps.drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, rebalanceWindow, evSettings);
+  // Re-render charts + table from the cached plan (no solve).
+  function renderVisuals() {
+    if (!lastTableRows.length) return false;
+    const cfg = getVizConfig();
+    const evSettings = getEvSettings();
+    const { rows, view, hasExtended } = getVisibleRows();
+    const rebalanceWindow = clampRebalanceWindow(lastTableRebalanceWindow, rows.length);
+
+    // Hourly bars keep the multi-day view readable; the standard view always
+    // uses native slots. Default to hourly beyond 48 h unless the user chose.
+    const spanH = rowsSpanHours(rows);
+    const canAggregate = spanH > 48;
+    const resolution = canAggregate ? (getStoredFlowsResolution() ?? "60") : "15";
+
+    updateViewToggleUI(hasExtended, view, canAggregate, resolution);
+
+    if (resolution === "60") {
+      const hourlyRows = aggregateRowsHourly(rows, cfg.stepSize_m);
+      deps.drawFlowsBarStackSigned(
+        els.flows, hourlyRows, 60,
+        mapRebalanceWindowToRows(rebalanceWindow, rows, hourlyRows),
+        evSettings,
+      );
+    } else {
+      deps.drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, rebalanceWindow, evSettings);
+    }
     deps.drawSocChart(els.soc, rows, cfg.stepSize_m, evSettings);
-    deps.drawPricesStepLines(els.prices, rows, cfg.stepSize_m);
+    deps.drawPricesStepLines(els.prices, rows, cfg.stepSize_m, lastPricesKnownUntilMs);
     deps.drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m);
+    renderScheduleTable();
+    return true;
+  }
+
+  const SEG_ACTIVE = "rounded-full px-2.5 py-1 text-xs font-medium bg-white text-ink shadow-sm dark:bg-slate-700 dark:text-slate-100 transition-all";
+  const SEG_INACTIVE = "rounded-full px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all";
+
+  function setSegState(btn, active) {
+    if (!btn) return;
+    btn.className = active ? SEG_ACTIVE : SEG_INACTIVE;
+    btn.setAttribute("aria-pressed", String(active));
+  }
+
+  function updateViewToggleUI(hasExtended, view, canAggregate, resolution) {
+    if (els.viewRangeToggle) els.viewRangeToggle.hidden = !hasExtended;
+    setSegState(els.viewRangeStandard, view === "standard");
+    setSegState(els.viewRangeFull, view === "full");
+    if (els.flowsResToggle) els.flowsResToggle.hidden = !canAggregate;
+    setSegState(els.flowsRes15, resolution === "15");
+    setSegState(els.flowsRes60, resolution === "60");
+  }
+
+  function onViewRangeChange(range) {
+    storeViewRange(range);
+    renderVisuals();
+  }
+
+  function onFlowsResolutionChange(resolution) {
+    storeFlowsResolution(resolution);
+    renderVisuals();
   }
 
   async function persistConfig(cfg = deps.snapshotUI(els)) {
@@ -182,9 +259,12 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
     debounceRun,
     onRun,
     onTableDisplayChange,
+    onViewRangeChange,
+    onFlowsResolutionChange,
     persistConfig,
     persistConfigDebounced,
     queuePersistSnapshot,
     renderScheduleTable,
+    renderVisuals,
   };
 }

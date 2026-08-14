@@ -95,3 +95,42 @@ describe('renderTable', () => {
     expect(table.innerHTML).toContain('Feed-in');
   });
 });
+
+describe('renderTable — multi-day day sections', () => {
+  const cfg = { stepSize_m: 15, batteryCapacity_Wh: 10000 };
+
+  function makeRows(startLocal, count) {
+    return Array.from({ length: count }, (_, i) =>
+      makeRow({ tIdx: i, timestampMs: startLocal.getTime() + i * 15 * 60_000 }));
+  }
+
+  it('adds collapsible day headers when the view spans more than 48 hours', () => {
+    const table = document.createElement('table');
+    document.body.appendChild(table);
+    const rows = makeRows(new Date(2026, 4, 1, 0, 0), 3 * 96); // 3 full days
+
+    renderTable({ rows, cfg, targets: { table }, showKwh: false });
+
+    const headers = table.querySelectorAll('[data-day-toggle]');
+    expect(headers).toHaveLength(2); // one per day after the first
+
+    // Clicking a header collapses that day's rows.
+    const header = headers[0];
+    const key = header.getAttribute('data-day-toggle');
+    const dayRows = table.querySelectorAll(`tr[data-day="${key}"]`);
+    expect(dayRows).toHaveLength(96);
+    header.querySelector('td').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect([...dayRows].every(tr => tr.classList.contains('hidden'))).toBe(true);
+    header.querySelector('td').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect([...dayRows].some(tr => tr.classList.contains('hidden'))).toBe(false);
+  });
+
+  it('keeps the classic layout (no day headers) within the standard window', () => {
+    const table = document.createElement('table');
+    const rows = makeRows(new Date(2026, 4, 1, 14, 0), 96); // 24 h crossing midnight once
+
+    renderTable({ rows, cfg, targets: { table }, showKwh: false });
+
+    expect(table.querySelectorAll('[data-day-toggle]')).toHaveLength(0);
+  });
+});

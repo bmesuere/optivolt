@@ -571,7 +571,21 @@
     <!-- Power flows — full width -->
     <section class="lg:col-span-3 min-w-0">
       <div class="card">
-        <h3 class="mb-3 sidebar-label">Power flows</h3>
+        <div class="mb-3 flex items-center justify-between gap-4">
+          <h3 class="sidebar-label">Power flows</h3>
+          <div class="flex items-center gap-2">
+            <div id="flows-res-toggle" hidden class="inline-flex rounded-full bg-slate-100 p-0.5 dark:bg-slate-800"
+              role="group" aria-label="Bar resolution">
+              <button id="flows-res-15" type="button">15 min</button>
+              <button id="flows-res-60" type="button">1 h</button>
+            </div>
+            <div id="view-range-toggle" hidden class="inline-flex rounded-full bg-slate-100 p-0.5 dark:bg-slate-800"
+              role="group" aria-label="View range">
+              <button id="view-range-standard" type="button">Standard</button>
+              <button id="view-range-full" type="button">Full horizon</button>
+            </div>
+          </div>
+        </div>
         <div class="h-80 w-full chart-wrap">
           <canvas id="flows" class="h-full w-full"></canvas>
           <div class="chart-empty">

@@ -39,6 +39,8 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       summary,
       rebalanceWindow,
       rebalanceNudge,
+      // Extended horizon: prices past this instant are forecast, not actuals.
+      pricesKnownUntilMs: cfg.pricesKnownUntilMs ?? null,
     });
   } catch (error) {
     logCalculateError(error);

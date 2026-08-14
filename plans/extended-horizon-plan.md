@@ -82,16 +82,22 @@ timestamp separating published day-ahead prices from model predictions.
   shadow period shows timeouts: loosen the MIP gap for large horizons, or
   coarsen far-out slots.
 
-## Phase 3 — Dashboard
+## Phase 3 — Dashboard (this branch)
 
-- Dashed price line beyond `pricesKnownUntilMs` (Chart.js `segment.borderDash`)
-  plus a shaded "forecast zone" background.
-- View-range toggle "Standard | Full horizon", defaulting to Standard so the
-  default UX is unchanged; persisted client-side.
-- Hourly aggregation for bar charts in the full-horizon view (sum energy,
-  average power), with a 15 min/1 h toggle; auto-select 1 h beyond ~48 h.
-- Verify multi-day EV annotations (previously skipped beyond the horizon) and
-  add day-collapsible sections to the table.
+- `/calculate` exposes `pricesKnownUntilMs`; the prices chart dashes the line
+  beyond it (`segment.borderDash`), shades the forecast zone, and marks
+  forecast slots in the tooltip.
+- View-range toggle "Standard | Full horizon" on the Power flows card, shown
+  only when the plan extends past the standard day-ahead window; defaults to
+  Standard (unchanged UX) and persists in localStorage.
+- Power-flows bars aggregate to hourly in views spanning > 48 h (energy-
+  preserving means; prices averaged, costs summed, SoC last-of-hour), with a
+  15 min/1 h toggle; auto-selects 1 h, the user's explicit choice persists.
+  The load/PV chart was already hourly; SoC and prices stay per-slot lines.
+- Multi-day EV annotations verified: markers already skip out-of-range times,
+  so they appear in the full view and vanish in Standard.
+- Schedule table groups days after the first into collapsible day sections on
+  views spanning > 48 h; the standard layout is untouched.
 
 ## Phase 4 — Validation
 

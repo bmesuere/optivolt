@@ -1,0 +1,162 @@
+/**
+ * plan-view.js
+ *
+ * Pure helpers for the extended-horizon dashboard views: slicing plan rows to
+ * the standard (day-ahead) window, hourly aggregation for bar charts, and the
+ * client-side persistence of the view toggles.
+ */
+
+const VIEW_RANGE_KEY = "optivolt:viewRange";
+const FLOWS_RES_KEY = "optivolt:flowsResolution";
+
+/**
+ * End of the "standard" view for a plan starting at the given timestamp: the
+ * classic day-ahead window (local midnight tonight before 13:00, midnight
+ * tomorrow after), mirroring the server's forecast windows.
+ */
+export function standardViewEndMs(firstTimestampMs) {
+  const d = new Date(firstTimestampMs);
+  const dayOffset = d.getHours() < 13 ? 1 : 2;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + dayOffset, 0, 0, 0, 0).getTime();
+}
+
+/** Rows within the standard window (a prefix of the plan, so slot indices are preserved). */
+export function sliceRowsToStandardView(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return rows ?? [];
+  const endMs = standardViewEndMs(rows[0].timestampMs);
+  const idx = rows.findIndex((r) => r.timestampMs >= endMs);
+  return idx < 0 ? rows : rows.slice(0, idx);
+}
+
+/** True when the plan extends beyond the standard window (i.e. a view toggle is useful). */
+export function planExceedsStandardView(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return false;
+  return rows[rows.length - 1].timestampMs >= standardViewEndMs(rows[0].timestampMs);
+}
+
+/** Span of the given rows in hours (0 for empty/single-row input). */
+export function rowsSpanHours(rows) {
+  if (!Array.isArray(rows) || rows.length < 2) return 0;
+  return (rows[rows.length - 1].timestampMs - rows[0].timestampMs) / 3_600_000;
+}
+
+/**
+ * Clamp a rebalance window (slot indices into the full plan) to the first
+ * `visibleLength` rows. Standard-view slicing keeps the row prefix, so
+ * indices stay valid — the window just gets cut off or dropped.
+ */
+export function clampRebalanceWindow(window, visibleLength) {
+  if (!window || window.startIdx >= visibleLength) return null;
+  return { startIdx: window.startIdx, endIdx: Math.min(window.endIdx, visibleLength - 1) };
+}
+
+// Flow-like fields: aggregated so that mean W × 1 h equals the summed slot
+// energy (missing slots in a partial hour count as zero).
+const ENERGY_MEAN_KEYS = [
+  "load", "pv",
+  "g2l", "g2b", "pv2l", "pv2b", "pv2g", "b2l", "b2g",
+  "g2ev", "pv2ev", "b2ev", "ev_charge",
+  "imp", "exp",
+];
+const SUM_KEYS = ["importCost_cents", "exportCost_cents"];
+const SLOT_MEAN_KEYS = ["ic", "ec"]; // prices: plain mean over present slots
+
+/**
+ * Aggregate 15-min plan rows into hourly rows of the same shape, for readable
+ * bar charts on multi-day horizons. Flows become the hour's average power
+ * (energy-preserving: mean W × 1 h = summed slot energy), prices the mean,
+ * costs the sum, and SoC values the hour's last slot.
+ */
+export function aggregateRowsHourly(rows, stepSize_m = 15) {
+  const slotsPerHour = Math.max(1, Math.round(60 / stepSize_m));
+  const buckets = new Map();
+
+  for (const row of rows) {
+    const dt = new Date(row.timestampMs);
+    dt.setMinutes(0, 0, 0);
+    const hourMs = dt.getTime();
+    if (!buckets.has(hourMs)) {
+      buckets.set(hourMs, { rows: [], hourMs });
+    }
+    buckets.get(hourMs).rows.push(row);
+  }
+
+  return [...buckets.values()]
+    .sort((a, b) => a.hourMs - b.hourMs)
+    .map(({ rows: slotRows, hourMs }, bucketIdx) => {
+      const last = slotRows[slotRows.length - 1];
+      const out = { ...last, tIdx: bucketIdx, timestampMs: hourMs };
+      for (const key of ENERGY_MEAN_KEYS) {
+        out[key] = slotRows.reduce((sum, r) => sum + (Number(r[key]) || 0), 0) / slotsPerHour;
+      }
+      for (const key of SUM_KEYS) {
+        out[key] = slotRows.reduce((sum, r) => sum + (Number(r[key]) || 0), 0);
+      }
+      for (const key of SLOT_MEAN_KEYS) {
+        out[key] = slotRows.reduce((sum, r) => sum + (Number(r[key]) || 0), 0) / slotRows.length;
+      }
+      // Original (pre-adjustment) predictions, only when some slot carried one.
+      for (const [key, base] of [["originalLoad", "load"], ["originalPv", "pv"]]) {
+        if (slotRows.some((r) => r[key] != null)) {
+          out[key] = slotRows.reduce((sum, r) => sum + (Number(r[key] ?? r[base]) || 0), 0) / slotsPerHour;
+        } else {
+          delete out[key];
+        }
+      }
+      return out;
+    });
+}
+
+/** Re-express a rebalance window given in `sourceRows` indices as indices into `targetRows` (by timestamp). */
+export function mapRebalanceWindowToRows(window, sourceRows, targetRows) {
+  if (!window) return null;
+  const startMs = sourceRows[window.startIdx]?.timestampMs;
+  const endMs = sourceRows[window.endIdx]?.timestampMs;
+  if (startMs == null || endMs == null) return null;
+  const containing = (ms) => {
+    let idx = -1;
+    for (let i = 0; i < targetRows.length; i++) {
+      if (targetRows[i].timestampMs <= ms) idx = i;
+      else break;
+    }
+    return idx;
+  };
+  const startIdx = containing(startMs);
+  const endIdx = containing(endMs);
+  if (startIdx < 0 || endIdx < 0) return null;
+  return { startIdx, endIdx };
+}
+
+// ---------------------------------------------------------------------------
+// Client-side persistence of the view toggles (localStorage; never synced)
+// ---------------------------------------------------------------------------
+
+export function getStoredViewRange() {
+  try {
+    return localStorage.getItem(VIEW_RANGE_KEY) === "full" ? "full" : "standard";
+  } catch {
+    return "standard";
+  }
+}
+
+export function storeViewRange(range) {
+  try {
+    localStorage.setItem(VIEW_RANGE_KEY, range === "full" ? "full" : "standard");
+  } catch { /* private mode etc. — the toggle just won't persist */ }
+}
+
+/** Explicit user choice ('15' | '60'), or null meaning "auto". */
+export function getStoredFlowsResolution() {
+  try {
+    const v = localStorage.getItem(FLOWS_RES_KEY);
+    return v === "15" || v === "60" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export function storeFlowsResolution(res) {
+  try {
+    localStorage.setItem(FLOWS_RES_KEY, res === "60" ? "60" : "15");
+  } catch { /* ignore */ }
+}
