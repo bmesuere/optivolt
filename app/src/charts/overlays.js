@@ -1,5 +1,5 @@
 import { fmtKwh } from '../chart-tooltip.js';
-import { getBuyPriceColor, toRGBA, SOLUTION_COLORS } from './colors.js';
+import { getPriceStripColor, toRGBA, SOLUTION_COLORS } from './colors.js';
 import { fmtHHMM } from './core.js';
 
 export const BUY_PRICE_STRIP_HEIGHT = 7;
@@ -298,7 +298,7 @@ export function makeNegativePriceInjectionPlugin(rows, h) {
 export function makeBuyPriceStripPlugin(rows) {
   if (!rows?.length) return null;
 
-  const colors = rows.map(row => getBuyPriceColor(row?.ic));
+  const colors = rows.map(row => getPriceStripColor(row?.ic, row?.ec));
 
   return {
     id: 'buyPriceStrip',

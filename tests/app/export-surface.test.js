@@ -16,7 +16,7 @@ describe('browser module compatibility exports', () => {
       drawSocChart: expect.any(Function),
       fmtHHMM: expect.any(Function),
       getBaseOptions: expect.any(Function),
-      getBuyPriceColor: expect.any(Function),
+      getPriceStripColor: expect.any(Function),
       getChartTheme: expect.any(Function),
       refreshAllChartThemes: expect.any(Function),
       renderChart: expect.any(Function),
