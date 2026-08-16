@@ -87,9 +87,9 @@ export function drawEvPowerChart(canvas, rows, _stepSize_m = 15, evSettings = {}
   };
 
   const eventPlugins = [
-    makeEvAwayBandPlugin(rows, evSettings.trips),
-    makeEvArrivalPlugin(rows, evSettings.arrivals),
-    makeEvDeparturePlugin(rows, evSettings.departures),
+    makeEvAwayBandPlugin(rows, evSettings?.trips),
+    makeEvArrivalPlugin(rows, evSettings?.arrivals),
+    makeEvDeparturePlugin(rows, evSettings?.departures),
   ].filter(Boolean);
 
   renderChart(canvas, {
@@ -105,10 +105,10 @@ export function drawEvSocChartTab(canvas, rows, evSettings = {}) {
   const axis = buildTimeAxisFromTimestamps(timestampsMs);
 
   const plugins = [
-    makeEvAwayBandPlugin(rows, evSettings.trips),
-    makeEvArrivalPlugin(rows, evSettings.arrivals),
-    makeEvDeparturePlugin(rows, evSettings.departures),
-    makeEvTargetPlugin(rows, evSettings.targets),
+    makeEvAwayBandPlugin(rows, evSettings?.trips),
+    makeEvArrivalPlugin(rows, evSettings?.arrivals),
+    makeEvDeparturePlugin(rows, evSettings?.departures),
+    makeEvTargetPlugin(rows, evSettings?.targets),
   ].filter(Boolean);
 
   renderChart(canvas, {

@@ -134,6 +134,44 @@ describe('optimizer controller', () => {
     expect(els.run.classList.contains('loading')).toBe(false);
   });
 
+  it('keeps a solved plan on screen when rendering throws', async () => {
+    const { controller, els, services, summary } = setupController();
+    services.drawSocChart.mockImplementation(() => {
+      throw new Error('canvas exploded');
+    });
+
+    await controller.onRun();
+
+    // The solve succeeded — and may already have been written to Victron — so the summary must
+    // survive, and the failure has to read as a display problem rather than a planning one.
+    expect(services.updateSummaryUI).toHaveBeenCalledWith(els, summary);
+    expect(services.updateSummaryUI).not.toHaveBeenCalledWith(els, null);
+    expect(els.status.textContent).toBe('Plan calculated, but display failed: canvas exploded');
+    expect(els.run.disabled).toBe(false);
+  });
+
+  it('reports a failed solve and clears the summary', async () => {
+    const { controller, els, services } = setupController();
+    services.requestRemoteSolve.mockRejectedValue(new Error('solver unavailable'));
+
+    await controller.onRun();
+
+    expect(services.updateSummaryUI).toHaveBeenCalledWith(els, null);
+    expect(els.status.textContent).toBe('Error: solver unavailable');
+    expect(els.run.disabled).toBe(false);
+  });
+
+  it('renders the EV panel when the EV toggle is off', async () => {
+    const { controller, els, services } = setupController();
+    els.evEnabled.checked = false;
+
+    await controller.onRun();
+
+    // getEvSettings returns null with EV off; the panel has to survive it.
+    expect(services.updateEvPanel).toHaveBeenCalledWith(els, expect.anything(), expect.anything(), 30, null);
+    expect(els.status.textContent).toBe('Plan updated');
+  });
+
   it('re-renders cached table rows when table display toggles change', async () => {
     const { controller, els, services } = setupController();
     await controller.onRun();

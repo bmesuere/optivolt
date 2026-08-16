@@ -63,8 +63,11 @@ export function collectEvSettings(entries = [], tripBuffer_percent = 20) {
   return { arrivals, departures, targets, trips };
 }
 
-export function updateEvPanel(els, rows, summary, stepSize_m = 15, evSettings = { arrivals: [], departures: [], targets: [] }) {
-  lastPanelArgs = [els, rows, summary, stepSize_m, evSettings];
+export function updateEvPanel(els, rows, summary, stepSize_m = 15, evSettings = null) {
+  // Callers pass null explicitly when EV support is off, and a default parameter only covers
+  // undefined — so normalise here rather than relying on one.
+  const ev = evSettings ?? { arrivals: [], departures: [], targets: [], trips: [] };
+  lastPanelArgs = [els, rows, summary, stepSize_m, ev];
   const evTotal = summary?.evChargeTotal_kWh ?? 0;
   const hasEv = evTotal > 0;
 
@@ -125,10 +128,10 @@ export function updateEvPanel(els, rows, summary, stepSize_m = 15, evSettings = 
 
   if (els.evPowerChart) {
     const powerRows = resolution === "60" ? aggregateRowsHourly(viewRows, stepSize_m) : viewRows;
-    drawEvPowerChart(els.evPowerChart, powerRows, resolution === "60" ? 60 : stepSize_m, evSettings);
+    drawEvPowerChart(els.evPowerChart, powerRows, resolution === "60" ? 60 : stepSize_m, ev);
   }
-  if (els.evSocChartTab) drawEvSocChartTab(els.evSocChartTab, viewRows, evSettings);
-  renderEvTable(viewRows.filter(r => (r.ev_soc_percent ?? 0) > 0), els.evScheduleTable, stepSize_m, evSettings);
+  if (els.evSocChartTab) drawEvSocChartTab(els.evSocChartTab, viewRows, ev);
+  renderEvTable(viewRows.filter(r => (r.ev_soc_percent ?? 0) > 0), els.evScheduleTable, stepSize_m, ev);
 }
 
 const MODE_CONFIG = [
@@ -225,13 +228,13 @@ function renderEvTable(evRows, tableEl, stepSize_m = 15, evSettings = {}) {
     return set;
   };
 
-  const arrivalIdxs = rowIdxSet(evSettings.arrivals);
-  const departureIdxs = rowIdxSet(evSettings.departures);
+  const arrivalIdxs = rowIdxSet(evSettings?.arrivals);
+  const departureIdxs = rowIdxSet(evSettings?.departures);
 
   // Map each target deadline to the first row at/after it, so the target % shows on that row.
   // When several targets land on the same row, show the highest — matching the solver's dedupe.
   const targetByRowIdx = new Map();
-  for (const t of (evSettings.targets ?? [])) {
+  for (const t of (evSettings?.targets ?? [])) {
     const idx = rowIdxAtOrAfter(t.time);
     if (idx >= 0) targetByRowIdx.set(idx, Math.max(targetByRowIdx.get(idx) ?? 0, t.soc_percent));
   }
