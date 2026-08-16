@@ -15,22 +15,25 @@ export const SOLUTION_COLORS = {
 
 const PRICE_STRIP_NEUTRAL_RGB = [226, 232, 240];
 
-// Buy-price bands: one hue per band, ramping light → deep within the band.
-// The lightness reset at each boundary makes the 15/20/25/30c thresholds
-// read as hard seams while within-band differences stay visible.
-const BUY_PRICE_BANDS = [
-  { min: 0,  max: 15, from: [220, 252, 231], to: [22, 163, 74] },   // green: cheap
-  { min: 15, max: 20, from: [254, 249, 195], to: [234, 179, 8] },   // yellow
-  { min: 20, max: 25, from: [254, 215, 170], to: [234, 88, 12] },   // orange
-  { min: 25, max: 30, from: [254, 202, 202], to: [220, 38, 38] },   // red
-  { min: 30, max: 40, from: [185, 28, 28],  to: [127, 29, 29] },    // dark red
+// Continuous scale for positive buy prices. Hue anchors sit at band centers
+// (green <15c, yellow 15-20c, orange 20-25c, red 25-30c, dark red 30c+) so
+// each band reads as its own hue family while neighbouring prices stay
+// near-identical: 9.9c vs 10.1c is negligible in practice and looks like it.
+const BUY_PRICE_STOPS = [
+  { value: 0,    rgb: [187, 247, 208] }, // pale green
+  { value: 12.5, rgb: [34, 197, 94] },   // green
+  { value: 17.5, rgb: [234, 179, 8] },   // yellow
+  { value: 22.5, rgb: [249, 115, 22] },  // orange
+  { value: 27.5, rgb: [220, 38, 38] },   // red
+  { value: 40,   rgb: [127, 29, 29] },   // dark red
 ];
 
-// Overrides for the exceptional low-price regimes. Buy and sell derive from
-// the same raw price, so these zones sit below the banded scale and never
-// interleave with it.
-const PAID_TO_CONSUME_BAND = { span: 10, from: [191, 219, 254], to: [29, 78, 216] };  // blue, buy < 0
-const NEGATIVE_SELL_BAND = { span: 10, from: [221, 214, 254], to: [124, 58, 237] };   // violet, sell < 0
+// The exceptional regimes get flat colors: crossing zero is the one place
+// where a tiny price difference matters, so the color change is abrupt.
+// Buy and sell derive from the same raw price, so these zones sit below the
+// positive scale and never interleave with it.
+const PAID_TO_CONSUME_RGB = [37, 99, 235]; // blue: buy < 0
+const NEGATIVE_SELL_RGB = [124, 58, 237];  // violet: sell < 0, buy >= 0
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
@@ -93,30 +96,30 @@ function rgbString(rgb) {
   return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 }
 
-function bandColor(band, t) {
-  const clamped = Math.max(0, Math.min(1, t));
-  return rgbString(interpolateOklab(band.from, band.to, clamped));
-}
-
 export function getPriceStripColor(buyPrice_cents_per_kWh, sellPrice_cents_per_kWh = 0) {
   const buy = Number(buyPrice_cents_per_kWh);
   if (buyPrice_cents_per_kWh == null || !Number.isFinite(buy)) {
     return rgbString(PRICE_STRIP_NEUTRAL_RGB);
   }
 
-  if (buy < 0) return bandColor(PAID_TO_CONSUME_BAND, -buy / PAID_TO_CONSUME_BAND.span);
+  if (buy < 0) return rgbString(PAID_TO_CONSUME_RGB);
 
   const sell = Number(sellPrice_cents_per_kWh);
-  if (Number.isFinite(sell) && sell < 0) {
-    return bandColor(NEGATIVE_SELL_BAND, -sell / NEGATIVE_SELL_BAND.span);
+  if (Number.isFinite(sell) && sell < 0) return rgbString(NEGATIVE_SELL_RGB);
+
+  const last = BUY_PRICE_STOPS[BUY_PRICE_STOPS.length - 1];
+  if (buy >= last.value) return rgbString(last.rgb);
+
+  for (let i = 1; i < BUY_PRICE_STOPS.length; i++) {
+    const lower = BUY_PRICE_STOPS[i - 1];
+    const upper = BUY_PRICE_STOPS[i];
+    if (buy <= upper.value) {
+      const t = (buy - lower.value) / (upper.value - lower.value);
+      return rgbString(interpolateOklab(lower.rgb, upper.rgb, t));
+    }
   }
 
-  for (const band of BUY_PRICE_BANDS) {
-    if (buy < band.max) return bandColor(band, (buy - band.min) / (band.max - band.min));
-  }
-
-  const last = BUY_PRICE_BANDS[BUY_PRICE_BANDS.length - 1];
-  return rgbString(last.to);
+  return rgbString(last.rgb);
 }
 
 export const toRGBA = (rgb, alpha = 1) => {

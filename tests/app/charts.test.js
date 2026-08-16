@@ -2,42 +2,38 @@ import { describe, expect, it } from 'vitest';
 import { aggregateLoadPvBuckets, getPriceStripColor } from '../../app/src/charts.js';
 
 describe('getPriceStripColor', () => {
-  it('uses a blue ramp when the buy price is negative (paid to consume)', () => {
-    expect(getPriceStripColor(-0.5, -3)).toBe('rgb(182, 212, 253)');
-    expect(getPriceStripColor(-5.5, -6)).toBe('rgb(99, 145, 236)');
-    expect(getPriceStripColor(-10, -8)).toBe('rgb(29, 78, 216)');
-    expect(getPriceStripColor(-20, -12)).toBe('rgb(29, 78, 216)');
+  it('uses a flat blue when the buy price is negative (paid to consume)', () => {
+    expect(getPriceStripColor(-0.1, -3)).toBe('rgb(37, 99, 235)');
+    expect(getPriceStripColor(-10, -8)).toBe('rgb(37, 99, 235)');
+    expect(getPriceStripColor(-20, -12)).toBe('rgb(37, 99, 235)');
   });
 
-  it('uses a violet ramp when only the sell price is negative (injection costs money)', () => {
-    expect(getPriceStripColor(8, -0.5)).toBe('rgb(215, 207, 254)');
-    expect(getPriceStripColor(6, -5)).toBe('rgb(168, 144, 249)');
+  it('uses a flat violet when only the sell price is negative (injection costs money)', () => {
+    expect(getPriceStripColor(8, -0.1)).toBe('rgb(124, 58, 237)');
     expect(getPriceStripColor(5, -10)).toBe('rgb(124, 58, 237)');
     expect(getPriceStripColor(2, -20)).toBe('rgb(124, 58, 237)');
   });
 
-  it('ramps light to deep within each buy-price band', () => {
-    expect(getPriceStripColor(0, 2)).toBe('rgb(220, 252, 231)');
-    expect(getPriceStripColor(7.5, 2)).toBe('rgb(136, 208, 153)');
-    expect(getPriceStripColor(15, 2)).toBe('rgb(254, 249, 195)');
-    expect(getPriceStripColor(17.5, 2)).toBe('rgb(245, 214, 125)');
-    expect(getPriceStripColor(20, 2)).toBe('rgb(254, 215, 170)');
-    expect(getPriceStripColor(25, 2)).toBe('rgb(254, 202, 202)');
-    expect(getPriceStripColor(30, 2)).toBe('rgb(185, 28, 28)');
+  it('anchors hues at band centers along the positive scale', () => {
+    expect(getPriceStripColor(0, 2)).toBe('rgb(187, 247, 208)');
+    expect(getPriceStripColor(12.5, 2)).toBe('rgb(34, 197, 94)');
+    expect(getPriceStripColor(17.5, 2)).toBe('rgb(234, 179, 8)');
+    expect(getPriceStripColor(22.5, 2)).toBe('rgb(249, 115, 22)');
+    expect(getPriceStripColor(27.5, 2)).toBe('rgb(220, 38, 38)');
     expect(getPriceStripColor(40, 2)).toBe('rgb(127, 29, 29)');
     expect(getPriceStripColor(90, 2)).toBe('rgb(127, 29, 29)');
   });
 
-  it('makes band boundaries a hard seam, not a smooth blend', () => {
-    expect(getPriceStripColor(14.9, 2)).toBe('rgb(25, 164, 75)');
-    expect(getPriceStripColor(15, 2)).toBe('rgb(254, 249, 195)');
-    expect(getPriceStripColor(19.9, 2)).toBe('rgb(234, 180, 22)');
-    expect(getPriceStripColor(20, 2)).toBe('rgb(254, 215, 170)');
+  it('keeps neighbouring positive prices near-identical', () => {
+    expect(getPriceStripColor(9.9, 2)).toBe('rgb(81, 208, 119)');
+    expect(getPriceStripColor(10.1, 2)).toBe('rgb(78, 207, 117)');
+    expect(getPriceStripColor(24.9, 2)).toBe('rgb(236, 83, 33)');
+    expect(getPriceStripColor(25.1, 2)).toBe('rgb(234, 80, 33)');
   });
 
-  it('falls back to the buy-price bands when the sell price is missing', () => {
-    expect(getPriceStripColor(10)).toBe('rgb(106, 193, 127)');
-    expect(getPriceStripColor(10, null)).toBe('rgb(106, 193, 127)');
+  it('falls back to the positive scale when the sell price is missing', () => {
+    expect(getPriceStripColor(10)).toBe('rgb(80, 207, 118)');
+    expect(getPriceStripColor(10, null)).toBe('rgb(80, 207, 118)');
   });
 
   it('treats invalid buy prices as neutral', () => {
