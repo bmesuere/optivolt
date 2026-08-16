@@ -2,6 +2,11 @@ import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { assertCondition, toHttpError } from '../http-errors.ts';
 import { loadSettings, saveSettings } from '../services/settings-store.ts';
+import {
+  buildPredictionRunConfig,
+  runCombinedPredictionForecast,
+} from '../services/prediction-forecast-runner.ts';
+import type { Settings } from '../types.ts';
 
 const router = express.Router();
 
@@ -27,10 +32,43 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     const mergedSettings = { ...prevSettings, ...incoming };
     await saveSettings(mergedSettings);
 
+    // Re-read so the comparison uses the normalized value (clamping and
+    // rounding happen on load, not on save).
+    const savedSettings = await loadSettings();
+    if (savedSettings.extendedHorizonDays !== prevSettings.extendedHorizonDays) {
+      await refreshForecastsForNewHorizon(savedSettings);
+    }
+
     res.json({ message: 'Settings saved successfully.', settings: mergedSettings });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to save settings'));
   }
 });
+
+/**
+ * The load and PV forecasts are generated over the configured horizon, but are
+ * otherwise only refreshed out-of-band (an HA cron hitting /predictions/forecast).
+ * A plan can never run past its data, so after a horizon change the stored
+ * series would cap the plan at the old window until that cron next fires.
+ * Regenerate them here instead.
+ *
+ * Awaited so the recompute that follows a settings change sees the new series.
+ * Failures are logged, not surfaced: the settings are already saved, and the
+ * next scheduled run recovers.
+ */
+async function refreshForecastsForNewHorizon(settings: Settings): Promise<void> {
+  // Only these sources are written by the forecast runner; skip the external
+  // calls entirely when neither applies.
+  if (settings.dataSources.load !== 'api' && settings.dataSources.pv !== 'api') return;
+  try {
+    const config = await buildPredictionRunConfig();
+    await runCombinedPredictionForecast(config, 'horizon-change');
+  } catch (error) {
+    console.warn(
+      '[settings] forecast refresh after horizon change failed:',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
 
 export default router;
