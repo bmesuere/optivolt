@@ -16,11 +16,30 @@ import {
   makeAdjustmentOverlayPlugin,
   makeForecastOriginalMarkersPlugin,
 } from '../charts/overlays.js';
+import { standardViewEndMs } from '../plan-view.js';
+import {
+  getStandardWindowEndMs,
+  getStoredViewRange,
+  mountViewToggles,
+  resolveFlowsResolution,
+  subscribeViewToggles,
+} from '../view-toggles.js';
 
 const stripe = (c) => window.pattern?.draw('diagonal', c) || c;
 
+/** Drop the part of a forecast series at or beyond `endMs`. */
+function sliceForecastToEnd(forecast, endMs) {
+  if (!forecast || !Array.isArray(forecast.values) || endMs == null) return forecast;
+  const startMs = new Date(forecast.start).getTime();
+  const stepMs = (forecast.step || 15) * 60_000;
+  const keep = Math.ceil((endMs - startMs) / stepMs);
+  if (!(keep > 0) || keep >= forecast.values.length) return forecast;
+  return { ...forecast, values: forecast.values.slice(0, keep) };
+}
+
 export function createForecastChartController({ getForecasts, onAdjustmentsChanged = () => {} }) {
   let predictionAdjustments = [];
+  let viewToggles = null;
   let forecastChartSelection = null;
   let forecastChartDrag = null;
   let adjustmentDraft = null;
@@ -45,13 +64,56 @@ export function createForecastChartController({ getForecasts, onAdjustmentsChang
     }
   }
 
+  /**
+   * Apply the shared view toggles to the forecast series. The standard-window
+   * boundary comes from the last plan when one has run, otherwise from the
+   * browser-local day-ahead rule.
+   */
+  function resolveForecastView({ load, pv, rawLoad, rawPv }) {
+    const reference = load ?? pv;
+    if (!reference?.values?.length) {
+      return {
+        view: { hasExtended: false, range: 'standard' },
+        resolution: resolveFlowsResolution(0),
+        series: { load, pv, rawLoad, rawPv },
+      };
+    }
+
+    const startMs = new Date(reference.start).getTime();
+    const stepMs = (reference.step || 15) * 60_000;
+    const endMs = startMs + reference.values.length * stepMs;
+    const standardEndMs = getStandardWindowEndMs() ?? standardViewEndMs(startMs);
+
+    const hasExtended = endMs > standardEndMs;
+    const range = hasExtended ? getStoredViewRange() : 'standard';
+    const cut = range === 'full' ? null : standardEndMs;
+    const spanH = ((cut != null ? Math.min(endMs, cut) : endMs) - startMs) / 3_600_000;
+
+    return {
+      view: { hasExtended, range },
+      resolution: resolveFlowsResolution(spanH),
+      series: {
+        load: sliceForecastToEnd(load, cut),
+        pv: sliceForecastToEnd(pv, cut),
+        rawLoad: sliceForecastToEnd(rawLoad, cut),
+        rawPv: sliceForecastToEnd(rawPv, cut),
+      },
+    };
+  }
+
   function renderCombinedForecastChart() {
     const canvas = document.getElementById('forecast-chart');
     if (!canvas) return;
+    if (!viewToggles) {
+      viewToggles = mountViewToggles(document.getElementById('forecast-view-toggles'));
+      subscribeViewToggles(renderCombinedForecastChart);
+    }
 
-    const { load, pv, rawLoad, rawPv } = getForecasts();
-    const is15m = document.getElementById('forecast-chart-15m')?.checked;
-    const stepMinutes = is15m ? 15 : 60;
+    const raw = getForecasts();
+    const { view, resolution, series } = resolveForecastView(raw);
+    const { load, pv, rawLoad, rawPv } = series;
+    const stepMinutes = resolution === '60' ? 60 : 15;
+    viewToggles?.update({ hasExtended: view.hasExtended, view: view.range, resolution });
 
     const loadAgg = load ? aggregateForecastKwh(load, stepMinutes) : { timestamps: [], values: [] };
     const pvAgg = pv ? aggregateForecastKwh(pv, stepMinutes) : { timestamps: [], values: [] };

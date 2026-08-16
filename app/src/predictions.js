@@ -50,7 +50,6 @@ export async function initPredictionsTab() {
   wirePredictionForm({
     onForecastAll,
     onPvForecast,
-    onForecastResolutionChange: forecastChart.render,
   });
   forecastChart.wireAdjustmentPopover();
   onForecastAll();

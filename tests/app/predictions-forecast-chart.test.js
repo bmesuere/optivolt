@@ -19,7 +19,7 @@ const flushPromises = () => new Promise(resolve => setTimeout(resolve, 0));
 
 function setupDom() {
   document.body.innerHTML = `
-    <input id="forecast-chart-15m" type="checkbox" />
+    <div id="forecast-view-toggles"></div>
     <div id="prediction-adjustments-count"></div>
     <div id="prediction-adjustments-list"></div>
     <div id="forecast-adjustment-popover" class="hidden">

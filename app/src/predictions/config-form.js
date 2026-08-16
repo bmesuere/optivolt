@@ -36,7 +36,7 @@ export function applyPredictionConfigToForm(config) {
   updatePredictorFieldVisibility();
 }
 
-export function wirePredictionForm({ onForecastAll, onPvForecast, onForecastResolutionChange }) {
+export function wirePredictionForm({ onForecastAll, onPvForecast }) {
   const debouncedSave = debounce(savePredictionFormSilently, 600);
 
   for (const el of document.querySelectorAll('[data-predictions-only="true"]')) {
@@ -53,8 +53,6 @@ export function wirePredictionForm({ onForecastAll, onPvForecast, onForecastReso
     ?.addEventListener('click', onForecastAll);
   document.getElementById('pred-pv-forecast')
     ?.addEventListener('click', onPvForecast);
-  document.getElementById('forecast-chart-15m')
-    ?.addEventListener('change', onForecastResolutionChange);
 
   const settingsToggle = document.getElementById('pred-settings-toggle');
   const settingsBody = document.getElementById('pred-settings-body');

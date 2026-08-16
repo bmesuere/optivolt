@@ -54,7 +54,6 @@ function setupDom() {
     </select>
     <button id="pred-load-forecast" type="button"></button>
     <button id="pred-pv-forecast" type="button"></button>
-    <input id="forecast-chart-15m" type="checkbox" />
     <button id="pred-settings-toggle" type="button"></button>
     <div id="pred-settings-body" class="hidden"></div>
     <span id="pred-settings-toggle-icon"></span>
@@ -140,10 +139,9 @@ describe('prediction config form', () => {
   it('wires prediction-owned controls, buttons, and settings toggle', async () => {
     const onForecastAll = vi.fn();
     const onPvForecast = vi.fn();
-    const onForecastResolutionChange = vi.fn();
     savePredictionConfig.mockResolvedValue({});
 
-    wirePredictionForm({ onForecastAll, onPvForecast, onForecastResolutionChange });
+    wirePredictionForm({ onForecastAll, onPvForecast });
 
     document.getElementById('pred-active-type').value = 'fixed';
     document.getElementById('pred-active-type').dispatchEvent(new Event('change', { bubbles: true }));
@@ -158,12 +156,10 @@ describe('prediction config form', () => {
 
     document.getElementById('pred-load-forecast').click();
     document.getElementById('pred-pv-forecast').click();
-    document.getElementById('forecast-chart-15m').dispatchEvent(new Event('change', { bubbles: true }));
     document.getElementById('pred-settings-toggle').click();
 
     expect(onForecastAll).toHaveBeenCalledTimes(1);
     expect(onPvForecast).toHaveBeenCalledTimes(1);
-    expect(onForecastResolutionChange).toHaveBeenCalledTimes(1);
     expect(document.getElementById('pred-settings-body').classList.contains('hidden')).toBe(false);
   });
 });

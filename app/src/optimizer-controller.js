@@ -8,7 +8,7 @@ import { renderTable } from "./table.js";
 import { debounce } from "./utils.js";
 import { saveConfig } from "./config-store.js";
 import { requestRemoteSolve } from "./api/api.js";
-import { updateEvPanel, collectEvSettings } from "./ev-tab.js";
+import { updateEvPanel, collectEvSettings, initEvPanelToggles } from "./ev-tab.js";
 import {
   snapshotUI,
   updatePlanMeta,
@@ -18,15 +18,18 @@ import {
 import {
   aggregateRowsHourly,
   clampRebalanceWindow,
-  getStoredFlowsResolution,
   getStoredViewRange,
   mapRebalanceWindowToRows,
   planExceedsStandardView,
   rowsSpanHours,
   sliceRowsToStandardView,
-  storeFlowsResolution,
-  storeViewRange,
 } from "./plan-view.js";
+import {
+  mountViewToggles,
+  resolveFlowsResolution,
+  setStandardWindowEndMs,
+  subscribeViewToggles,
+} from "./view-toggles.js";
 
 export function createOptimizerController({ els, services = {}, getEvEntries = () => [], onPlanRows = () => {} }) {
   const deps = {
@@ -50,6 +53,10 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
   let lastTableRebalanceWindow = null;
   let lastPricesKnownUntilMs = null;
   let lastStandardWindowEndMs = null;
+
+  const viewToggles = mountViewToggles(els.optimizerViewToggles);
+  initEvPanelToggles(els);
+  subscribeViewToggles(() => { renderVisuals(); });
 
   const debounceRun = deps.debounce(onRun, 250);
   const persistConfigDebounced = deps.debounce((cfg) => {
@@ -95,6 +102,8 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
       lastTableRebalanceWindow = result.rebalanceWindow ?? null;
       lastPricesKnownUntilMs = result.pricesKnownUntilMs ?? null;
       lastStandardWindowEndMs = result.standardWindowEndMs ?? null;
+      // Share the server boundary so the EV and forecast tabs slice alike.
+      setStandardWindowEndMs(lastStandardWindowEndMs);
 
       renderVisuals();
       deps.updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m, evSettings);
@@ -159,13 +168,11 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
     const { rows, view, hasExtended } = getVisibleRows();
     const rebalanceWindow = clampRebalanceWindow(lastTableRebalanceWindow, rows.length);
 
-    // Hourly bars keep the multi-day view readable; the standard view always
-    // uses native slots. Default to hourly beyond 48 h unless the user chose.
-    const spanH = rowsSpanHours(rows);
-    const canAggregate = spanH > 48;
-    const resolution = canAggregate ? (getStoredFlowsResolution() ?? "60") : "15";
+    // Hourly bars keep multi-day views readable, so that is the default beyond
+    // 48 h — but the control is always available, whatever the span.
+    const resolution = resolveFlowsResolution(rowsSpanHours(rows));
 
-    updateViewToggleUI(hasExtended, view, canAggregate, resolution);
+    viewToggles.update({ hasExtended, view, resolution });
 
     if (resolution === "60") {
       const hourlyRows = aggregateRowsHourly(rows, cfg.stepSize_m);
@@ -182,36 +189,6 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
     deps.drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m);
     renderScheduleTable();
     return true;
-  }
-
-  const SEG_ACTIVE = "rounded-full px-2.5 py-1 text-xs font-medium bg-white text-ink shadow-sm dark:bg-slate-700 dark:text-slate-100 transition-all";
-  const SEG_INACTIVE = "rounded-full px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all";
-
-  function setSegState(btn, active) {
-    if (!btn) return;
-    btn.className = active ? SEG_ACTIVE : SEG_INACTIVE;
-    btn.setAttribute("aria-pressed", String(active));
-  }
-
-  function updateViewToggleUI(hasExtended, view, canAggregate, resolution) {
-    // Tailwind's .hidden utility, not the `hidden` attribute: the toggles carry
-    // `inline-flex`, which overrides the attribute's display:none.
-    els.viewRangeToggle?.classList.toggle("hidden", !hasExtended);
-    setSegState(els.viewRangeStandard, view === "standard");
-    setSegState(els.viewRangeFull, view === "full");
-    els.flowsResToggle?.classList.toggle("hidden", !canAggregate);
-    setSegState(els.flowsRes15, resolution === "15");
-    setSegState(els.flowsRes60, resolution === "60");
-  }
-
-  function onViewRangeChange(range) {
-    storeViewRange(range);
-    renderVisuals();
-  }
-
-  function onFlowsResolutionChange(resolution) {
-    storeFlowsResolution(resolution);
-    renderVisuals();
   }
 
   async function persistConfig(cfg = deps.snapshotUI(els)) {
@@ -266,8 +243,6 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
     debounceRun,
     onRun,
     onTableDisplayChange,
-    onViewRangeChange,
-    onFlowsResolutionChange,
     persistConfig,
     persistConfigDebounced,
     queuePersistSnapshot,

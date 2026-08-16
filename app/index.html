@@ -573,18 +573,7 @@
       <div class="card">
         <div class="mb-3 flex items-center justify-between gap-4">
           <h3 class="sidebar-label">Power flows</h3>
-          <div class="flex items-center gap-2">
-            <div id="flows-res-toggle" class="hidden inline-flex rounded-full bg-slate-100 p-0.5 dark:bg-slate-800"
-              role="group" aria-label="Bar resolution">
-              <button id="flows-res-15" type="button">15 min</button>
-              <button id="flows-res-60" type="button">1 h</button>
-            </div>
-            <div id="view-range-toggle" class="hidden inline-flex rounded-full bg-slate-100 p-0.5 dark:bg-slate-800"
-              role="group" aria-label="View range">
-              <button id="view-range-standard" type="button">Standard</button>
-              <button id="view-range-full" type="button">Full horizon</button>
-            </div>
-          </div>
+          <div id="optimizer-view-toggles" class="flex items-center gap-2"></div>
         </div>
         <div class="h-80 w-full chart-wrap">
           <canvas id="flows" class="h-full w-full"></canvas>
@@ -1080,13 +1069,7 @@
       <section class="card relative">
         <div class="mb-3 flex items-center justify-between gap-3">
           <h2 class="sidebar-label">Forecast</h2>
-          <div class="flex items-center gap-3">
-            <label class="toggle">
-              <input id="forecast-chart-15m" type="checkbox">
-              <span class="toggle-knob"></span>
-              <span class="text-sm text-slate-600 dark:text-slate-400">15m bars</span>
-            </label>
-          </div>
+          <div id="forecast-view-toggles" class="flex items-center gap-2"></div>
         </div>
         <div class="h-80 w-full chart-wrap">
           <canvas id="forecast-chart" class="h-full w-full"></canvas>
@@ -1699,7 +1682,10 @@
     <!-- Main: Charts + Table -->
     <section class="lg:col-span-2 space-y-6 min-w-0">
       <div class="card">
-        <h3 class="mb-3 sidebar-label">Charging flows</h3>
+        <div class="mb-3 flex items-center justify-between gap-4">
+          <h3 class="sidebar-label">Charging flows</h3>
+          <div id="ev-view-toggles" class="flex items-center gap-2"></div>
+        </div>
         <div class="h-52 w-full chart-wrap">
           <canvas id="ev-power-chart" class="h-full w-full"></canvas>
           <div class="chart-empty">

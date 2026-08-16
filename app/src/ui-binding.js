@@ -42,12 +42,8 @@ export function getElements() {
     planTsStart: $("#plan-ts-start"),
 
     // charts + status
-    viewRangeToggle: $("#view-range-toggle"),
-    viewRangeStandard: $("#view-range-standard"),
-    viewRangeFull: $("#view-range-full"),
-    flowsResToggle: $("#flows-res-toggle"),
-    flowsRes15: $("#flows-res-15"),
-    flowsRes60: $("#flows-res-60"),
+    optimizerViewToggles: $("#optimizer-view-toggles"),
+    evViewToggles: $("#ev-view-toggles"),
     flows: $("#flows"),
     soc: $("#soc"),
     prices: $("#prices"),
@@ -147,7 +143,6 @@ export function wireGlobalInputs(
   els,
   {
     onInput, onSave = onInput, onRun, onTableDisplayChange = onRun, updateTerminalCustomUI,
-    onViewRangeChange, onFlowsResolutionChange,
   }
 ) {
   // Auto-save only settings-owned controls.
@@ -167,16 +162,6 @@ export function wireGlobalInputs(
   // Table display toggles
   els.tableKwh?.addEventListener("change", onTableDisplayChange);
   els.tableDess?.addEventListener("change", onTableDisplayChange);
-
-  // View-range + bar-resolution toggles (extended horizon)
-  if (onViewRangeChange) {
-    els.viewRangeStandard?.addEventListener("click", () => onViewRangeChange("standard"));
-    els.viewRangeFull?.addEventListener("click", () => onViewRangeChange("full"));
-  }
-  if (onFlowsResolutionChange) {
-    els.flowsRes15?.addEventListener("click", () => onFlowsResolutionChange("15"));
-    els.flowsRes60?.addEventListener("click", () => onFlowsResolutionChange("60"));
-  }
 
   // Keyboard shortcut: Ctrl+Enter (or Cmd+Enter) to Recompute
   document.addEventListener("keydown", (e) => {
