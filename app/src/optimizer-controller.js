@@ -30,6 +30,7 @@ import {
   setStandardWindowEndMs,
   subscribeViewToggles,
 } from "./view-toggles.js";
+import { renderNowPanel, startNowPanelTicker } from "./now-panel.js";
 
 export function createOptimizerController({ els, services = {}, getEvEntries = () => [], onPlanRows = () => {} }) {
   const deps = {
@@ -53,10 +54,19 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
   let lastTableRebalanceWindow = null;
   let lastPricesKnownUntilMs = null;
   let lastStandardWindowEndMs = null;
+  let lastInitialSoc_percent = null;
 
   const viewToggles = mountViewToggles(els.optimizerViewToggles);
   initEvPanelToggles(els);
   subscribeViewToggles(() => { renderVisuals(); });
+
+  // The "Now" block follows the wall clock, not the plan's first row, so it
+  // keeps pointing at the right slot without a page reload.
+  startNowPanelTicker(() => renderNowPanel(els, {
+    rows: lastTableRows,
+    stepSize_m: getVizConfig().stepSize_m,
+    initialSoc_percent: lastInitialSoc_percent,
+  }));
 
   const debounceRun = deps.debounce(onRun, 250);
   const persistConfigDebounced = deps.debounce((cfg) => {
@@ -90,7 +100,8 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
       const solverStatus =
         typeof result?.solverStatus === "string" ? result.solverStatus : "OK";
 
-      deps.updatePlanMeta(els, result.initialSoc_percent, result.tsStart);
+      // Plan end is the last planned slot's start, not the boundary after it.
+      deps.updatePlanMeta(els, result.tsStart, rows[rows.length - 1]?.timestampMs ?? null);
       deps.updateSummaryUI(els, result.summary);
       deps.updateRebalanceNudgeUI(els, result.rebalanceNudge);
       updateRunStatus(solverStatus, writeToVictron);
@@ -99,6 +110,7 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
       const evSettings = getEvSettings();
 
       lastTableRows = rows;
+      lastInitialSoc_percent = result.initialSoc_percent ?? null;
       lastTableRebalanceWindow = result.rebalanceWindow ?? null;
       lastPricesKnownUntilMs = result.pricesKnownUntilMs ?? null;
       lastStandardWindowEndMs = result.standardWindowEndMs ?? null;
@@ -106,6 +118,11 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
       setStandardWindowEndMs(lastStandardWindowEndMs);
 
       renderVisuals();
+      renderNowPanel(els, {
+        rows,
+        stepSize_m: cfgForViz.stepSize_m,
+        initialSoc_percent: lastInitialSoc_percent,
+      });
       deps.updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m, evSettings);
       onPlanRows(rows);
     } catch (err) {

@@ -684,15 +684,29 @@
               <span class="stat-label">Rebalancing</span>
               <span id="rebalance-status" class="text-sm font-medium"></span>
             </div>
+            <div class="summary-block border-t border-slate-100 dark:border-white/5">
+              <div class="flex items-baseline justify-between mb-2">
+                <span class="stat-label">Now</span>
+                <span id="now-slot-window" class="text-[11px] text-slate-400 dark:text-slate-600">—</span>
+              </div>
+              <div class="flex items-baseline justify-between gap-2">
+                <span id="now-action" class="text-sm font-medium text-ink dark:text-slate-100">—</span>
+                <span id="now-power" class="stat-value">—</span>
+              </div>
+              <div
+                class="mt-1 flex items-baseline justify-between font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                <span class="color-flow-battery">SoC <span id="plan-soc-now">—</span>%</span>
+                <span id="now-soc-target"></span>
+              </div>
+            </div>
             <div class="grid grid-cols-2 border-t border-slate-100 dark:border-white/5">
               <div class="px-3 py-2.5 border-b border-r border-slate-100 dark:border-white/5">
-                <div class="stat-label mb-0.5">Current SoC</div>
-                <div class="stat-value color-flow-battery"><span id="plan-soc-now">—</span><span
-                    class="text-[10px] opacity-50 ml-0.5">%</span></div>
-              </div>
-              <div class="px-3 py-2.5 border-b border-slate-100 dark:border-white/5">
                 <div class="stat-label mb-0.5">Plan start</div>
                 <div id="plan-ts-start" class="stat-value">—</div>
+              </div>
+              <div class="px-3 py-2.5 border-b border-slate-100 dark:border-white/5">
+                <div class="stat-label mb-0.5">Plan end</div>
+                <div id="plan-ts-end" class="stat-value">—</div>
               </div>
               <div class="px-3 py-2.5 border-b border-r border-slate-100 dark:border-white/5">
                 <div class="stat-label mb-0.5">Predicted load</div>

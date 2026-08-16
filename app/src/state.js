@@ -136,33 +136,25 @@ export function hydrateUI(els, obj = {}) {
 }
 
 // Plan metadata helper
-export function updatePlanMeta(els, initialSoc_percent, tsStart) {
-  if (els.planSocNow) {
-    if (initialSoc_percent == null || !Number.isFinite(Number(initialSoc_percent))) {
-      els.planSocNow.textContent = "—";
-    } else {
-      const n = Number(initialSoc_percent);
-      els.planSocNow.textContent = String(Math.round(n));
-    }
-  }
+function fmtPlanStamp(ts) {
+  if (!ts) return "—";
+  const date = new Date(ts);
+  if (isNaN(date.getTime())) return String(ts);
+  const d = String(date.getDate()).padStart(2, "0");
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const H = String(date.getHours()).padStart(2, "0");
+  const M = String(date.getMinutes()).padStart(2, "0");
+  return `${d}/${m} ${H}:${M}`;
+}
 
-  if (els.planTsStart) {
-    if (!tsStart) {
-      els.planTsStart.textContent = "—";
-    } else {
-      const raw = String(tsStart);
-      let display = raw;
-      const date = new Date(tsStart);
-      if (!isNaN(date.getTime())) {
-        const d = String(date.getDate()).padStart(2, "0");
-        const m = String(date.getMonth() + 1).padStart(2, "0");
-        const H = String(date.getHours()).padStart(2, "0");
-        const M = String(date.getMinutes()).padStart(2, "0");
-        display = `${d}/${m} ${H}:${M}`;
-      }
-      els.planTsStart.textContent = display;
-    }
-  }
+/**
+ * Plan start and end. The end is the *last planned slot's* start (e.g. 23:45),
+ * not the exclusive boundary after it (00:00), which reads ambiguously — it is
+ * not obvious whether the following day is included.
+ */
+export function updatePlanMeta(els, tsStart, tsEnd) {
+  if (els.planTsStart) els.planTsStart.textContent = fmtPlanStamp(tsStart);
+  if (els.planTsEnd) els.planTsEnd.textContent = fmtPlanStamp(tsEnd);
 }
 
 // Summary helper

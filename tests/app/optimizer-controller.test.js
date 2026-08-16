@@ -95,10 +95,11 @@ describe('optimizer controller', () => {
       updateData: true,
       writeToVictron: false,
     });
+    // Plan end is the last planned slot's start, not the boundary after it.
     expect(services.updatePlanMeta).toHaveBeenCalledWith(
       els,
-      42,
       '2026-05-01T12:00:00.000Z',
+      1714586400000,
     );
     expect(services.updateSummaryUI).toHaveBeenCalledWith(els, summary);
     expect(services.updateRebalanceNudgeUI).toHaveBeenCalledWith(els, undefined);
