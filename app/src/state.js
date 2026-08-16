@@ -136,7 +136,9 @@ export function hydrateUI(els, obj = {}) {
 }
 
 // Plan metadata helper
-function fmtPlanStamp(ts) {
+const WEEKDAY_FMT = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
+
+export function fmtPlanStamp(ts, { withWeekday = false } = {}) {
   if (!ts) return "—";
   const date = new Date(ts);
   if (isNaN(date.getTime())) return String(ts);
@@ -144,17 +146,21 @@ function fmtPlanStamp(ts) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const H = String(date.getHours()).padStart(2, "0");
   const M = String(date.getMinutes()).padStart(2, "0");
-  return `${d}/${m} ${H}:${M}`;
+  const stamp = `${d}/${m} ${H}:${M}`;
+  return withWeekday ? `${WEEKDAY_FMT.format(date)} ${stamp}` : stamp;
 }
 
 /**
  * Plan start and end. The end is the *last planned slot's* start (e.g. 23:45),
  * not the exclusive boundary after it (00:00), which reads ambiguously — it is
  * not obvious whether the following day is included.
+ *
+ * Only the end carries a weekday: it can be days out, where "20/08" alone says
+ * little, while the start is always the current slot.
  */
 export function updatePlanMeta(els, tsStart, tsEnd) {
   if (els.planTsStart) els.planTsStart.textContent = fmtPlanStamp(tsStart);
-  if (els.planTsEnd) els.planTsEnd.textContent = fmtPlanStamp(tsEnd);
+  if (els.planTsEnd) els.planTsEnd.textContent = fmtPlanStamp(tsEnd, { withWeekday: true });
 }
 
 // Summary helper
