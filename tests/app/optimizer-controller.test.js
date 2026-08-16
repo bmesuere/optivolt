@@ -148,4 +148,40 @@ describe('optimizer controller', () => {
     expect(services.renderTable.mock.calls[0][0].showKwh).toBe(false);
     expect(services.saveConfig).toHaveBeenCalledWith({ tableShowKwh: false });
   });
+
+  it('marks the chart placeholders as calculating while a solve is in flight', async () => {
+    document.body.innerHTML = `
+      <div id="panel-optimizer"><div class="chart-empty"><span>Run the optimizer to see results</span></div></div>
+      <div id="panel-ev"><div class="chart-empty"><span>Run the optimizer to see results</span></div></div>`;
+    const texts = () => [...document.querySelectorAll('.chart-empty span')].map(s => s.textContent);
+
+    const { controller, services } = setupController();
+    let releaseSolve;
+    services.requestRemoteSolve.mockImplementation(
+      () => new Promise(resolve => { releaseSolve = resolve; }),
+    );
+
+    const run = controller.onRun();
+    // Set synchronously, before the awaited config persist.
+    expect(texts()).toEqual(['Calculating…', 'Calculating…']);
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(texts()).toEqual(['Calculating…', 'Calculating…']);
+
+    releaseSolve({ rows: [], solverStatus: 'Optimal', summary: {} });
+    await run;
+  });
+
+  it('restores the actionable placeholder when a solve fails', async () => {
+    document.body.innerHTML =
+      '<div id="panel-optimizer"><div class="chart-empty"><span>x</span></div></div>';
+
+    const { controller, services } = setupController();
+    services.requestRemoteSolve.mockRejectedValue(new Error('boom'));
+
+    await controller.onRun();
+
+    expect(document.querySelector('.chart-empty span').textContent)
+      .toBe('Run the optimizer to see results');
+  });
 });

@@ -32,6 +32,16 @@ import {
 } from "./view-toggles.js";
 import { renderNowPanel, startNowPanelTicker } from "./now-panel.js";
 
+const CHART_PLACEHOLDER_IDLE = "Run the optimizer to see results";
+const PLACEHOLDER_SELECTOR = "#panel-optimizer .chart-empty span, #panel-ev .chart-empty span";
+
+/** Text of the not-yet-drawn chart overlays on the plan-driven tabs. */
+function setChartPlaceholders(text) {
+  for (const span of document.querySelectorAll(PLACEHOLDER_SELECTOR)) {
+    span.textContent = text;
+  }
+}
+
 export function createOptimizerController({ els, services = {}, getEvEntries = () => [], onPlanRows = () => {} }) {
   const deps = {
     debounce,
@@ -82,6 +92,10 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
       els.status.textContent = "Calculating…";
       els.status.className = "text-sm font-medium text-ink dark:text-slate-100";
     }
+    // Until the first plan lands the charts are bare placeholders reading
+    // "Run the optimizer…", which contradicts the status line while a solve is
+    // actually in flight. renderChart hides them for good once it draws.
+    setChartPlaceholders("Calculating…");
 
     const runBtn = els.run;
     if (runBtn) {
@@ -131,6 +145,7 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
         els.status.textContent = `Error: ${err.message}`;
         els.status.className = "text-sm font-medium text-red-600 dark:text-red-400";
       }
+      setChartPlaceholders(CHART_PLACEHOLDER_IDLE);
       deps.updateSummaryUI(els, null);
     } finally {
       if (runBtn) {
