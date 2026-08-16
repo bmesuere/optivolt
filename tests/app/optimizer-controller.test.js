@@ -21,7 +21,7 @@ function immediateDebounce(fn) {
   return debounced;
 }
 
-function setupController() {
+function setupController(overrides = {}) {
   const rows = [{ tIdx: 0, timestampMs: 1714586400000, soc_percent: 55 }];
   const rebalanceWindow = { startIdx: 0, endIdx: 0 };
   const summary = { netGridCost_cents: 12.5 };
@@ -70,7 +70,7 @@ function setupController() {
 
   const evEntries = [{ type: 'departure', time: '2026-05-01T18:30', soc_percent: 80 }];
   return {
-    controller: createOptimizerController({ els, services, getEvEntries: () => evEntries }),
+    controller: createOptimizerController({ els, services, getEvEntries: () => evEntries, ...overrides }),
     els,
     rebalanceWindow,
     rows,
@@ -183,5 +183,25 @@ describe('optimizer controller', () => {
 
     expect(document.querySelector('.chart-empty span').textContent)
       .toBe('Run the optimizer to see results');
+  });
+
+  it('re-reads the cached forecasts when the server regenerated them', async () => {
+    const onForecastsRefreshed = vi.fn();
+    const { controller, services } = setupController({ onForecastsRefreshed });
+    services.saveConfig.mockResolvedValue({ forecastsRefreshed: true });
+
+    await controller.persistConfig();
+
+    expect(onForecastsRefreshed).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the cached forecasts alone when the server did not regenerate', async () => {
+    const onForecastsRefreshed = vi.fn();
+    const { controller, services } = setupController({ onForecastsRefreshed });
+    services.saveConfig.mockResolvedValue({ forecastsRefreshed: false });
+
+    await controller.persistConfig();
+
+    expect(onForecastsRefreshed).not.toHaveBeenCalled();
   });
 });

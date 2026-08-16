@@ -1,6 +1,6 @@
 import { refreshVrmSettings } from "./src/api/api.js";
 import { loadInitialConfig } from "./src/config-store.js";
-import { initPredictionsTab } from "./src/predictions.js";
+import { initPredictionsTab, reloadStoredForecasts } from "./src/predictions.js";
 import {
   refreshEvSensorStates,
   wireEvSensorInputs,
@@ -34,6 +34,9 @@ const optimizer = createOptimizerController({
   els,
   getEvEntries: () => evSchedule?.getEntries() ?? [],
   onPlanRows: (rows) => evSchedule?.refreshHorizonQuickSet(rows),
+  // The server regenerates the stored load/PV series when the horizon changes;
+  // the Predictions tab caches them, so it has to re-read.
+  onForecastsRefreshed: () => reloadStoredForecasts(),
 });
 evSchedule = createEvScheduleController({
   els,

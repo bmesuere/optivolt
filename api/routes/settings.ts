@@ -35,11 +35,15 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     // Re-read so the comparison uses the normalized value (clamping and
     // rounding happen on load, not on save).
     const savedSettings = await loadSettings();
+    let forecastsRefreshed = false;
     if (savedSettings.extendedHorizonDays !== prevSettings.extendedHorizonDays) {
-      await refreshForecastsForNewHorizon(savedSettings);
+      forecastsRefreshed = await refreshForecastsForNewHorizon(savedSettings);
     }
 
-    res.json({ message: 'Settings saved successfully.', settings: mergedSettings });
+    // Reported so the client can re-read the stored series: the Predictions tab
+    // caches them, and would otherwise show the old window until a manual
+    // forecast run or a page reload.
+    res.json({ message: 'Settings saved successfully.', settings: mergedSettings, forecastsRefreshed });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to save settings'));
   }
@@ -56,18 +60,20 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
  * Failures are logged, not surfaced: the settings are already saved, and the
  * next scheduled run recovers.
  */
-async function refreshForecastsForNewHorizon(settings: Settings): Promise<void> {
+async function refreshForecastsForNewHorizon(settings: Settings): Promise<boolean> {
   // Only these sources are written by the forecast runner; skip the external
   // calls entirely when neither applies.
-  if (settings.dataSources.load !== 'api' && settings.dataSources.pv !== 'api') return;
+  if (settings.dataSources.load !== 'api' && settings.dataSources.pv !== 'api') return false;
   try {
     const config = await buildPredictionRunConfig();
     await runCombinedPredictionForecast(config, 'horizon-change');
+    return true;
   } catch (error) {
     console.warn(
       '[settings] forecast refresh after horizon change failed:',
       error instanceof Error ? error.message : String(error),
     );
+    return false;
   }
 }
 

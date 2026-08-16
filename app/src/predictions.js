@@ -46,7 +46,7 @@ const forecastChart = createForecastChartController({
 export async function initPredictionsTab() {
   await hydratePredictionForm();
   await forecastChart.loadAdjustments();
-  await hydrateForecastsFromStoredData();
+  await reloadStoredForecasts();
   wirePredictionForm({
     onForecastAll,
     onPvForecast,
@@ -65,7 +65,11 @@ function refreshAdjustedForecastsFromRaw() {
     : null;
 }
 
-async function hydrateForecastsFromStoredData() {
+/**
+ * Re-read the persisted load/PV series into the tab's cache and redraw.
+ * Also called after the server regenerates them on a horizon change.
+ */
+export async function reloadStoredForecasts() {
   try {
     const data = await fetchStoredData();
     const load = futureForecastSeries(data?.load);

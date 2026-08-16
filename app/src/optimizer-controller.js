@@ -42,7 +42,13 @@ function setChartPlaceholders(text) {
   }
 }
 
-export function createOptimizerController({ els, services = {}, getEvEntries = () => [], onPlanRows = () => {} }) {
+export function createOptimizerController({
+  els,
+  services = {},
+  getEvEntries = () => [],
+  onPlanRows = () => {},
+  onForecastsRefreshed = () => {},
+}) {
   const deps = {
     debounce,
     drawFlowsBarStackSigned,
@@ -225,7 +231,11 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
 
   async function persistConfig(cfg = deps.snapshotUI(els)) {
     try {
-      await deps.saveConfig(cfg);
+      const result = await deps.saveConfig(cfg);
+      // Changing the horizon makes the server regenerate the load/PV forecasts.
+      // The Predictions tab caches those series, so it has to re-read them or
+      // it keeps charting the old window until a manual run or a reload.
+      if (result?.forecastsRefreshed) await onForecastsRefreshed();
     } catch (error) {
       console.error("Failed to persist settings", error);
       if (els.status) els.status.textContent = `Settings error: ${error.message}`;

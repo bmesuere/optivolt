@@ -37,6 +37,8 @@ describe('POST /settings — forecast refresh on horizon change', () => {
 
     expect(res.status).toBe(200);
     expect(runCombinedPredictionForecast).toHaveBeenCalledTimes(1);
+    // Reported so the client can re-read the series its Predictions tab caches.
+    expect(res.body.forecastsRefreshed).toBe(true);
   });
 
   it('does not regenerate when the horizon is unchanged', async () => {
@@ -46,6 +48,7 @@ describe('POST /settings — forecast refresh on horizon change', () => {
 
     expect(res.status).toBe(200);
     expect(runCombinedPredictionForecast).not.toHaveBeenCalled();
+    expect(res.body.forecastsRefreshed).toBe(false);
   });
 
   it('does not regenerate when neither load nor PV is api-sourced', async () => {
@@ -67,6 +70,8 @@ describe('POST /settings — forecast refresh on horizon change', () => {
 
     expect(res.status).toBe(200);
     expect(saveSettings).toHaveBeenCalled();
+    // Nothing was regenerated, so the client must not drop its cache.
+    expect(res.body.forecastsRefreshed).toBe(false);
     warn.mockRestore();
   });
 });
