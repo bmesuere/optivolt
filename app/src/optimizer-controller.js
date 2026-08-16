@@ -120,15 +120,6 @@ export function createOptimizerController({
       const solverStatus =
         typeof result?.solverStatus === "string" ? result.solverStatus : "OK";
 
-      // Plan end is the last planned slot's start, not the boundary after it.
-      deps.updatePlanMeta(els, result.tsStart, rows[rows.length - 1]?.timestampMs ?? null);
-      deps.updateSummaryUI(els, result.summary);
-      deps.updateRebalanceNudgeUI(els, result.rebalanceNudge);
-      updateRunStatus(solverStatus, writeToVictron);
-
-      const cfgForViz = getVizConfig();
-      const evSettings = getEvSettings();
-
       lastTableRows = rows;
       lastInitialSoc_percent = result.initialSoc_percent ?? null;
       lastTableRebalanceWindow = result.rebalanceWindow ?? null;
@@ -137,14 +128,33 @@ export function createOptimizerController({
       // Share the server boundary so the EV and forecast tabs slice alike.
       setStandardWindowEndMs(lastStandardWindowEndMs);
 
-      renderVisuals();
-      renderNowPanel(els, {
-        rows,
-        stepSize_m: cfgForViz.stepSize_m,
-        initialSoc_percent: lastInitialSoc_percent,
-      });
-      deps.updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m, evSettings);
-      onPlanRows(rows);
+      // The plan is solved by now — and, when writeToVictron is set, already written over MQTT.
+      // A throw while drawing it is a display failure, not a planning failure, so it must not
+      // fall through to the outer catch and wipe a summary that computed fine.
+      try {
+        // Plan end is the last planned slot's start, not the boundary after it.
+        deps.updatePlanMeta(els, result.tsStart, rows[rows.length - 1]?.timestampMs ?? null);
+        deps.updateSummaryUI(els, result.summary);
+        deps.updateRebalanceNudgeUI(els, result.rebalanceNudge);
+        updateRunStatus(solverStatus, writeToVictron);
+
+        const cfgForViz = getVizConfig();
+
+        renderVisuals();
+        renderNowPanel(els, {
+          rows,
+          stepSize_m: cfgForViz.stepSize_m,
+          initialSoc_percent: lastInitialSoc_percent,
+        });
+        deps.updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m, getEvSettings());
+        onPlanRows(rows);
+      } catch (renderError) {
+        console.error("Failed to render plan", renderError);
+        if (els.status) {
+          els.status.textContent = `Plan calculated, but display failed: ${renderError.message}`;
+          els.status.className = "text-sm font-medium text-amber-600 dark:text-amber-400";
+        }
+      }
     } catch (err) {
       console.error(err);
       if (els.status) {
