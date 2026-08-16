@@ -3,7 +3,7 @@ import { loadSettings } from './settings-store.ts';
 import { loadData, saveData } from './data-store.ts';
 import { applyPredictionAdjustmentsToData, pruneExpiredPredictionAdjustments } from './prediction-adjustments.ts';
 import { recordFullSocObservation } from './rebalance-nudge.ts';
-import { extractWindow, extendSeriesWithForecast, getQuarterStart } from '../../lib/time-series-utils.ts';
+import { extractWindow, extendSeriesWithForecast, getForecastTimeRange, getQuarterStart } from '../../lib/time-series-utils.ts';
 import { fetchHaEntityState } from './ha-client.ts';
 import { buildEvConfig } from './ev-config-builder.ts';
 import { normalizeEvScheduleEntries, recordEvLastState } from './ev-schedule-entries.ts';
@@ -49,7 +49,12 @@ export function buildSolverConfigFromSettings(
   const pvEndMs     = getSeriesEndMs(data.pv);
   const importEndMs = getSeriesEndMs(importPrice);
   const exportEndMs = getSeriesEndMs(exportPrice);
-  const endMs = Math.min(loadEndMs, pvEndMs, importEndMs, exportEndMs);
+  // Clamp to the configured horizon. Series already in data.json are not
+  // truncated when extendedHorizonDays is lowered (and the price forecast is
+  // stored in full regardless), so without this the plan would keep running to
+  // the end of whatever stale data happens to be persisted.
+  const configuredEndMs = new Date(getForecastTimeRange(nowMs, settings.extendedHorizonDays).endIso).getTime();
+  const endMs = Math.min(loadEndMs, pvEndMs, importEndMs, exportEndMs, configuredEndMs);
 
   // A series that starts after the plan window begins would be silently
   // zero-padded by extractWindow for the leading slots. Zero PV just means
