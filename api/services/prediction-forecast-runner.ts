@@ -12,7 +12,7 @@ import { loadActiveAdjustmentsAndPrune } from './prediction-adjustment-store.ts'
 
 export async function buildPredictionRunConfig(): Promise<PredictionRunConfig> {
   const [config, settings] = await Promise.all([loadPredictionConfig(), loadSettings()]);
-  return { ...config, haUrl: settings.haUrl, haToken: settings.haToken };
+  return { ...config, haUrl: settings.haUrl, haToken: settings.haToken, extendedHorizonDays: settings.extendedHorizonDays };
 }
 
 export async function executePredictionValidation(config: PredictionRunConfig) {

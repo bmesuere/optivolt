@@ -52,6 +52,10 @@ export interface Settings {
   evChargeEfficiency_percent: number;
   evSocValue_cents_per_kWh: number;
   evTripSocBuffer_percent: number;
+  /** Extra planning days beyond the standard day-ahead window. 0 = off (default behaviour). */
+  extendedHorizonDays: number;
+  /** URL of a price-forecast JSON feed (energieprijs forecast.json format). Empty = disabled. */
+  priceForecastUrl: string;
 }
 
 // ----------------------------- Persisted data ---------------------------
@@ -113,6 +117,9 @@ export interface Data {
   pv: TimeSeries;
   importPrice: TimeSeries;
   exportPrice: TimeSeries;
+  /** Forecast prices pulled from priceForecastUrl; only extend the actual series, never override it. */
+  importPriceForecast?: TimeSeries;
+  exportPriceForecast?: TimeSeries;
   soc: SocData;
   lastFullSocAt?: string | null;
   rebalanceState?: RebalanceState;
@@ -164,4 +171,6 @@ export interface PredictionConfig {
 export interface PredictionRunConfig extends PredictionConfig {
   haUrl: string;
   haToken: string;
+  /** Extra forecast days beyond the standard window (from Settings.extendedHorizonDays). */
+  extendedHorizonDays?: number;
 }

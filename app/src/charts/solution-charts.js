@@ -242,16 +242,62 @@ function makePriceZeroLinePlugin() {
   };
 }
 
-export function drawPricesStepLines(canvas, rows, _stepSize_m = 15) {
+/**
+ * Shade the part of the chart where prices are forecast (beyond the last
+ * published actual) and label it, so predicted prices are never mistaken for
+ * real ones.
+ */
+function makeForecastZonePlugin(boundaryIdx) {
+  return {
+    id: 'priceForecastZone',
+    beforeDatasetsDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+      const xFrom = Math.max(chartArea.left, scales.x.getPixelForValue(boundaryIdx));
+      if (xFrom >= chartArea.right) return;
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.08)';
+      ctx.fillRect(xFrom, chartArea.top, chartArea.right - xFrom, chartArea.bottom - chartArea.top);
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(xFrom, chartArea.top);
+      ctx.lineTo(xFrom, chartArea.bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = getChartTheme().axisTickColor;
+      ctx.font = '600 10px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText('forecast', xFrom + 6, chartArea.top + 4);
+      ctx.restore();
+    }
+  };
+}
+
+export function drawPricesStepLines(canvas, rows, _stepSize_m = 15, pricesKnownUntilMs = null) {
   const timestampsMs = rows.map(r => r.timestampMs);
   const axis = buildTimeAxisFromTimestamps(timestampsMs);
   const strokeW = (axis.labels.length > 48) ? 1 : 2;
+
+  // First slot whose prices come from the forecast feed rather than
+  // published actuals (-1 when the whole window is actual).
+  const boundaryIdx = pricesKnownUntilMs != null
+    ? timestampsMs.findIndex(ms => ms >= pricesKnownUntilMs)
+    : -1;
 
   const commonLine = {
     stepped: true,
     borderWidth: strokeW,
     pointRadius: 0,
-    pointHitRadius: 8
+    pointHitRadius: 8,
+    ...(boundaryIdx >= 0 ? {
+      segment: {
+        borderDash: (ctx) => (ctx.p0DataIndex >= boundaryIdx ? [4, 3] : undefined),
+      },
+    } : {}),
   };
 
   renderChart(canvas, {
@@ -283,9 +329,10 @@ export function drawPricesStepLines(canvas, rows, _stepSize_m = 15) {
           intersect: false,
           enabled: false,
           external: createTooltipHandler({
-            renderContent: (_idx, tooltip) => {
+            renderContent: (idx, tooltip) => {
               const time = tooltip.title?.[0] ?? "";
-              let html = ttHeader(time);
+              const isForecast = boundaryIdx >= 0 && idx >= boundaryIdx;
+              let html = ttHeader(time, isForecast ? 'forecast' : '');
               for (const pt of (tooltip.dataPoints ?? [])) {
                 html += ttRow(pt.dataset.borderColor, pt.dataset.label, `${pt.raw.toFixed(1)} c€/kWh`);
               }
@@ -296,7 +343,10 @@ export function drawPricesStepLines(canvas, rows, _stepSize_m = 15) {
         },
       },
     }),
-    plugins: [makePriceZeroLinePlugin()]
+    plugins: [
+      makePriceZeroLinePlugin(),
+      ...(boundaryIdx >= 0 ? [makeForecastZonePlugin(boundaryIdx)] : []),
+    ]
   });
 }
 
@@ -307,13 +357,13 @@ export function aggregateLoadPvBuckets(rows, stepSize_m = 15) {
   const hourMap = new Map();
 
   for (const row of rows) {
-    const dt = new Date(row.timestampMs);
-    dt.setMinutes(0, 0, 0);
-    const hourMs = dt.getTime();
+    // Absolute-hour bucketing (epoch floor): local wall-clock would collapse
+    // the repeated hour at the autumn DST transition into one bucket.
+    const hourMs = Math.floor(row.timestampMs / 3_600_000) * 3_600_000;
 
     if (!hourMap.has(hourMs)) {
       hourMap.set(hourMs, {
-        dtHour: dt,
+        dtHour: new Date(hourMs),
         loadKWh: 0,
         pvKWh: 0,
         originalLoadKWh: 0,

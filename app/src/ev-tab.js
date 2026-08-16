@@ -1,5 +1,33 @@
 import { SOLUTION_COLORS, toRGBA, drawEvPowerChart, drawEvSocChartTab } from "./charts.js";
 import { formatKWh, updateStackedBarContainer } from "./state.js";
+import {
+  aggregateRowsHourly,
+  getStoredViewRange,
+  planExceedsStandardView,
+  rowsSpanHours,
+  sliceRowsToStandardView,
+} from "./plan-view.js";
+import {
+  getStandardWindowEndMs,
+  mountViewToggles,
+  resolveFlowsResolution,
+  subscribeViewToggles,
+} from "./view-toggles.js";
+
+// Last plan rendered into the tab, replayed when a view toggle changes.
+let lastPanelArgs = null;
+let viewToggles = null;
+
+/**
+ * Mount the EV tab's view toggles. Kept separate from updateEvPanel so the
+ * controls exist (and re-render on change) before the first plan arrives.
+ */
+export function initEvPanelToggles(els) {
+  viewToggles = mountViewToggles(els.evViewToggles);
+  subscribeViewToggles(() => {
+    if (lastPanelArgs) updateEvPanel(...lastPanelArgs);
+  });
+}
 
 /**
  * Derive the chart/table annotation inputs from the EV schedule entries: arrival and departure
@@ -36,6 +64,7 @@ export function collectEvSettings(entries = [], tripBuffer_percent = 20) {
 }
 
 export function updateEvPanel(els, rows, summary, stepSize_m = 15, evSettings = { arrivals: [], departures: [], targets: [] }) {
+  lastPanelArgs = [els, rows, summary, stepSize_m, evSettings];
   const evTotal = summary?.evChargeTotal_kWh ?? 0;
   const hasEv = evTotal > 0;
 
@@ -85,9 +114,21 @@ export function updateEvPanel(els, rows, summary, stepSize_m = 15, evSettings = 
     renderModeRows(els.evTabModeRows, evRows);
   }
 
-  if (els.evPowerChart) drawEvPowerChart(els.evPowerChart, rows, stepSize_m, evSettings);
-  if (els.evSocChartTab) drawEvSocChartTab(els.evSocChartTab, rows, evSettings);
-  renderEvTable(evRows, els.evScheduleTable, stepSize_m, evSettings);
+  // The stat panel stays whole-plan (it summarises the plan, not the view);
+  // only the charts and the table follow the view toggles, as on the optimizer.
+  const standardEndMs = getStandardWindowEndMs();
+  const hasExtended = planExceedsStandardView(rows, standardEndMs);
+  const view = hasExtended ? getStoredViewRange() : "standard";
+  const viewRows = view === "full" ? rows : sliceRowsToStandardView(rows, standardEndMs);
+  const resolution = resolveFlowsResolution(rowsSpanHours(viewRows));
+  viewToggles?.update({ hasExtended, view, resolution });
+
+  if (els.evPowerChart) {
+    const powerRows = resolution === "60" ? aggregateRowsHourly(viewRows, stepSize_m) : viewRows;
+    drawEvPowerChart(els.evPowerChart, powerRows, resolution === "60" ? 60 : stepSize_m, evSettings);
+  }
+  if (els.evSocChartTab) drawEvSocChartTab(els.evSocChartTab, viewRows, evSettings);
+  renderEvTable(viewRows.filter(r => (r.ev_soc_percent ?? 0) > 0), els.evScheduleTable, stepSize_m, evSettings);
 }
 
 const MODE_CONFIG = [

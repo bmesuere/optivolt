@@ -1,6 +1,6 @@
 import { refreshVrmSettings } from "./src/api/api.js";
 import { loadInitialConfig } from "./src/config-store.js";
-import { initPredictionsTab } from "./src/predictions.js";
+import { initPredictionsTab, reloadStoredForecasts } from "./src/predictions.js";
 import {
   refreshEvSensorStates,
   wireEvSensorInputs,
@@ -34,6 +34,9 @@ const optimizer = createOptimizerController({
   els,
   getEvEntries: () => evSchedule?.getEntries() ?? [],
   onPlanRows: (rows) => evSchedule?.refreshHorizonQuickSet(rows),
+  // The server regenerates the stored load/PV series when the horizon changes;
+  // the Predictions tab caches them, so it has to re-read.
+  onForecastsRefreshed: () => reloadStoredForecasts(),
 });
 evSchedule = createEvScheduleController({
   els,
@@ -158,12 +161,16 @@ async function boot() {
   // Not awaited — HA may be slow or unconfigured; the initial solve should not wait for it.
   void refreshEvSensorStates(els);
 
-  // Initial compute
-  await optimizer.onRun();
-
-  // Reveal cards on the initial (optimizer) panel after first compute
+  // Reveal the cards *before* the first solve. Cards are opacity:0 until
+  // revealed, so revealing afterwards left the whole panel blank for the
+  // duration of the solve — including the status line and the Recompute
+  // spinner, the very things meant to signal that work is in progress. On a
+  // multi-day horizon that blank period is long enough to look broken.
   const optimizerPanel = document.getElementById('panel-optimizer');
   if (optimizerPanel) revealCards(optimizerPanel);
+
+  // Initial compute
+  await optimizer.onRun();
 }
 
 // ---------- Actions ----------

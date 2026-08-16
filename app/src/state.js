@@ -32,6 +32,9 @@ export function snapshotUI(els) {
       soc: els.sourceSoc?.value || "mqtt",
     },
 
+    extendedHorizonDays: num(els.extendedHorizonDays?.value),
+    priceForecastUrl: els.priceForecastUrl?.value ?? '',
+
     // ALGORITHM
     rebalanceEnabled: !!els.rebalanceEnabled?.checked,
     rebalanceHoldHours: num(els.rebalanceHoldHours?.value),
@@ -99,6 +102,10 @@ export function hydrateUI(els, obj = {}) {
   }
   setIfDef(els.rebalanceHoldHours, obj.rebalanceHoldHours);
 
+  // Data / extended horizon
+  setIfDef(els.extendedHorizonDays, obj.extendedHorizonDays);
+  setIfDef(els.priceForecastUrl, obj.priceForecastUrl);
+
   // HOME ASSISTANT
   setIfDef(els.haUrl, obj.haUrl);
   setIfDef(els.haToken, obj.haToken);
@@ -129,33 +136,31 @@ export function hydrateUI(els, obj = {}) {
 }
 
 // Plan metadata helper
-export function updatePlanMeta(els, initialSoc_percent, tsStart) {
-  if (els.planSocNow) {
-    if (initialSoc_percent == null || !Number.isFinite(Number(initialSoc_percent))) {
-      els.planSocNow.textContent = "—";
-    } else {
-      const n = Number(initialSoc_percent);
-      els.planSocNow.textContent = String(Math.round(n));
-    }
-  }
+const WEEKDAY_FMT = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
 
-  if (els.planTsStart) {
-    if (!tsStart) {
-      els.planTsStart.textContent = "—";
-    } else {
-      const raw = String(tsStart);
-      let display = raw;
-      const date = new Date(tsStart);
-      if (!isNaN(date.getTime())) {
-        const d = String(date.getDate()).padStart(2, "0");
-        const m = String(date.getMonth() + 1).padStart(2, "0");
-        const H = String(date.getHours()).padStart(2, "0");
-        const M = String(date.getMinutes()).padStart(2, "0");
-        display = `${d}/${m} ${H}:${M}`;
-      }
-      els.planTsStart.textContent = display;
-    }
-  }
+export function fmtPlanStamp(ts, { withWeekday = false } = {}) {
+  if (!ts) return "—";
+  const date = new Date(ts);
+  if (isNaN(date.getTime())) return String(ts);
+  const d = String(date.getDate()).padStart(2, "0");
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const H = String(date.getHours()).padStart(2, "0");
+  const M = String(date.getMinutes()).padStart(2, "0");
+  const stamp = `${d}/${m} ${H}:${M}`;
+  return withWeekday ? `${WEEKDAY_FMT.format(date)} ${stamp}` : stamp;
+}
+
+/**
+ * Plan start and end. The end is the *last planned slot's* start (e.g. 23:45),
+ * not the exclusive boundary after it (00:00), which reads ambiguously — it is
+ * not obvious whether the following day is included.
+ *
+ * Only the end carries a weekday: it can be days out, where "20/08" alone says
+ * little, while the start is always the current slot.
+ */
+export function updatePlanMeta(els, tsStart, tsEnd) {
+  if (els.planTsStart) els.planTsStart.textContent = fmtPlanStamp(tsStart);
+  if (els.planTsEnd) els.planTsEnd.textContent = fmtPlanStamp(tsEnd, { withWeekday: true });
 }
 
 // Summary helper

@@ -15,6 +15,7 @@ const NUMERIC_FIELDS: (keyof Settings)[] = [
   'terminalSocCustomPrice_cents_per_kWh', 'rebalanceHoldHours',
   'evMinChargeCurrent_A', 'evMaxChargeCurrent_A', 'evBatteryCapacity_kWh',
   'evChargeEfficiency_percent', 'evSocValue_cents_per_kWh', 'evTripSocBuffer_percent',
+  'extendedHorizonDays',
 ];
 
 function validateSettings(s: Settings): Settings {
@@ -36,6 +37,13 @@ function validateSettings(s: Settings): Settings {
 
   // Trip buffer is a SoC share on top of the trip usage; clamp to a sane [0, 100].
   s.evTripSocBuffer_percent = Math.max(0, Math.min(100, s.evTripSocBuffer_percent));
+
+  // Whole days only; 6 extra days is the practical limit of the price forecast feed.
+  s.extendedHorizonDays = Math.max(0, Math.min(6, Math.round(s.extendedHorizonDays)));
+
+  if (typeof s.priceForecastUrl !== 'string') {
+    s.priceForecastUrl = '';
+  }
 
   if (!Array.isArray(s.optimizerQuickSettings)) {
     s.optimizerQuickSettings = [];

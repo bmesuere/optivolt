@@ -21,7 +21,7 @@ function immediateDebounce(fn) {
   return debounced;
 }
 
-function setupController() {
+function setupController(overrides = {}) {
   const rows = [{ tIdx: 0, timestampMs: 1714586400000, soc_percent: 55 }];
   const rebalanceWindow = { startIdx: 0, endIdx: 0 };
   const summary = { netGridCost_cents: 12.5 };
@@ -70,7 +70,7 @@ function setupController() {
 
   const evEntries = [{ type: 'departure', time: '2026-05-01T18:30', soc_percent: 80 }];
   return {
-    controller: createOptimizerController({ els, services, getEvEntries: () => evEntries }),
+    controller: createOptimizerController({ els, services, getEvEntries: () => evEntries, ...overrides }),
     els,
     rebalanceWindow,
     rows,
@@ -95,10 +95,11 @@ describe('optimizer controller', () => {
       updateData: true,
       writeToVictron: false,
     });
+    // Plan end is the last planned slot's start, not the boundary after it.
     expect(services.updatePlanMeta).toHaveBeenCalledWith(
       els,
-      42,
       '2026-05-01T12:00:00.000Z',
+      1714586400000,
     );
     expect(services.updateSummaryUI).toHaveBeenCalledWith(els, summary);
     expect(services.updateRebalanceNudgeUI).toHaveBeenCalledWith(els, undefined);
@@ -109,7 +110,7 @@ describe('optimizer controller', () => {
     expect(tableArgs.targets).toEqual({ table: els.table, tableUnit: els.tableUnit });
     expect(tableArgs.showKwh).toBe(true);
     expect(tableArgs.showDess).toBe(false);
-    expect(tableArgs.rebalanceWindow).toBe(rebalanceWindow);
+    expect(tableArgs.rebalanceWindow).toEqual(rebalanceWindow);
     expect(tableArgs.evSettings).toEqual({
       arrivals: [],
       departures: ['2026-05-01T18:30'],
@@ -125,7 +126,7 @@ describe('optimizer controller', () => {
       tableArgs.evSettings,
     );
     expect(services.drawSocChart).toHaveBeenCalledWith(els.soc, rows, 30, tableArgs.evSettings);
-    expect(services.drawPricesStepLines).toHaveBeenCalledWith(els.prices, rows, 30);
+    expect(services.drawPricesStepLines).toHaveBeenCalledWith(els.prices, rows, 30, null);
     expect(services.drawLoadPvGrouped).toHaveBeenCalledWith(els.loadpv, rows, 30);
     expect(services.updateEvPanel).toHaveBeenCalledWith(els, rows, summary, 30, tableArgs.evSettings);
     expect(els.status.textContent).toBe('Plan updated');
@@ -146,5 +147,61 @@ describe('optimizer controller', () => {
     expect(services.renderTable).toHaveBeenCalledTimes(1);
     expect(services.renderTable.mock.calls[0][0].showKwh).toBe(false);
     expect(services.saveConfig).toHaveBeenCalledWith({ tableShowKwh: false });
+  });
+
+  it('marks the chart placeholders as calculating while a solve is in flight', async () => {
+    document.body.innerHTML = `
+      <div id="panel-optimizer"><div class="chart-empty"><span>Run the optimizer to see results</span></div></div>
+      <div id="panel-ev"><div class="chart-empty"><span>Run the optimizer to see results</span></div></div>`;
+    const texts = () => [...document.querySelectorAll('.chart-empty span')].map(s => s.textContent);
+
+    const { controller, services } = setupController();
+    let releaseSolve;
+    services.requestRemoteSolve.mockImplementation(
+      () => new Promise(resolve => { releaseSolve = resolve; }),
+    );
+
+    const run = controller.onRun();
+    // Set synchronously, before the awaited config persist.
+    expect(texts()).toEqual(['Calculating…', 'Calculating…']);
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(texts()).toEqual(['Calculating…', 'Calculating…']);
+
+    releaseSolve({ rows: [], solverStatus: 'Optimal', summary: {} });
+    await run;
+  });
+
+  it('restores the actionable placeholder when a solve fails', async () => {
+    document.body.innerHTML =
+      '<div id="panel-optimizer"><div class="chart-empty"><span>x</span></div></div>';
+
+    const { controller, services } = setupController();
+    services.requestRemoteSolve.mockRejectedValue(new Error('boom'));
+
+    await controller.onRun();
+
+    expect(document.querySelector('.chart-empty span').textContent)
+      .toBe('Run the optimizer to see results');
+  });
+
+  it('re-reads the cached forecasts when the server regenerated them', async () => {
+    const onForecastsRefreshed = vi.fn();
+    const { controller, services } = setupController({ onForecastsRefreshed });
+    services.saveConfig.mockResolvedValue({ forecastsRefreshed: true });
+
+    await controller.persistConfig();
+
+    expect(onForecastsRefreshed).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the cached forecasts alone when the server did not regenerate', async () => {
+    const onForecastsRefreshed = vi.fn();
+    const { controller, services } = setupController({ onForecastsRefreshed });
+    services.saveConfig.mockResolvedValue({ forecastsRefreshed: false });
+
+    await controller.persistConfig();
+
+    expect(onForecastsRefreshed).not.toHaveBeenCalled();
   });
 });

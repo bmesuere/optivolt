@@ -95,10 +95,20 @@ export interface SolverConfig {
   // Initial state
   initialSoc_percent: number;
 
+  // Extended horizon: instant after which price slots come from a forecast
+  // feed instead of published actuals (absent when all prices are actual).
+  pricesKnownUntilMs?: number;
+
   // Rebalancing (optional — only present when rebalanceEnabled is true)
   rebalanceHoldSlots?: number;
   rebalanceRemainingSlots?: number;
   rebalanceTargetSoc_percent?: number;
+  /**
+   * Latest slot index (inclusive) at which the rebalance window may start.
+   * Set on extended horizons to keep "hold once" a day-1 decision instead of
+   * letting the solver defer it days out (also caps the binary count).
+   */
+  rebalanceMaxStartSlot?: number;
 
   // EV charging (optional — only present when evEnabled is true and EV is plugged in)
   ev?: EvConfig;

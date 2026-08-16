@@ -13,6 +13,8 @@ export function getElements() {
     sourceLoad: $("#source-load"),
     sourcePv: $("#source-pv"),
     sourceSoc: $("#source-soc"),
+    extendedHorizonDays: $("#extended-horizon-days"),
+    priceForecastUrl: $("#price-forecast-url"),
     rebalanceToggleLabel: $("#rebalance-toggle-label"),
     rebalanceEnabled: $("#rebalance-enabled"),
     rebalanceNudge: $("#rebalance-nudge"),
@@ -36,10 +38,17 @@ export function getElements() {
     terminalCustom: $("#terminal-custom"),
 
     // plan metadata
-    planSocNow: $("#plan-soc-now"),
     planTsStart: $("#plan-ts-start"),
 
     // charts + status
+    optimizerViewToggles: $("#optimizer-view-toggles"),
+    evViewToggles: $("#ev-view-toggles"),
+    planTsEnd: $("#plan-ts-end"),
+    nowSlotWindow: $("#now-slot-window"),
+    nowAction: $("#now-action"),
+    nowPower: $("#now-power"),
+    nowSoc: $("#plan-soc-now"),
+    nowSocTarget: $("#now-soc-target"),
     flows: $("#flows"),
     soc: $("#soc"),
     prices: $("#prices"),
@@ -137,7 +146,9 @@ export function getElements() {
 
 export function wireGlobalInputs(
   els,
-  { onInput, onSave = onInput, onRun, onTableDisplayChange = onRun, updateTerminalCustomUI }
+  {
+    onInput, onSave = onInput, onRun, onTableDisplayChange = onRun, updateTerminalCustomUI,
+  }
 ) {
   // Auto-save only settings-owned controls.
   for (const el of document.querySelectorAll("[data-settings-input]")) {

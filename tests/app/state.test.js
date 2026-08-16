@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { hydrateUI, snapshotUI, updateRebalanceNudgeUI, updateSummaryUI } from '../../app/src/state.js';
+import { hydrateUI, snapshotUI, updatePlanMeta, updateRebalanceNudgeUI, updateSummaryUI } from '../../app/src/state.js';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -146,5 +146,32 @@ describe('settings state', () => {
     });
 
     expect(els.rebalanceNudge.classList.contains('hidden')).toBe(true);
+  });
+});
+
+describe('plan meta', () => {
+  it('formats the plan window, with a weekday only on the end', () => {
+    const planTsStart = document.createElement('div');
+    const planTsEnd = document.createElement('div');
+
+    // 2026-08-16 is a Sunday; the plan runs to Thursday 2026-08-20.
+    updatePlanMeta(
+      { planTsStart, planTsEnd },
+      new Date('2026-08-16T18:45:00').toISOString(),
+      new Date('2026-08-20T23:45:00').getTime(),
+    );
+
+    expect(planTsStart.textContent).toBe('16/08 18:45');
+    expect(planTsEnd.textContent).toBe('Thu 20/08 23:45');
+  });
+
+  it('renders a dash when either end is missing', () => {
+    const planTsStart = document.createElement('div');
+    const planTsEnd = document.createElement('div');
+
+    updatePlanMeta({ planTsStart, planTsEnd }, null, null);
+
+    expect(planTsStart.textContent).toBe('—');
+    expect(planTsEnd.textContent).toBe('—');
   });
 });

@@ -95,3 +95,49 @@ describe('renderTable', () => {
     expect(table.innerHTML).toContain('Feed-in');
   });
 });
+
+describe('renderTable — multi-day day sections', () => {
+  const cfg = { stepSize_m: 15, batteryCapacity_Wh: 10000 };
+
+  function makeRows(startLocal, count) {
+    return Array.from({ length: count }, (_, i) =>
+      makeRow({ tIdx: i, timestampMs: startLocal.getTime() + i * 15 * 60_000 }));
+  }
+
+  it('adds collapsible day headers when the view spans more than 48 hours', () => {
+    const table = document.createElement('table');
+    document.body.appendChild(table);
+    const rows = makeRows(new Date(2026, 4, 1, 0, 0), 3 * 96); // 3 full days
+
+    renderTable({ rows, cfg, targets: { table }, showKwh: false });
+
+    // A real, focusable button per day after the first, wired to its section.
+    const buttons = table.querySelectorAll('button[data-day-toggle]');
+    expect(buttons).toHaveLength(2);
+    const button = buttons[0];
+    expect(button.getAttribute('type')).toBe('button');
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    const sectionId = button.getAttribute('aria-controls');
+    expect(table.querySelector(`tbody[id="${sectionId}"]`)?.contains(button)).toBe(true);
+
+    // Activating the button collapses that day's rows and updates the state.
+    const key = button.getAttribute('data-day-toggle');
+    const dayRows = table.querySelectorAll(`tr[data-day="${key}"]`);
+    expect(dayRows).toHaveLength(96);
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect([...dayRows].every(tr => tr.classList.contains('hidden'))).toBe(true);
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect([...dayRows].some(tr => tr.classList.contains('hidden'))).toBe(false);
+  });
+
+  it('keeps the classic layout (no day headers) within the standard window', () => {
+    const table = document.createElement('table');
+    const rows = makeRows(new Date(2026, 4, 1, 14, 0), 96); // 24 h crossing midnight once
+
+    renderTable({ rows, cfg, targets: { table }, showKwh: false });
+
+    expect(table.querySelectorAll('[data-day-toggle]')).toHaveLength(0);
+  });
+});

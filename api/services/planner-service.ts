@@ -10,12 +10,25 @@ import { saveSettings } from './settings-store.ts';
 import { saveData } from './data-store.ts';
 import { applyPredictionAdjustmentsToData } from './prediction-adjustments.ts';
 import { refreshSeriesFromVrmAndPersist } from './vrm-refresh.ts';
+import { refreshPriceForecastAndPersist } from './price-forecast-service.ts';
 import { setDynamicEssSchedule } from './mqtt-service.ts';
 import { getRebalanceNudge, type RebalanceNudge } from './rebalance-nudge.ts';
 import type { PlanRowWithDess, Data } from '../types.ts';
 
 // How many slots we push into Dynamic ESS
 const DESS_SLOTS = 4;
+// Upper bound on a single HiGHS solve, in seconds. Current ~100-slot MILPs
+// solve well under a second; this only kicks in when something degenerates
+// (or once longer horizons multiply the binary count).
+const SOLVE_TIME_LIMIT_S = 30;
+// MIP gap tuning. The EV × rebalance combination on a multi-day horizon is
+// the one slow case (4-day benchmark: 18.5 s at 0.5% gap vs 7.5 s at 2% on an
+// M-series Mac — slower add-on hardware could hit the time limit, and a
+// timed-out solve blocks hardware writes entirely). Loosen the gap for that
+// combination only; everything else keeps the tight default.
+const MIP_REL_GAP = 0.005;
+const MIP_REL_GAP_LARGE = 0.02;
+const LARGE_MILP_SLOTS = 200;
 
 // Lazy, shared HiGHS instance
 type HighsInstance = Awaited<ReturnType<typeof highsFactory>>;
@@ -99,6 +112,25 @@ function attachOriginalPredictionValues(rows: PlanRow[], data: Data): PlanRow[] 
   });
 }
 
+/**
+ * Solver options for a config. The solve runs synchronously on the event
+ * loop, so a runaway MIP would block every HTTP request; the time limit
+ * bounds that (a limited solve comes back non-Optimal and is refused for
+ * hardware writes). The EV × rebalance combination on a multi-day horizon
+ * gets the loosened MIP gap; everything else keeps the tight default.
+ */
+export function selectSolveOptions(cfg: SolverConfig): { mip_rel_gap?: number; mip_abs_gap?: number; time_limit: number } {
+  const hasEv = cfg.ev != null;
+  const hasRebalance = (cfg.rebalanceRemainingSlots ?? 0) > 0;
+  if (!hasEv && !hasRebalance) return { time_limit: SOLVE_TIME_LIMIT_S };
+  const largeMilpCombo = hasEv && hasRebalance && cfg.load_W.length > LARGE_MILP_SLOTS;
+  return {
+    mip_rel_gap: largeMilpCombo ? MIP_REL_GAP_LARGE : MIP_REL_GAP,
+    mip_abs_gap: 0.01,
+    time_limit: SOLVE_TIME_LIMIT_S,
+  };
+}
+
 // Cache of the last computed plan, used by /ev/* endpoints
 let lastPlan: ComputePlanResult | undefined;
 
@@ -116,6 +148,16 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
         vrmError instanceof Error ? vrmError.message : String(vrmError),
       );
     }
+    try {
+      // No-op unless extendedHorizonDays > 0 and a priceForecastUrl is set.
+      // On failure the previously stored forecast is kept and simply ages out.
+      await refreshPriceForecastAndPersist();
+    } catch (forecastError) {
+      console.error(
+        'Failed to refresh price forecast before calculation:',
+        forecastError instanceof Error ? forecastError.message : String(forecastError),
+      );
+    }
   }
 
   let { cfg, timing, data, settings } = await getSolverInputs();
@@ -131,8 +173,8 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const lpText = buildLP(cfg);
   const highs = await getHighsInstance();
-  const hasBinaries = cfg.ev != null || (cfg.rebalanceRemainingSlots ?? 0) > 0;
-  const solveOptions = hasBinaries ? { mip_rel_gap: 0.005, mip_abs_gap: 0.01 } : {};
+  const hasRebalance = (cfg.rebalanceRemainingSlots ?? 0) > 0;
+  const solveOptions = selectSolveOptions(cfg);
   let result: ReturnType<typeof highs.solve>;
   const t0 = performance.now();
   try {
@@ -152,8 +194,10 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   console.log('[calculate] solve', {
     slots: cfg.load_W.length,
     ev: evInfo,
-    rebalance: (cfg.rebalanceRemainingSlots ?? 0) > 0,
+    rebalance: hasRebalance,
+    ...('mip_rel_gap' in solveOptions ? { mipRelGap: solveOptions.mip_rel_gap } : {}),
     solveMs: Math.round(solveMs),
+    status: result.Status,
   });
 
   const rows = attachOriginalPredictionValues(parseSolution(result, cfg, timing), data);

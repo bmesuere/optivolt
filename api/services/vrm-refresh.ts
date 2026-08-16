@@ -70,9 +70,15 @@ export async function refreshSeriesFromVrmAndPersist(): Promise<void> {
   const shouldFetchPrices = sources.prices === 'vrm';
   const shouldFetchSoc = sources.soc === 'mqtt';
 
+  // Extended horizon: ask VRM for extra forecast days and clamp to whatever it
+  // actually returns. The prices window stays standard — VRM prices are
+  // day-ahead actuals; further days come from the price forecast feed.
+  const extraDays = settings.extendedHorizonDays > 0 ? settings.extendedHorizonDays : 0;
+  const forecastWindow = extraDays > 0 ? VRMClient.windowOptimizationHorizon(extraDays) : {};
+
   // Concurrent IO
   const [forecastsResult, pricesResult, socResult] = await Promise.allSettled([
-    shouldFetchForecasts ? client.fetchForecasts() : Promise.resolve(null),
+    shouldFetchForecasts ? client.fetchForecasts(forecastWindow, { clampEndToData: extraDays > 0 }) : Promise.resolve(null),
     shouldFetchPrices ? client.fetchPrices() : Promise.resolve(null),
     shouldFetchSoc ? readVictronSocPercent({ timeoutMs: 5000 }) : Promise.resolve(null),
   ]);
@@ -142,6 +148,8 @@ export async function refreshSeriesFromVrmAndPersist(): Promise<void> {
     pv,
     importPrice,
     exportPrice,
+    importPriceForecast: baseData.importPriceForecast,
+    exportPriceForecast: baseData.exportPriceForecast,
     soc,
     lastFullSocAt: baseData.lastFullSocAt,
     rebalanceState: baseData.rebalanceState,

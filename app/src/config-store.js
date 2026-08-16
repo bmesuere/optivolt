@@ -14,6 +14,7 @@ export async function loadInitialConfig() {
   }
 }
 
+/** Returns the server's response, which reports whether it regenerated the stored forecasts. */
 export async function saveConfig(config) {
-  await saveStoredSettings(config);
+  return saveStoredSettings(config);
 }

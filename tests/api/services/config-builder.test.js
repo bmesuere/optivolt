@@ -167,3 +167,41 @@ describe('buildSolverConfigFromSettings — EV config (wiring)', () => {
     expect(cfg.evSocValue_cents_per_kWh).toBe(15);
   });
 });
+
+describe('buildSolverConfigFromSettings — extended horizon clamping', () => {
+  // Series stored while extendedHorizonDays was high are not truncated when the
+  // setting is lowered, so the configured window has to bound the plan.
+  const longData = () => ({
+    load: { start: NOW_STRING, step: 15, values: Array(400).fill(100) },
+    pv: { start: NOW_STRING, step: 15, values: Array(400).fill(0) },
+    importPrice: { start: NOW_STRING, step: 15, values: Array(400).fill(10) },
+    exportPrice: { start: NOW_STRING, step: 15, values: Array(400).fill(5) },
+    soc: { timestamp: NOW_STRING, value: 50 },
+  });
+
+  // NOW is 13:00 in Europe/Amsterdam (pinned in vitest.config.js), so the
+  // standard window runs to midnight the day after tomorrow: 35 h = 140 slots.
+  // Each extra day adds 24 h = 96 slots.
+  it.each([
+    [0, 140],
+    [1, 236],
+    [2, 332],
+  ])('plans %i extra day(s) as %i slots regardless of stored data length', (extendedHorizonDays, expected) => {
+    const cfg = buildSolverConfigFromSettings(
+      { ...mockSettings, extendedHorizonDays }, longData(), NOW_MS,
+    );
+    expect(cfg.load_W).toHaveLength(expected);
+    expect(cfg.importPrice).toHaveLength(expected);
+  });
+
+  it('still stops at the end of the data when that is shorter than the window', () => {
+    const short = longData();
+    for (const key of ['load', 'pv', 'importPrice', 'exportPrice']) {
+      short[key].values = short[key].values.slice(0, 96);
+    }
+    const cfg = buildSolverConfigFromSettings(
+      { ...mockSettings, extendedHorizonDays: 2 }, short, NOW_MS,
+    );
+    expect(cfg.load_W).toHaveLength(96);
+  });
+});

@@ -98,6 +98,9 @@ describe('Integration: API', () => {
     expect(res.status).toBe(200);
     expect(res.body.solverStatus).toBe('Optimal');
     expect(res.body.rows).toHaveLength(5);
+    // Canonical day-ahead boundary for the client's "Standard" view slicing.
+    expect(res.body.standardWindowEndMs).toBeTypeOf('number');
+    expect(res.body.standardWindowEndMs).toBeGreaterThan(Date.now() - 24 * 3_600_000);
     expect(res.body.rebalanceNudge).toEqual({
       lastFullSocAt: null,
       daysSinceLastFullSoc: null,

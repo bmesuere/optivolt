@@ -7,15 +7,16 @@ export function fmtHHMM(dt) {
   return `${HH}:${MM}`;
 }
 
+// Midnight ticks name the day that is starting. On a multi-day axis a weekday
+// reads far faster than a numeric date, and the horizon is short enough that
+// the abbreviation is effectively unambiguous.
+const WEEKDAY_FMT = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
+
 function fmtTickHourOrDate(dt) {
   const mins = dt.getMinutes();
   if (mins !== 0) return "";
   const hrs = dt.getHours();
-  if (hrs === 0) {
-    const dd = String(dt.getDate()).padStart(2, "0");
-    const mm = String(dt.getMonth() + 1).padStart(2, "0");
-    return `${dd}/${mm}`;
-  }
+  if (hrs === 0) return WEEKDAY_FMT.format(dt);
   return `${String(hrs).padStart(2, "0")}:00`;
 }
 

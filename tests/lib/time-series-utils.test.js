@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractWindow, getQuarterStart, buildForecastSeries } from '../../lib/time-series-utils.ts';
+import { extractWindow, getQuarterStart, buildForecastSeries, getForecastTimeRange, extendSeriesWithForecast } from '../../lib/time-series-utils.ts';
 
 describe('Time Series Utils', () => {
   describe('getQuarterStart', () => {
@@ -141,5 +141,83 @@ describe('buildForecastSeries', () => {
     const series = buildForecastSeries([], start, end, 15);
     expect(series.values).toHaveLength(4);
     expect(series.values.every(v => v === 0)).toBe(true);
+  });
+});
+
+describe('getForecastTimeRange', () => {
+  // Times are interpreted in local time; use explicit local Date values.
+  it('extends the end by extraDays', () => {
+    const now = new Date(2024, 0, 1, 10, 0, 0); // 10:00 local, before 13:00
+    const base = getForecastTimeRange(now.getTime());
+    const extended = getForecastTimeRange(now.getTime(), 3);
+    const dayMs = 24 * 60 * 60 * 1000;
+    expect(new Date(extended.endIso).getTime() - new Date(base.endIso).getTime()).toBe(3 * dayMs);
+    expect(extended.startIso).toBe(base.startIso);
+  });
+
+  it('defaults to the standard window when extraDays is omitted', () => {
+    const now = new Date(2024, 0, 1, 14, 0, 0); // after 13:00 → midnight tomorrow
+    const { endIso } = getForecastTimeRange(now.getTime());
+    expect(new Date(endIso).getTime()).toBe(new Date(2024, 0, 3, 0, 0, 0).getTime());
+  });
+});
+
+describe('extendSeriesWithForecast', () => {
+  const startMs = new Date('2024-01-01T10:00:00Z').getTime();
+  const stepMs = 15 * 60 * 1000;
+  const actual = {
+    start: new Date(startMs).toISOString(),
+    step: 15,
+    values: [10, 11, 12, 13], // ends 11:00
+  };
+
+  it('appends only the forecast tail past the end of the actual series', () => {
+    const forecast = {
+      start: new Date(startMs + 2 * stepMs).toISOString(), // 10:30, overlaps actual
+      step: 15,
+      values: [99, 99, 20, 21, 22], // 10:30..11:45; tail past 11:00 = [20, 21, 22]
+    };
+    const merged = extendSeriesWithForecast(actual, forecast);
+    expect(merged.start).toBe(actual.start);
+    expect(merged.values).toEqual([10, 11, 12, 13, 20, 21, 22]);
+  });
+
+  it('returns the actual series unchanged when there is no forecast', () => {
+    expect(extendSeriesWithForecast(actual, undefined)).toBe(actual);
+    expect(extendSeriesWithForecast(actual, { start: actual.start, step: 15, values: [] })).toBe(actual);
+  });
+
+  it('returns the actual series unchanged when the forecast ends before the actual data', () => {
+    const forecast = { start: actual.start, step: 15, values: [1, 2] };
+    expect(extendSeriesWithForecast(actual, forecast)).toBe(actual);
+  });
+
+  it('returns the actual series unchanged when the forecast starts after the actual data ends (gap)', () => {
+    const forecast = {
+      start: new Date(startMs + 5 * stepMs).toISOString(), // 11:15, actual ends 11:00
+      step: 15,
+      values: [20, 21],
+    };
+    expect(extendSeriesWithForecast(actual, forecast)).toBe(actual);
+  });
+
+  it('accepts a forecast starting exactly where the actual series ends', () => {
+    const forecast = {
+      start: new Date(startMs + 4 * stepMs).toISOString(), // 11:00
+      step: 15,
+      values: [20, 21],
+    };
+    const merged = extendSeriesWithForecast(actual, forecast);
+    expect(merged.values).toEqual([10, 11, 12, 13, 20, 21]);
+  });
+
+  it('resamples a coarser forecast to the actual step', () => {
+    const forecast = {
+      start: new Date(startMs + 4 * stepMs).toISOString(), // 11:00
+      step: 60,
+      values: [40], // one hour → four 15-min slots
+    };
+    const merged = extendSeriesWithForecast(actual, forecast);
+    expect(merged.values).toEqual([10, 11, 12, 13, 40, 40, 40, 40]);
   });
 });
