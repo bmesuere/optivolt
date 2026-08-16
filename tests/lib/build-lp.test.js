@@ -423,3 +423,94 @@ describe('buildLP — EV charging (MILP)', () => {
     expect(secondLine).toMatch(/ev_on_3 \+ ev_on_4 >= 2\b/);
   });
 });
+
+describe('buildLP — EV trips (drop windows)', () => {
+  const T = 5;
+  const base = {
+    load_W: Array(T).fill(500),
+    pv_W: Array(T).fill(1000),
+    importPrice: Array(T).fill(10),
+    exportPrice: Array(T).fill(5),
+    batteryCapacity_Wh: 10000,
+    maxDischargePower_W: 4000,
+    maxGridImport_W: 2500,
+  };
+  const evCfg = {
+    evMinChargePower_W: 1380,
+    evMaxChargePower_W: 3680,
+    evBatteryCapacity_Wh: 60000,
+    evInitialSoc_percent: 50, // → 30 000 Wh
+    availabilityWindows: [{ startSlot: 0, endSlot: T, resetSoc_Wh: 30000 }],
+    targets: [],
+  };
+  const tripWindows = [
+    { startSlot: 0, endSlot: 2, resetSoc_Wh: 30000 },
+    { startSlot: 3, endSlot: T, drop_Wh: 5000 },
+  ];
+
+  it('continues the SoC chain minus the drop at a trip-return window start', () => {
+    const lp = buildLP({ ...base, ev: { ...evCfg, availabilityWindows: tripWindows } });
+    // Chained form (references ev_soc_2 = the pre-departure SoC) with the drop as RHS —
+    // NOT an absolute reset: the arrival SoC must track whatever was charged before departure.
+    const socLine = lp.split('\n').find((l) => l.trim().startsWith('c_ev_soc_3:'));
+    expect(socLine).toMatch(/ev_soc_3 - ev_soc_2\b/);
+    expect(socLine).toMatch(/= -5000\b/);
+  });
+
+  it('continues the SoC chain unchanged for a zero-usage trip (neither reset nor drop)', () => {
+    const lp = buildLP({
+      ...base,
+      ev: {
+        ...evCfg,
+        availabilityWindows: [
+          { startSlot: 0, endSlot: 2, resetSoc_Wh: 30000 },
+          { startSlot: 3, endSlot: T },
+        ],
+      },
+    });
+    const socLine = lp.split('\n').find((l) => l.trim().startsWith('c_ev_soc_3:'));
+    expect(socLine).toMatch(/ev_soc_3 - ev_soc_2\b/);
+    expect(socLine).toMatch(/= 0\b/);
+  });
+
+  it('values only the chain end when a drop window continues the chain', () => {
+    // Energy charged before the trip persists (minus the constant drop) into the second
+    // window's SoC; valuing both window ends would double-count it.
+    const lp = buildLP({
+      ...base,
+      ev: { ...evCfg, availabilityWindows: tripWindows },
+      evSocValue_cents_per_kWh: 20,
+    });
+    const objLine = lp.split('\n').find((l) => l.trim().startsWith('obj:'));
+    expect(objLine).not.toMatch(/- 0\.02 ev_soc_1\b/);
+    expect(objLine).toMatch(/- 0\.02 ev_soc_4\b/);
+  });
+
+  it('adds in-segment drops to the cardinality-bound deficit', () => {
+    // Anchor = initial 30 000 at slot 0; target 30 920 at slot 4 with a 1 840 Wh drop at
+    // slot 3 → deficit 30920 - 30000 + 1840 = 2760 → kMin = ceil(2760/920) = 3, counted over
+    // the available slots of both windows (charging before the trip still helps the target).
+    const lp = buildLP({
+      ...base,
+      ev: {
+        ...evCfg,
+        availabilityWindows: [
+          { startSlot: 0, endSlot: 2, resetSoc_Wh: 30000 },
+          { startSlot: 3, endSlot: T, drop_Wh: 1840 },
+        ],
+        targets: [{ slot: 4, soc_Wh: 30920 }],
+      },
+    });
+    const onLine = lp.split('\n').find((l) => l.trim().startsWith('c_ev_min_on_4:'));
+    expect(onLine).toBeDefined();
+    expect(onLine).toMatch(/ev_on_0 \+ ev_on_1 \+ ev_on_3 \+ ev_on_4 >= 3\b/);
+  });
+
+  it('ignores a drop on a slot-0 window (slot 0 always anchors to the initial SoC)', () => {
+    const lp = buildLP({
+      ...base,
+      ev: { ...evCfg, availabilityWindows: [{ startSlot: 0, endSlot: T, drop_Wh: 5000 }] },
+    });
+    expect(lp).toMatch(/c_ev_soc_0:.*= 30000\b/);
+  });
+});

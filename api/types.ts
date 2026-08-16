@@ -51,6 +51,7 @@ export interface Settings {
   evPlugSensor: string;
   evChargeEfficiency_percent: number;
   evSocValue_cents_per_kWh: number;
+  evTripSocBuffer_percent: number;
 }
 
 // ----------------------------- Persisted data ---------------------------
@@ -79,16 +80,32 @@ export interface PredictionAdjustment {
   updatedAt: string;
 }
 
-export type EvScheduleEntryType = 'arrival' | 'departure' | 'target';
+export type EvScheduleEntryType = 'arrival' | 'departure' | 'target' | 'trip';
 
 export interface EvScheduleEntry {
   id: string;
   type: EvScheduleEntryType;
+  /** Arrival/departure/target: the event time. Trip: the departure time. */
   time: string;
   /** Arrival: assumed SoC on arrival. Departure: optional target SoC at departure. Target: required SoC. */
   soc_percent?: number;
+  /** Trip only: the arrival (return) time; required, strictly after `time`. */
+  endTime?: string;
+  /** Trip only: estimated share of the EV battery consumed by the trip, in [0, 100]. */
+  usage_percent?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Last observed EV state, persisted so entry pruning / trip conversion can reason about the car
+ * without a live Home Assistant round-trip. `soc_percent` is the last SoC seen while the car was
+ * plugged in (the best "SoC at unplug" estimate once it leaves), not necessarily the current one.
+ */
+export interface EvLastState {
+  pluggedIn: boolean;
+  soc_percent: number | null;
+  observedAt: string;
 }
 
 export interface Data {
@@ -101,6 +118,7 @@ export interface Data {
   rebalanceState?: RebalanceState;
   predictionAdjustments?: PredictionAdjustment[];
   evScheduleEntries?: EvScheduleEntry[];
+  evLastState?: EvLastState;
 }
 
 // ----------------------------- Plan rows with DESS ----------------------

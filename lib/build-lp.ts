@@ -110,12 +110,20 @@ export function buildLP({
       startSlot: Math.min(T, Math.max(0, w.startSlot)),
       endSlot: Math.min(T, Math.max(0, w.endSlot)),
       resetSoc_Wh: w.resetSoc_Wh,
+      drop_Wh: w.drop_Wh,
     }))
-    .filter((w) => w.endSlot > w.startSlot);
+    .filter((w) => w.endSlot > w.startSlot)
+    .sort((a, b) => a.startSlot - b.startSlot);
   const evAvailable: boolean[] = Array(T).fill(false);
   for (const w of evWindows) for (let t = w.startSlot; t < w.endSlot; t++) evAvailable[t] = true;
   const evResetAt = new Map<number, number>();
   for (const w of evWindows) if (w.resetSoc_Wh != null) evResetAt.set(w.startSlot, w.resetSoc_Wh);
+  // Trip drops: window starts that continue the previous SoC chain minus a fixed usage.
+  // Slot 0 always anchors to the initial SoC, so a drop there would be meaningless.
+  const evDropAt = new Map<number, number>();
+  for (const w of evWindows) {
+    if (w.resetSoc_Wh == null && w.drop_Wh != null && w.startSlot > 0) evDropAt.set(w.startSlot, w.drop_Wh);
+  }
   // SoC deadlines, clamped to in-horizon slots and to battery capacity.
   const evTargets = (ev?.targets ?? [])
     .filter((tg) => tg.slot >= 0 && tg.slot < T)
@@ -174,14 +182,19 @@ export function buildLP({
     objTerms.push(` - ${toNum(terminalPrice_cents_per_Wh)} ${soc(T - 1)}`);
   }
   // EV SoC valuation: the car drives away with whatever energy it holds at each departure, so
-  // value the SoC at the last slot of EVERY window (its endSlot - 1), not just the final one.
-  // Valuing only the last window would leave earlier windows' pre-departure charging unrewarded.
-  // This assumes every window carries resetSoc_Wh (ev-config-builder always sets it), making the
-  // windows' energies independent. A reset-less window would continue the previous chain, and
-  // valuing both window ends would then double-count the energy charged before the gap.
+  // value the SoC at the last slot of each CHAIN of windows, not only the final one. A window
+  // with resetSoc_Wh starts a new, independent chain (its energy is unrelated to the previous
+  // windows), so every window whose successor resets — or that has no successor — is a chain
+  // end. A reset-less successor (a trip return) continues the chain: energy charged before the
+  // trip persists (minus the constant drop) into the later window's SoC, so valuing both window
+  // ends would double-count it — only the chain's last window is valued.
   if (evActive && evTerminalPrice_cents_per_Wh > 0) {
-    for (const w of evWindows) {
-      objTerms.push(` - ${toNum(evTerminalPrice_cents_per_Wh)} ${evSocVar(w.endSlot - 1)}`);
+    for (let i = 0; i < evWindows.length; i++) {
+      const next = evWindows[i + 1];
+      const chainContinues = next != null && next.resetSoc_Wh == null;
+      if (!chainContinues) {
+        objTerms.push(` - ${toNum(evTerminalPrice_cents_per_Wh)} ${evSocVar(evWindows[i].endSlot - 1)}`);
+      }
     }
   }
   // Rebalancing symmetry-breaking: escalating penalty prefers earlier windows when cost-equivalent.
@@ -270,15 +283,21 @@ export function buildLP({
       if (!evAvailable[t]) lines.push(` c_ev_off_${t}: ${evOn(t)} = 0`);
     }
 
-    // SoC evolution. Slot 0 anchors to the initial SoC; any other window start with a reset
-    // re-anchors the chain (a future returning trip). All other slots chain from the previous.
+    // SoC evolution. Slot 0 anchors to the initial SoC; a window start with a reset re-anchors
+    // the chain (a known arrival SoC). A window start with a drop continues the chain minus a
+    // fixed trip usage: the pre-departure SoC (a solver variable) carries through the trip, so
+    // charging before departure raises the post-trip SoC one-for-one. Combined with the
+    // ev_soc >= 0 bound this also forces the car to hold at least the trip usage at departure
+    // (the builder clamps the drop to what is reachable, keeping the model feasible). All other
+    // slots chain from the previous one.
     for (let t = 0; t < T; t++) {
       const reset = t === 0 ? evInitialWh : evResetAt.get(t);
       const flows = `- ${toNum(evChargeWhPerW)} ${gridToEv(t)} - ${toNum(evChargeWhPerW)} ${pvToEv(t)} - ${toNum(evChargeWhPerW)} ${batteryToEv(t)}`;
       if (reset != null) {
         lines.push(` c_ev_soc_${t}: ${evSocVar(t)} ${flows} = ${toNum(reset)}`);
       } else {
-        lines.push(` c_ev_soc_${t}: ${evSocVar(t)} - ${evSocVar(t - 1)} ${flows} = 0`);
+        const drop = evDropAt.get(t) ?? 0;
+        lines.push(` c_ev_soc_${t}: ${evSocVar(t)} - ${evSocVar(t - 1)} ${flows} = ${toNum(-drop)}`);
       }
     }
 
@@ -292,7 +311,8 @@ export function buildLP({
     // freely in [0,1] during LP relaxation, giving weak bounds and excessive MIP branching.
     // Each bound lives within the target's SoC chain segment: the deficit is measured against
     // the most recent reset at/before the deadline, and only available slots in that segment
-    // count — charging before a reset is erased by it and cannot help meet the target.
+    // count — charging before a reset is erased by it and cannot help meet the target. Trip
+    // drops inside the segment consume charged energy, so they add to the deficit.
     const evChargeWhPerSlot = evChargeWhPerW * evMaxPow_W;
     if (evChargeWhPerSlot > 0) {
       for (const tg of evTargets) {
@@ -301,7 +321,11 @@ export function buildLP({
         for (const [s, wh] of evResetAt) {
           if (s > anchorSlot && s <= tg.slot) { anchorSlot = s; anchorWh = wh; }
         }
-        const deficitWh = tg.soc_Wh - anchorWh;
+        let dropsWh = 0;
+        for (const [s, wh] of evDropAt) {
+          if (s > anchorSlot && s <= tg.slot) dropsWh += wh;
+        }
+        const deficitWh = tg.soc_Wh - anchorWh + dropsWh;
         if (deficitWh <= 0) continue;
         const kMin = Math.ceil(deficitWh / evChargeWhPerSlot);
         const termParts: string[] = [];

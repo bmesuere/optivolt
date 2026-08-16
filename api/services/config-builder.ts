@@ -6,7 +6,7 @@ import { recordFullSocObservation } from './rebalance-nudge.ts';
 import { extractWindow, getQuarterStart } from '../../lib/time-series-utils.ts';
 import { fetchHaEntityState } from './ha-client.ts';
 import { buildEvConfig } from './ev-config-builder.ts';
-import { pruneExpiredEvScheduleEntries } from './ev-schedule-entries.ts';
+import { normalizeEvScheduleEntries, recordEvLastState } from './ev-schedule-entries.ts';
 import type { SolverConfig, TimeSeries } from '../../lib/types.ts';
 import type { Settings, Data } from '../types.ts';
 
@@ -107,19 +107,9 @@ export function buildSolverConfigFromSettings(
 export async function getSolverInputs(): Promise<{ cfg: SolverConfig; timing: { startMs: number; stepMin: number }; data: Data; settings: Settings }> {
   const [settings, loadedData] = await Promise.all([loadSettings(), loadData()]);
   const startMs = getQuarterStart(new Date(), settings.stepSize_m);
-  const pruned = pruneExpiredPredictionAdjustments(loadedData, startMs);
-  const prunedEv = pruneExpiredEvScheduleEntries(pruned.data, startMs);
-  let data = prunedEv.data;
-  let shouldSaveData = pruned.changed || prunedEv.changed;
 
-  const observedData = recordFullSocObservation(data);
-  if (observedData !== data) {
-    data = observedData;
-    shouldSaveData = true;
-  }
-
-  if (shouldSaveData) await saveData(data);
-
+  // Read the live EV state before normalizing schedule entries: pruning overdue departures and
+  // converting departed trips both depend on an up-to-date plug state (persisted as evLastState).
   let evState: { pluggedIn: boolean; soc_percent: number } | undefined;
   if (settings.evEnabled && settings.evSocSensor && settings.evPlugSensor) {
     try {
@@ -140,6 +130,22 @@ export async function getSolverInputs(): Promise<{ cfg: SolverConfig; timing: { 
       console.warn('Could not read EV state from HA:', err instanceof Error ? err.message : String(err));
     }
   }
+
+  const withEvState = recordEvLastState(loadedData, evState, startMs);
+  const pruned = pruneExpiredPredictionAdjustments(withEvState, startMs);
+  // Pass the just-fetched EV state: the persisted evLastState's observedAt only moves on state
+  // changes, so normalization would otherwise treat a long-unchanged plug state as stale.
+  const prunedEv = normalizeEvScheduleEntries(pruned.data, startMs, evState);
+  let data = prunedEv.data;
+  let shouldSaveData = withEvState !== loadedData || pruned.changed || prunedEv.changed;
+
+  const observedData = recordFullSocObservation(data);
+  if (observedData !== data) {
+    data = observedData;
+    shouldSaveData = true;
+  }
+
+  if (shouldSaveData) await saveData(data);
 
   const adjustedData = applyPredictionAdjustmentsToData(data);
   const cfg = buildSolverConfigFromSettings(settings, adjustedData, startMs, evState);

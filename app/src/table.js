@@ -26,10 +26,14 @@ export function renderTable({ rows, cfg, targets, showKwh, showDess = false, reb
   const fmtTime = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
   const fmtDate = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit" });
 
-  const departureMs = evSettings?.departureTime ? new Date(evSettings.departureTime).getTime() : null;
-  const departureIdx = departureMs != null
-    ? rows.findIndex(r => r.timestampMs >= departureMs)
-    : -1;
+  // First row at/after each departure (plain departures and trip departures alike).
+  const departureIdxs = new Set();
+  for (const time of (evSettings?.departures ?? [])) {
+    const ms = new Date(time).getTime();
+    if (!Number.isFinite(ms)) continue;
+    const idx = rows.findIndex(r => r.timestampMs >= ms);
+    if (idx >= 0) departureIdxs.add(idx);
+  }
 
   const timesDisp = rows.map((row) => {
     const dt = new Date(row.timestampMs);
@@ -86,7 +90,7 @@ export function renderTable({ rows, cfg, targets, showKwh, showDess = false, reb
           const n = Number(x) || 0;
           if (n === 0) return "–";
           const text = `${Math.round(n)}%`;
-          if (ri === departureIdx) {
+          if (departureIdxs.has(ri)) {
             return `<span class="text-emerald-600 dark:text-emerald-400 font-semibold">${text}</span>`;
           }
           return text;
@@ -204,7 +208,7 @@ export function renderTable({ rows, cfg, targets, showKwh, showDess = false, reb
 
     const isRebalancing = rebalanceWindow != null && ri >= rebalanceWindow.startIdx && ri <= rebalanceWindow.endIdx;
     const rowBg = isRebalancing ? "bg-sky-100 dark:bg-sky-900/50" : "";
-    const isDeparture = ri === departureIdx;
+    const isDeparture = departureIdxs.has(ri);
     return `<tr class="border-b border-slate-100/70 dark:border-slate-800/60 hover:bg-slate-50/60 dark:hover:bg-slate-800/60 ${rowBg}${isDeparture ? ' ring-1 ring-inset ring-emerald-200 dark:ring-emerald-800/50' : ''}">${tds}</tr>`;
   }).join("")}
     </tbody>`;

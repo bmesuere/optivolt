@@ -3,13 +3,16 @@ import { formatKWh, updateStackedBarContainer } from "./state.js";
 
 /**
  * Derive the chart/table annotation inputs from the EV schedule entries: arrival and departure
- * times (multiple possible) and the list of SoC deadlines. A departure carrying a SoC also
- * contributes a target at its time.
+ * times (multiple possible), the list of SoC deadlines, and the away spans of trips. A departure
+ * carrying a SoC also contributes a target at its time; a trip contributes a departure, an
+ * arrival, an away span, and — when it has a usage estimate — a derived target at departure of
+ * usage + the global trip buffer.
  */
-export function collectEvSettings(entries = []) {
+export function collectEvSettings(entries = [], tripBuffer_percent = 20) {
   const arrivals = [];
   const departures = [];
   const targets = [];
+  const trips = [];
   for (const e of entries) {
     if (e.type === 'arrival') {
       arrivals.push(e.time);
@@ -18,9 +21,18 @@ export function collectEvSettings(entries = []) {
       if (e.soc_percent > 0) targets.push({ time: e.time, soc_percent: e.soc_percent });
     } else if (e.type === 'target' && e.soc_percent > 0) {
       targets.push({ time: e.time, soc_percent: e.soc_percent });
+    } else if (e.type === 'trip') {
+      departures.push(e.time);
+      if (e.endTime) {
+        arrivals.push(e.endTime);
+        trips.push({ from: e.time, to: e.endTime });
+      }
+      if (Number.isFinite(e.usage_percent)) {
+        targets.push({ time: e.time, soc_percent: Math.min(100, Math.round(e.usage_percent + tripBuffer_percent)) });
+      }
     }
   }
-  return { arrivals, departures, targets };
+  return { arrivals, departures, targets, trips };
 }
 
 export function updateEvPanel(els, rows, summary, stepSize_m = 15, evSettings = { arrivals: [], departures: [], targets: [] }) {

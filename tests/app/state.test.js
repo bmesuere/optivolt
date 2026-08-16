@@ -30,6 +30,15 @@ describe('settings state', () => {
     expect(snapshotUI(els).optimizerQuickSettings).toEqual(['minSoc_percent', 'blockFeedInOnNegativePrices']);
   });
 
+  it('round-trips the EV trip SoC buffer through hydrate and snapshot', () => {
+    const evTripSocBuffer = document.createElement('input');
+    evTripSocBuffer.type = 'number';
+    const els = { evTripSocBuffer };
+
+    hydrateUI(els, { evTripSocBuffer_percent: 25 });
+    expect(snapshotUI(els).evTripSocBuffer_percent).toBe(25);
+  });
+
   it('keeps the DESS table toggle out of persisted settings', () => {
     const tableDess = document.createElement('input');
     tableDess.type = 'checkbox';

@@ -114,6 +114,7 @@ describe('optimizer controller', () => {
       arrivals: [],
       departures: ['2026-05-01T18:30'],
       targets: [{ time: '2026-05-01T18:30', soc_percent: 80 }],
+      trips: [],
     });
 
     expect(services.drawFlowsBarStackSigned).toHaveBeenCalledWith(

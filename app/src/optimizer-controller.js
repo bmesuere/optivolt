@@ -173,7 +173,9 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
   }
 
   function getEvSettings() {
-    return els.evEnabled?.checked ? collectEvSettings(getEvEntries()) : null;
+    if (!els.evEnabled?.checked) return null;
+    const buffer = Number(els.evTripSocBuffer?.value);
+    return collectEvSettings(getEvEntries(), Number.isFinite(buffer) ? buffer : 20);
   }
 
   return {

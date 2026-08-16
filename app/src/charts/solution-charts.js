@@ -4,7 +4,7 @@ import {
 } from '../chart-tooltip.js';
 import { SOLUTION_COLORS, dim, toRGBA } from './colors.js';
 import { buildTimeAxisFromTimestamps, dsBar, getBaseOptions, getChartTheme, renderChart } from './core.js';
-import { makeEvArrivalPlugin, makeEvDeparturePlugin, makeEvTargetPlugin } from './ev-annotations.js';
+import { makeEvArrivalPlugin, makeEvAwayBandPlugin, makeEvDeparturePlugin, makeEvTargetPlugin } from './ev-annotations.js';
 import {
   BUY_PRICE_STRIP_TICK_PADDING,
   makeBuyPriceStripPlugin,
@@ -103,6 +103,8 @@ export function drawFlowsBarStackSigned(canvas, rows, stepSize_m = 15, rebalance
   if (buyPriceStripPlugin) plugins.push(buyPriceStripPlugin);
   const negativeInjectionPlugin = makeNegativePriceInjectionPlugin(rows, h);
   if (negativeInjectionPlugin) plugins.push(negativeInjectionPlugin);
+  const awayBandPlugin = evSettings?.trips?.length ? makeEvAwayBandPlugin(rows, evSettings.trips) : null;
+  if (awayBandPlugin) plugins.push(awayBandPlugin);
   const arrPlugin = evSettings?.arrivals?.length ? makeEvArrivalPlugin(rows, evSettings.arrivals) : null;
   if (arrPlugin) plugins.push(arrPlugin);
   const depPlugin = evSettings?.departures?.length
@@ -180,6 +182,7 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15, evSettings = null) 
   }
 
   const evPlugins = [
+    makeEvAwayBandPlugin(rows, evSettings?.trips),
     makeEvArrivalPlugin(rows, evSettings?.arrivals),
     makeEvDeparturePlugin(rows, evSettings?.departures),
     evSettings ? makeEvTargetPlugin(rows, evSettings.targets) : null,

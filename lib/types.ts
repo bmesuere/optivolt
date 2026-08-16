@@ -17,22 +17,26 @@ export type EvChargeMode = 'off' | 'fixed' | 'solar_only' | 'solar_grid' | 'max'
 /**
  * A window during which the EV is plugged in and available to charge, as the
  * half-open slot range [startSlot, endSlot). Outside every window the EV is
- * forced off (charging held at zero, SoC flat). The builder emits a single
- * window today; the array form is forward-compatible with future multiple
- * arrival/departure windows and recurring schedules.
+ * forced off (charging held at zero, SoC flat).
+ *
+ * A window's SoC is anchored in one of three ways:
+ *  - `resetSoc_Wh`: fixed value at startSlot (a plain arrival), discarding the
+ *    previous chain — this starts a new, independent SoC chain.
+ *  - `drop_Wh`: the SoC chain continues from the previous slot minus a fixed
+ *    drop (a trip return: pre-departure SoC minus the trip usage). The
+ *    pre-departure SoC stays a solver decision, so charging before departure
+ *    carries through the trip.
+ *  - neither: the chain simply continues (a zero-usage trip).
  */
 export interface EvAvailabilityWindow {
   /** Inclusive first available slot, clamped to [0, T]. */
   startSlot: number;
   /** Exclusive last available slot, clamped to [startSlot, T]. */
   endSlot: number;
-  /**
-   * SoC (Wh) assumed at startSlot, anchoring the SoC chain for this window.
-   * Today only the first window sets this (= the arrival SoC). A future window
-   * modelling a return trip would reset it; undefined means SoC carries over
-   * from the previous slot.
-   */
+  /** SoC (Wh) assumed at startSlot; starts a new SoC chain. Takes precedence over drop_Wh. */
   resetSoc_Wh?: number;
+  /** SoC (Wh) subtracted at startSlot relative to the previous slot; continues the chain. */
+  drop_Wh?: number;
 }
 
 /** A SoC deadline: ev_soc must be at least soc_Wh by slot. */

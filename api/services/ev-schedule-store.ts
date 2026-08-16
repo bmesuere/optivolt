@@ -3,20 +3,20 @@ import { loadData, saveData } from './data-store.ts';
 import type { EvScheduleEntryInput } from './ev-schedule-entries.ts';
 import {
   createEvScheduleEntry,
-  pruneExpiredEvScheduleEntries,
+  normalizeEvScheduleEntries,
   updateEvScheduleEntry,
 } from './ev-schedule-entries.ts';
 
 export async function loadActiveEvScheduleEntriesAndPrune() {
   const data = await loadData();
-  const pruned = pruneExpiredEvScheduleEntries(data);
+  const pruned = normalizeEvScheduleEntries(data);
   if (pruned.changed) await saveData(pruned.data);
   return { data: pruned.data, entries: pruned.entries };
 }
 
 export async function createStoredEvScheduleEntry(input: EvScheduleEntryInput) {
   const data = await loadData();
-  const { data: pruned } = pruneExpiredEvScheduleEntries(data);
+  const { data: pruned } = normalizeEvScheduleEntries(data);
   const entry = createEvScheduleEntry(input);
   const entries = [...(pruned.evScheduleEntries ?? []), entry];
   await saveData({ ...pruned, evScheduleEntries: entries });
@@ -25,7 +25,7 @@ export async function createStoredEvScheduleEntry(input: EvScheduleEntryInput) {
 
 export async function updateStoredEvScheduleEntry(id: string, input: EvScheduleEntryInput) {
   const data = await loadData();
-  const { data: pruned } = pruneExpiredEvScheduleEntries(data);
+  const { data: pruned } = normalizeEvScheduleEntries(data);
   const entries = pruned.evScheduleEntries ?? [];
   const index = entries.findIndex(entry => entry.id === id);
   assertCondition(index >= 0, 404, 'EV schedule entry not found');
@@ -38,7 +38,7 @@ export async function updateStoredEvScheduleEntry(id: string, input: EvScheduleE
 
 export async function deleteStoredEvScheduleEntry(id: string) {
   const data = await loadData();
-  const { data: pruned } = pruneExpiredEvScheduleEntries(data);
+  const { data: pruned } = normalizeEvScheduleEntries(data);
   const entries = pruned.evScheduleEntries ?? [];
   const nextEntries = entries.filter(entry => entry.id !== id);
   assertCondition(nextEntries.length !== entries.length, 404, 'EV schedule entry not found');

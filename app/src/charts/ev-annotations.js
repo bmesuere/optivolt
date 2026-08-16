@@ -47,6 +47,40 @@ export function makeEvDeparturePlugin(rows, departureTimes) {
   return makeEvEventPlugin('evDeparture', 'rgba(16, 185, 129, 0.75)', 10, rows, departureTimes);
 }
 
+/**
+ * Subtle shaded band over each trip's away span ({ from, to } departure → arrival). Drawn
+ * behind the datasets. A departure before the horizon start clamps to the left edge; an arrival
+ * beyond the horizon extends to the right edge.
+ */
+export function makeEvAwayBandPlugin(rows, trips) {
+  const spans = (trips ?? [])
+    .map(({ from, to }) => {
+      const fromMs = new Date(from).getTime();
+      const toMs = new Date(to).getTime();
+      if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null;
+      if (rows.length === 0 || fromMs > rows[rows.length - 1].timestampMs) return null;
+      return { fromIdx: Math.max(0, findDepartureSlotIdx(rows, from)), toIdx: findDepartureSlotIdx(rows, to) };
+    })
+    .filter(Boolean);
+  if (spans.length === 0) return null;
+
+  return {
+    id: 'evAwayBand',
+    beforeDatasetsDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+      ctx.save();
+      ctx.fillStyle = 'rgba(100, 116, 139, 0.08)';
+      for (const { fromIdx, toIdx } of spans) {
+        const xFrom = scales.x.getPixelForValue(fromIdx);
+        const xTo = toIdx >= 0 ? scales.x.getPixelForValue(toIdx) : chartArea.right;
+        ctx.fillRect(xFrom, chartArea.top, xTo - xFrom, chartArea.bottom - chartArea.top);
+      }
+      ctx.restore();
+    }
+  };
+}
+
 // Vertical line at each arrival (the car (re)connects) — sky, matching the "arrives" badge.
 export function makeEvArrivalPlugin(rows, arrivalTimes) {
   return makeEvEventPlugin('evArrival', 'rgba(14, 165, 233, 0.75)', 22, rows, arrivalTimes);
