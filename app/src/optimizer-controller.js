@@ -194,10 +194,12 @@ export function createOptimizerController({ els, services = {}, getEvEntries = (
   }
 
   function updateViewToggleUI(hasExtended, view, canAggregate, resolution) {
-    if (els.viewRangeToggle) els.viewRangeToggle.hidden = !hasExtended;
+    // Tailwind's .hidden utility, not the `hidden` attribute: the toggles carry
+    // `inline-flex`, which overrides the attribute's display:none.
+    els.viewRangeToggle?.classList.toggle("hidden", !hasExtended);
     setSegState(els.viewRangeStandard, view === "standard");
     setSegState(els.viewRangeFull, view === "full");
-    if (els.flowsResToggle) els.flowsResToggle.hidden = !canAggregate;
+    els.flowsResToggle?.classList.toggle("hidden", !canAggregate);
     setSegState(els.flowsRes15, resolution === "15");
     setSegState(els.flowsRes60, resolution === "60");
   }
