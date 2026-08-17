@@ -121,9 +121,9 @@ export function createOptimizerController({
   }
 
   // Show the server's cached plan (if it still covers now) instead of solving
-  // on page load. Returns the plan's age in milliseconds so the caller can
-  // decide whether a fresh solve is still warranted, or null — cheaply,
-  // without touching the UI — when there is nothing to show.
+  // on page load. Returns the fetched payload so the caller can judge whether
+  // a fresh solve is still warranted, or null — cheaply, without touching the
+  // UI — when there is nothing usable to show.
   async function loadLastPlan() {
     let result;
     try {
@@ -138,7 +138,7 @@ export function createOptimizerController({
       els.status.textContent = "Loaded existing plan";
       els.status.className = "text-sm font-medium text-ink dark:text-slate-100";
     }
-    return Date.now() - (result.computedAtMs ?? 0);
+    return result;
   }
 
   async function onRun() {

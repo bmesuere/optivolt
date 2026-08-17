@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDataDir, readJson, writeJson } from './json-store.ts';
+import { bumpSolverInputsVersion } from './solver-inputs-version.ts';
 import type { Settings } from '../types.ts';
 
 const DATA_DIR = resolveDataDir();
@@ -70,10 +71,18 @@ export async function loadSettings(): Promise<Settings> {
   }
 }
 
+// Serialized form of the last save; see the matching note in data-store.ts.
+let lastSavedJson: string | undefined;
+
 /**
  * Persist settings to DATA_DIR/settings.json (pretty-printed).
  */
 export async function saveSettings(settings: Settings): Promise<void> {
+  const json = JSON.stringify(settings);
+  if (json !== lastSavedJson) {
+    lastSavedJson = json;
+    bumpSolverInputsVersion();
+  }
   await writeJson(SETTINGS_PATH, settings);
 }
 

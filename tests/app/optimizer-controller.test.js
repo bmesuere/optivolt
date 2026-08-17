@@ -224,20 +224,20 @@ describe('optimizer controller', () => {
       .toBe('Run the optimizer to see results');
   });
 
-  it('renders the server-cached plan without solving and reports its age', async () => {
+  it('renders the server-cached plan without solving and returns the payload', async () => {
     const { controller, els, rows, services, summary } = setupController();
-    services.fetchLastPlan.mockResolvedValue({
+    const payload = {
       computedAtMs: Date.now() - 5 * 60_000,
       initialSoc_percent: 42,
+      inputsCurrent: true,
       rows,
       solverStatus: 'optimal',
       summary,
       tsStart: '2026-05-01T12:00:00.000Z',
-    });
+    };
+    services.fetchLastPlan.mockResolvedValue(payload);
 
-    const ageMs = await controller.loadLastPlan();
-    expect(ageMs).toBeGreaterThanOrEqual(5 * 60_000);
-    expect(ageMs).toBeLessThan(6 * 60_000);
+    await expect(controller.loadLastPlan()).resolves.toBe(payload);
 
     expect(services.requestRemoteSolve).not.toHaveBeenCalled();
     expect(services.updateSummaryUI).toHaveBeenCalledWith(els, summary);

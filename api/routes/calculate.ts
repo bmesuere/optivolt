@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { assertCondition, toHttpError } from '../http-errors.ts';
 import { planAndMaybeWrite, getLastPlan, type ComputePlanResult } from '../services/planner-service.ts';
 import { getForecastTimeRange } from '../../lib/time-series-utils.ts';
+import { getSolverInputsVersion } from '../services/solver-inputs-version.ts';
 
 const router = express.Router();
 
@@ -35,11 +36,18 @@ function planCoversNow(plan: ComputePlanResult): boolean {
 
 router.get('/last', (_req: Request, res: Response) => {
   const plan = getLastPlan();
-  if (!plan || !planCoversNow(plan)) {
+  // Only an optimal plan is worth serving: computePlan caches every solve,
+  // and an infeasible/unbounded one holds all-zero garbage rows.
+  if (!plan || plan.result.Status !== 'Optimal' || !planCoversNow(plan)) {
     res.status(404).json({ error: 'No current plan available' });
     return;
   }
-  res.json(planToResponse(plan));
+  res.json({
+    ...planToResponse(plan),
+    // False when settings/data changed since this plan solved — the client
+    // may still paint it, but must not skip its own recompute.
+    inputsCurrent: plan.inputsVersion === getSolverInputsVersion(),
+  });
 });
 
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {

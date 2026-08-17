@@ -10,6 +10,7 @@ vi.mock('../../api/services/mqtt-service.ts');
 
 import { loadSettings } from '../../api/services/settings-store.ts';
 import { loadData } from '../../api/services/data-store.ts';
+import { bumpSolverInputsVersion } from '../../api/services/solver-inputs-version.ts';
 
 const mockSettings = {
   stepSize_m: 60,
@@ -84,11 +85,38 @@ describe('Integration: GET /calculate/last', () => {
 
     const res = await request(app).get('/calculate/last');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(solved.body);
+    expect(res.body).toEqual({ ...solved.body, inputsCurrent: true });
     expect(res.body.rows).toHaveLength(5);
     expect(res.body.solverStatus).toBe('Optimal');
     // Clients gate their fallback recompute on this.
     expect(res.body.computedAtMs).toBe(Date.now());
+  });
+
+  it('flags the plan as inputsCurrent: false once solver inputs mutate', async () => {
+    await request(app).post('/calculate').send({});
+    expect((await request(app).get('/calculate/last')).body.inputsCurrent).toBe(true);
+
+    // The stores are mocked here, so simulate what a real saveData/saveSettings
+    // with changed content does.
+    bumpSolverInputsVersion();
+
+    const res = await request(app).get('/calculate/last');
+    expect(res.status).toBe(200);
+    expect(res.body.inputsCurrent).toBe(false);
+  });
+
+  it('refuses to serve a non-optimal cached solve', async () => {
+    // Battery pinned at min SoC, no PV, and a zero import cap: the load is
+    // unservable, so the solve comes back infeasible.
+    loadData.mockResolvedValue({ ...mockData, soc: { ...mockData.soc } });
+    loadSettings.mockResolvedValue({ ...mockSettings, maxGridImport_W: 0 });
+
+    const solved = await request(app).post('/calculate').send({});
+    expect(solved.status).toBe(200);
+    expect(solved.body.solverStatus).not.toBe('Optimal');
+
+    const res = await request(app).get('/calculate/last');
+    expect(res.status).toBe(404);
   });
 
   it('returns 404 once the cached plan no longer covers now', async () => {

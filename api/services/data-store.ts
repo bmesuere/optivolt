@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDataDir, readJson, writeJson } from './json-store.ts';
+import { bumpSolverInputsVersion } from './solver-inputs-version.ts';
 import type { Data, TimeSeries } from '../types.ts';
 import { validatePredictionAdjustment } from './prediction-adjustments.ts';
 import { validateEvScheduleEntry } from './ev-schedule-entries.ts';
@@ -98,11 +99,21 @@ export async function loadData(): Promise<Data> {
   }
 }
 
+// Serialized form of the last save, to bump the solver-inputs version only on
+// real changes — the boot-time forecast run often rewrites identical series,
+// and that must not read as "the cached plan is stale".
+let lastSavedJson: string | undefined;
+
 /**
  * Persist data to DATA_DIR/data.json (pretty-printed).
  */
 export async function saveData(data: Data): Promise<void> {
   validateData(data);
+  const json = JSON.stringify(data);
+  if (json !== lastSavedJson) {
+    lastSavedJson = json;
+    bumpSolverInputsVersion();
+  }
   await writeJson(DATA_PATH, data);
 }
 
