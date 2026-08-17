@@ -255,10 +255,8 @@ export async function planAndMaybeWrite({
 } = {}): Promise<ComputePlanResult> {
   const plan = await computePlan({ updateData });
   if (writeToVictron) {
-    // Never push a non-optimal solve to the hardware. Infeasible/unbounded/errored
-    // solves already throw in parseSolution; this additionally refuses statuses that
-    // carry a feasible-but-unproven incumbent (e.g. "Time limit reached"), which are
-    // fine to display but not to write as a real schedule.
+    // Never push a non-Optimal solve to the hardware: a feasible-but-unproven
+    // incumbent (e.g. "Time limit reached") is fine to display but not to write.
     if (plan.result.Status !== 'Optimal') {
       throw new Error(`Refusing to write schedule to Victron: solver status is "${plan.result.Status ?? 'unknown'}" (expected "Optimal")`);
     }

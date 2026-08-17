@@ -64,8 +64,7 @@ describe('computePlan — rebalance bookkeeping', () => {
 
   it('does NOT set startMs when soc < maxSoc_percent (not at target yet)', async () => {
     // Fast charging + a generous import cap keep the rebalance MILP feasible
-    // (reach 100% and hold it within the 5-slot horizon); parseSolution now
-    // rejects infeasible solves outright.
+    // within the 5-slot horizon (parseSolution rejects infeasible solves).
     loadSettings.mockResolvedValue({
       ...baseSettings,
       rebalanceEnabled: true,
@@ -158,7 +157,6 @@ describe('computePlan — rebalance bookkeeping', () => {
       pv: { start: NOW_STRING, step: 60, values: [0, 0, 0, 0, 0] },
     });
 
-    // parseSolution rejects the infeasible result before the write guard is reached.
     await expect(planAndMaybeWrite({ writeToVictron: true })).rejects.toThrow(/no usable solution.*Infeasible/i);
     expect(setDynamicEssSchedule).not.toHaveBeenCalled();
   });

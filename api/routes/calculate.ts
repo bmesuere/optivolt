@@ -79,8 +79,6 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   } catch (error) {
     logCalculateError(error);
     if (error instanceof SolverStatusError) {
-      // Upstream solver reported no usable solution (infeasible/unbounded/error):
-      // surface the solver status to the client instead of a generic 500.
       next(new HttpError(502, error.message, { cause: error }));
       return;
     }

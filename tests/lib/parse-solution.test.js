@@ -128,6 +128,20 @@ describe('parseSolution — solver status guard', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].soc).toBe(200);
   });
+
+  it('throws for "Time limit reached" with empty columns (no incumbent found)', () => {
+    const result = { Status: 'Time limit reached', Columns: {} };
+    expect(() => parseSolution(result, cfg, opts)).toThrow(SolverStatusError);
+    expect(() => parseSolution(result, cfg, opts)).toThrow(/without a feasible incumbent.*Time limit reached/);
+  });
+
+  it('throws for "Time limit reached" with non-finite primal values', () => {
+    const result = {
+      Status: 'Time limit reached',
+      Columns: { ...columns, 'soc_1': { Primal: NaN } },
+    };
+    expect(() => parseSolution(result, cfg, opts)).toThrow(/without a feasible incumbent/);
+  });
 });
 
 describe('parseSolution — ev_charge_mode derivation', () => {

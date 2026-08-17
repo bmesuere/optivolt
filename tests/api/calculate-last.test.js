@@ -61,8 +61,7 @@ const mockData = {
 // load-bearing: the "no plan yet" case has to run before anything solves.
 describe('Integration: GET /calculate/last', () => {
   beforeEach(() => {
-    // Only fake Date: faking setImmediate would deadlock Express's error
-    // middleware, which the infeasible-solve test exercises via its 502.
+    // Only fake Date: faking setImmediate deadlocks Express's error middleware.
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
 
