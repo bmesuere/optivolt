@@ -13,12 +13,42 @@ export interface HighsSolution {
   Columns?: Record<string, HighsColumn>;
 }
 
+// HiGHS statuses under which the result can carry a feasible primal solution.
+// "Optimal" is the normal case; the limit/interrupt statuses mean the solve
+// stopped early but the incumbent is still a feasible plan worth displaying
+// (planner-service separately refuses hardware writes for anything non-Optimal).
+// Every other status (Infeasible, Unbounded, load/model/solve errors, …)
+// carries no usable primal solution — parsing it would fabricate rows of
+// all-zero flows and 0% SoC that look like a real plan.
+const STATUSES_WITH_SOLUTION = new Set([
+  'Optimal',
+  'Time limit reached',
+  'Iteration limit reached',
+  'Bound on objective reached',
+  'Target for objective reached',
+]);
+
+/** Thrown when a HiGHS result's status indicates no usable primal solution. */
+export class SolverStatusError extends Error {
+  status: string;
+
+  constructor(status: string) {
+    super(`Solver produced no usable solution: status is "${status}"`);
+    this.name = 'SolverStatusError';
+    this.status = status;
+  }
+}
+
 interface ParseSolutionOpts {
   startMs: number;
   stepMin: number;
 }
 
 export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: ParseSolutionOpts): PlanRow[] {
+  if (!STATUSES_WITH_SOLUTION.has(result.Status ?? '')) {
+    throw new SolverStatusError(result.Status ?? 'missing');
+  }
+
   const T = cfg.load_W.length;
 
   const timestampsMs = synthesizeFromStart(opts.startMs, opts.stepMin, T);

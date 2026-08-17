@@ -63,7 +63,15 @@ describe('computePlan — rebalance bookkeeping', () => {
   });
 
   it('does NOT set startMs when soc < maxSoc_percent (not at target yet)', async () => {
-    loadSettings.mockResolvedValue({ ...baseSettings, rebalanceEnabled: true });
+    // Fast charging + a generous import cap keep the rebalance MILP feasible
+    // (reach 100% and hold it within the 5-slot horizon); parseSolution now
+    // rejects infeasible solves outright.
+    loadSettings.mockResolvedValue({
+      ...baseSettings,
+      rebalanceEnabled: true,
+      maxChargePower_W: 5000,
+      maxGridImport_W: 10000,
+    });
     loadData.mockResolvedValue({ ...baseData, soc: { timestamp: NOW_STRING, value: 50 }, rebalanceState: { startMs: null } });
 
     await computePlan();
@@ -141,7 +149,7 @@ describe('computePlan — rebalance bookkeeping', () => {
     expect(result.rows[0].dess.feedin).toBe(FeedIn.allowed);
   });
 
-  it('refuses to write to Victron when the solve is not optimal', async () => {
+  it('throws on an infeasible solve and never writes to Victron', async () => {
     loadSettings.mockResolvedValue(baseSettings);
     // Load far exceeds max grid import + max discharge + PV every slot → infeasible.
     loadData.mockResolvedValue({
@@ -150,7 +158,8 @@ describe('computePlan — rebalance bookkeeping', () => {
       pv: { start: NOW_STRING, step: 60, values: [0, 0, 0, 0, 0] },
     });
 
-    await expect(planAndMaybeWrite({ writeToVictron: true })).rejects.toThrow(/solver status/i);
+    // parseSolution rejects the infeasible result before the write guard is reached.
+    await expect(planAndMaybeWrite({ writeToVictron: true })).rejects.toThrow(/no usable solution.*Infeasible/i);
     expect(setDynamicEssSchedule).not.toHaveBeenCalled();
   });
 
