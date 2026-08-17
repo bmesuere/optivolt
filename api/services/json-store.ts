@@ -14,8 +14,7 @@ export async function readJson<T>(filePath: string): Promise<T> {
   return JSON.parse(txt) as T;
 }
 
-// Per-path promise chain so concurrent writeJson calls to the same file are
-// serialized instead of interleaving. Keyed by resolved absolute path.
+// Per-path promise chain so concurrent writeJson calls to the same file serialize.
 const writeQueues = new Map<string, Promise<void>>();
 
 export async function writeJson(filePath: string, obj: unknown): Promise<void> {
@@ -26,8 +25,7 @@ export async function writeJson(filePath: string, obj: unknown): Promise<void> {
     () => writeJsonAtomic(resolvedPath, obj),
   );
 
-  // Keep the chain alive for the next caller regardless of outcome, but
-  // don't let a rejection here become an unhandled rejection.
+  // Chain must not reject, or it would break the queue for the next caller.
   writeQueues.set(
     resolvedPath,
     tail.then(
@@ -44,8 +42,7 @@ async function writeJsonAtomic(resolvedPath: string, obj: unknown): Promise<void
   const dir = path.dirname(resolvedPath);
   await fs.mkdir(dir, { recursive: true });
 
-  // Same-directory temp file so the rename below is an atomic operation on
-  // the same filesystem (not guaranteed across directories/filesystems).
+  // Same-directory temp file so the rename below is atomic (same filesystem).
   const tmpPath = path.join(
     dir,
     `.${path.basename(resolvedPath)}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`,
@@ -55,9 +52,7 @@ async function writeJsonAtomic(resolvedPath: string, obj: unknown): Promise<void
     const fh = await fs.open(tmpPath, 'w');
     try {
       await fh.writeFile(json, 'utf8');
-      // Flush the temp file's contents to disk before the rename, so a
-      // power loss right after the rename can't leave the new directory
-      // entry pointing at data that never made it past the page cache.
+      // Flush to disk before rename, or a power loss could leave the renamed file empty/partial.
       await fh.sync();
     } finally {
       await fh.close();
@@ -71,26 +66,20 @@ async function writeJsonAtomic(resolvedPath: string, obj: unknown): Promise<void
   }
 }
 
-// Syncing the parent directory persists the rename itself (the new/updated
-// directory entry), so recovery after a power loss yields either the
-// complete old file or the complete new file, never a missing/partial one.
-// Directory fsync is supported on Linux (the deployment target) but some
-// platforms (e.g. Windows) reject opening a directory as a file handle, so
-// this is best-effort and swallows that specific failure.
+// Persists the rename itself. Best-effort: some platforms (e.g. Windows)
+// can't fsync a directory handle, so failures here are swallowed.
 async function syncDirectoryBestEffort(dir: string): Promise<void> {
   let dh: fs.FileHandle | undefined;
   try {
     dh = await fs.open(dir, 'r');
     await dh.sync();
   } catch {
-    // Best-effort: not all platforms/filesystems support fsync on a
-    // directory handle. The file rename above is still durable on those
-    // that don't support it, just without the extra directory-entry guarantee.
+    // ignore
   } finally {
     try {
       await dh?.close();
     } catch {
-      // Ignore close errors too — nothing more we can do here.
+      // ignore
     }
   }
 }

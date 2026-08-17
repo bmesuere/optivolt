@@ -18,8 +18,7 @@ afterEach(async () => {
 let importCounter = 0;
 
 async function importStore() {
-  // Fresh import each test so any module-level state (the write queue map)
-  // starts empty and DATA_DIR is picked up freshly.
+  // Unique query string forces a fresh module instance (fresh write queue, current DATA_DIR).
   importCounter += 1;
   return import('../../../api/services/json-store.ts?t=' + Date.now() + '-' + importCounter);
 }
@@ -84,8 +83,6 @@ describe('json-store', () => {
       }
       await Promise.all(writes);
 
-      // The last call issued should be the last one applied, since writes
-      // to the same path are serialized in call order.
       const finalValue = await readJson(filePath);
       expect(finalValue).toEqual({ i: writeCount - 1, tag: `write-${writeCount - 1}` });
     });
@@ -123,9 +120,7 @@ describe('json-store', () => {
       const { writeJson } = await importStore();
       const filePath = path.join(tmpDir, 'durable.json');
 
-      // All FileHandle instances share one prototype, so spying on it here
-      // observes sync() calls made on both the temp-file handle and the
-      // directory handle inside writeJson.
+      // All FileHandle instances share one prototype, so spying on it catches both sync() calls.
       const probe = await open(path.join(tmpDir, '.probe'), 'w');
       const fileHandleProto = Object.getPrototypeOf(probe);
       await probe.close();
@@ -135,8 +130,6 @@ describe('json-store', () => {
 
       await writeJson(filePath, { a: 1 });
 
-      // Expect at least two sync() calls: one for the temp file's contents,
-      // one for the parent directory (to persist the rename itself).
       expect(syncSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
 
       syncSpy.mockRestore();
@@ -155,9 +148,7 @@ describe('json-store', () => {
       let callIndex = 0;
       const syncSpy = vi.spyOn(fileHandleProto, 'sync').mockImplementation(function (...args) {
         callIndex += 1;
-        // Let the first call (temp file flush) succeed, but reject the
-        // second call (directory sync) to simulate a platform where
-        // fsync-ing a directory handle isn't supported.
+        // 2nd sync() call is the directory sync; reject it to simulate an unsupported platform.
         if (callIndex === 2) {
           return Promise.reject(new Error('EPERM: operation not permitted, fsync'));
         }
