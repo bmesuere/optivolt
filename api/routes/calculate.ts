@@ -1,6 +1,7 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
-import { assertCondition, toHttpError } from '../http-errors.ts';
+import { assertCondition, HttpError, toHttpError } from '../http-errors.ts';
+import { SolverStatusError } from '../../lib/parse-solution.ts';
 import { planAndMaybeWrite, getLastPlan, type ComputePlanResult } from '../services/planner-service.ts';
 import { getForecastTimeRange } from '../../lib/time-series-utils.ts';
 import { getSolverInputsVersion } from '../services/solver-inputs-version.ts';
@@ -77,6 +78,10 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     res.json(planToResponse(plan));
   } catch (error) {
     logCalculateError(error);
+    if (error instanceof SolverStatusError) {
+      next(new HttpError(502, error.message, { cause: error }));
+      return;
+    }
     next(toHttpError(error, 500, 'Failed to calculate plan'));
   }
 });

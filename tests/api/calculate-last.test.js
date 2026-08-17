@@ -61,7 +61,8 @@ const mockData = {
 // load-bearing: the "no plan yet" case has to run before anything solves.
 describe('Integration: GET /calculate/last', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    // Only fake Date: faking setImmediate deadlocks Express's error middleware.
+    vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
 
     vi.resetAllMocks();
@@ -105,18 +106,20 @@ describe('Integration: GET /calculate/last', () => {
     expect(res.body.inputsCurrent).toBe(false);
   });
 
-  it('refuses to serve a non-optimal cached solve', async () => {
+  it('rejects an infeasible solve with 502 and keeps serving the last good plan', async () => {
     // Battery pinned at min SoC, no PV, and a zero import cap: the load is
     // unservable, so the solve comes back infeasible.
     loadData.mockResolvedValue({ ...mockData, soc: { ...mockData.soc } });
     loadSettings.mockResolvedValue({ ...mockSettings, maxGridImport_W: 0 });
 
     const solved = await request(app).post('/calculate').send({});
-    expect(solved.status).toBe(200);
-    expect(solved.body.solverStatus).not.toBe('Optimal');
+    expect(solved.status).toBe(502);
+    expect(solved.body.error).toMatch(/Infeasible/);
 
+    // The failed solve must not clobber the previously cached optimal plan.
     const res = await request(app).get('/calculate/last');
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    expect(res.body.solverStatus).toBe('Optimal');
   });
 
   it('returns 404 once the cached plan no longer covers now', async () => {
