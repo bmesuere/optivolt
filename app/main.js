@@ -169,8 +169,16 @@ async function boot() {
   const optimizerPanel = document.getElementById('panel-optimizer');
   if (optimizerPanel) revealCards(optimizerPanel);
 
-  // Initial compute
-  await optimizer.onRun();
+  // Initial display: paint the server's cached plan first (instant when one
+  // still covers now). The HA automation recomputes every quarter hour, so a
+  // plan younger than that is exactly what a fresh solve would produce and
+  // the solve is skipped; an older one means the automation isn't feeding us
+  // (or the server just restarted) and we solve on top of the cached paint.
+  const CACHED_PLAN_FRESH_MS = 16 * 60_000;
+  const cachedPlanAgeMs = await optimizer.loadLastPlan();
+  if (cachedPlanAgeMs == null || cachedPlanAgeMs > CACHED_PLAN_FRESH_MS) {
+    await optimizer.onRun();
+  }
 }
 
 // ---------- Actions ----------

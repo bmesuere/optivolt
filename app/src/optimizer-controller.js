@@ -7,7 +7,7 @@ import {
 import { renderTable } from "./table.js";
 import { debounce } from "./utils.js";
 import { saveConfig } from "./config-store.js";
-import { requestRemoteSolve } from "./api/api.js";
+import { fetchLastPlan, requestRemoteSolve } from "./api/api.js";
 import { updateEvPanel, collectEvSettings, initEvPanelToggles } from "./ev-tab.js";
 import {
   snapshotUI,
@@ -55,6 +55,7 @@ export function createOptimizerController({
     drawLoadPvGrouped,
     drawPricesStepLines,
     drawSocChart,
+    fetchLastPlan,
     renderTable,
     requestRemoteSolve,
     saveConfig,
@@ -89,6 +90,57 @@ export function createOptimizerController({
     void persistConfig(cfg);
   }, 600);
 
+  // Cache a plan result (fresh solve or server-cached) and render everything
+  // that derives from it: meta, summary, charts, table, Now panel, EV panel.
+  function applyPlanResult(result) {
+    const rows = Array.isArray(result?.rows) ? result.rows : [];
+
+    lastTableRows = rows;
+    lastInitialSoc_percent = result.initialSoc_percent ?? null;
+    lastTableRebalanceWindow = result.rebalanceWindow ?? null;
+    lastPricesKnownUntilMs = result.pricesKnownUntilMs ?? null;
+    lastStandardWindowEndMs = result.standardWindowEndMs ?? null;
+    // Share the server boundary so the EV and forecast tabs slice alike.
+    setStandardWindowEndMs(lastStandardWindowEndMs);
+
+    // Plan end is the last planned slot's start, not the boundary after it.
+    deps.updatePlanMeta(els, result.tsStart, rows[rows.length - 1]?.timestampMs ?? null);
+    deps.updateSummaryUI(els, result.summary);
+    deps.updateRebalanceNudgeUI(els, result.rebalanceNudge);
+
+    const cfgForViz = getVizConfig();
+
+    renderVisuals();
+    renderNowPanel(els, {
+      rows,
+      stepSize_m: cfgForViz.stepSize_m,
+      initialSoc_percent: lastInitialSoc_percent,
+    });
+    deps.updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m, getEvSettings());
+    onPlanRows(rows);
+  }
+
+  // Show the server's cached plan (if it still covers now) instead of solving
+  // on page load. Returns the plan's age in milliseconds so the caller can
+  // decide whether a fresh solve is still warranted, or null — cheaply,
+  // without touching the UI — when there is nothing to show.
+  async function loadLastPlan() {
+    let result;
+    try {
+      result = await deps.fetchLastPlan();
+    } catch {
+      return null;
+    }
+    if (!Array.isArray(result?.rows) || result.rows.length === 0) return null;
+
+    applyPlanResult(result);
+    if (els.status) {
+      els.status.textContent = "Loaded existing plan";
+      els.status.className = "text-sm font-medium text-ink dark:text-slate-100";
+    }
+    return Date.now() - (result.computedAtMs ?? 0);
+  }
+
   async function onRun() {
     if (typeof persistConfigDebounced.cancel === "function") {
       persistConfigDebounced.cancel();
@@ -116,38 +168,15 @@ export function createOptimizerController({
       const writeToVictron = !!els.pushToVictron?.checked;
       const result = await deps.requestRemoteSolve({ updateData, writeToVictron });
 
-      const rows = Array.isArray(result?.rows) ? result.rows : [];
       const solverStatus =
         typeof result?.solverStatus === "string" ? result.solverStatus : "OK";
-
-      lastTableRows = rows;
-      lastInitialSoc_percent = result.initialSoc_percent ?? null;
-      lastTableRebalanceWindow = result.rebalanceWindow ?? null;
-      lastPricesKnownUntilMs = result.pricesKnownUntilMs ?? null;
-      lastStandardWindowEndMs = result.standardWindowEndMs ?? null;
-      // Share the server boundary so the EV and forecast tabs slice alike.
-      setStandardWindowEndMs(lastStandardWindowEndMs);
 
       // The plan is solved by now — and, when writeToVictron is set, already written over MQTT.
       // A throw while drawing it is a display failure, not a planning failure, so it must not
       // fall through to the outer catch and wipe a summary that computed fine.
       try {
-        // Plan end is the last planned slot's start, not the boundary after it.
-        deps.updatePlanMeta(els, result.tsStart, rows[rows.length - 1]?.timestampMs ?? null);
-        deps.updateSummaryUI(els, result.summary);
-        deps.updateRebalanceNudgeUI(els, result.rebalanceNudge);
         updateRunStatus(solverStatus, writeToVictron);
-
-        const cfgForViz = getVizConfig();
-
-        renderVisuals();
-        renderNowPanel(els, {
-          rows,
-          stepSize_m: cfgForViz.stepSize_m,
-          initialSoc_percent: lastInitialSoc_percent,
-        });
-        deps.updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m, getEvSettings());
-        onPlanRows(rows);
+        applyPlanResult(result);
       } catch (renderError) {
         console.error("Failed to render plan", renderError);
         if (els.status) {
@@ -293,6 +322,7 @@ export function createOptimizerController({
 
   return {
     debounceRun,
+    loadLastPlan,
     onRun,
     onTableDisplayChange,
     persistConfig,

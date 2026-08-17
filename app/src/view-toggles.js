@@ -94,6 +94,14 @@ export function mountViewToggles(host) {
   const resButtons = [...host.querySelectorAll("[data-res]")];
   const rangeButtons = [...host.querySelectorAll("[data-range]")];
 
+  // Style the segments immediately from the stored choice — the first render
+  // pass only calls update() once a plan is in, which otherwise leaves the
+  // buttons unstyled inside a styled pill for the whole initial solve.
+  const initialResolution = getStoredFlowsResolution() ?? "15";
+  const initialRange = getStoredViewRange();
+  for (const btn of resButtons) setSegState(btn, btn.dataset.res === initialResolution);
+  for (const btn of rangeButtons) setSegState(btn, btn.dataset.range === initialRange);
+
   for (const btn of resButtons) {
     btn.addEventListener("click", () => {
       storeFlowsResolution(btn.dataset.res);

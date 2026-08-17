@@ -52,6 +52,8 @@ export interface RebalanceWindow {
 export interface ComputePlanResult {
   cfg: SolverConfig;
   data: Data;
+  /** Wall-clock time the solve finished; lets clients judge cache freshness. */
+  computedAtMs: number;
   timing: { startMs: number; stepMin: number };
   result: HighsSolution;
   rows: PlanRowWithDess[];
@@ -232,7 +234,7 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const rebalanceNudge = getRebalanceNudge(data);
 
-  lastPlan = { cfg, data, timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
+  lastPlan = { cfg, data, computedAtMs: Date.now(), timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
   return lastPlan;
 }
 
