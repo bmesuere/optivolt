@@ -2,6 +2,7 @@ import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { assertCondition, toHttpError } from '../http-errors.ts';
 import { loadSettings, saveSettings } from '../services/settings-store.ts';
+import { HA_TOKEN_SENTINEL, redactSettingsForClient } from '../settings-redaction.ts';
 import {
   buildPredictionRunConfig,
   runCombinedPredictionForecast,
@@ -13,7 +14,7 @@ const router = express.Router();
 router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const settings = await loadSettings();
-    res.json({ ...settings, isAddon: !!process.env.SUPERVISOR_TOKEN });
+    res.json({ ...redactSettingsForClient(settings), isAddon: !!process.env.SUPERVISOR_TOKEN });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to read settings'));
   }
@@ -29,6 +30,11 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     );
 
     const prevSettings = await loadSettings();
+    // GET /settings redacts the HA token to a sentinel and the UI posts the
+    // full form snapshot back, so the sentinel means "keep the stored token".
+    if (incoming.haToken === HA_TOKEN_SENTINEL) {
+      incoming.haToken = prevSettings.haToken;
+    }
     const mergedSettings = { ...prevSettings, ...incoming };
     await saveSettings(mergedSettings);
 
@@ -43,7 +49,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     // Reported so the client can re-read the stored series: the Predictions tab
     // caches them, and would otherwise show the old window until a manual
     // forecast run or a page reload.
-    res.json({ message: 'Settings saved successfully.', settings: mergedSettings, forecastsRefreshed });
+    res.json({ message: 'Settings saved successfully.', settings: redactSettingsForClient(mergedSettings), forecastsRefreshed });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to save settings'));
   }
