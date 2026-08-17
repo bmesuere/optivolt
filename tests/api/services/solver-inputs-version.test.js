@@ -4,8 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { getSolverInputsVersion } from '../../../api/services/solver-inputs-version.ts';
 
-// saveSettings validates before writing, so the test payload must be a full
-// valid Settings object; start from the shipped defaults.
+// saveSettings validates, so the payload must be a full valid Settings object.
 const defaultSettings = JSON.parse(
   await readFile(new URL('../../../api/defaults/default-settings.json', import.meta.url), 'utf8'),
 );

@@ -19,8 +19,8 @@ afterEach(async () => {
   await rm(tmpDir, { recursive: true, force: true });
 });
 
-// The store resolves DATA_DIR at module load, so import it fresh per test
-// with a cache-busting query (same pattern as solver-inputs-version.test.js).
+// The store resolves DATA_DIR at module load; a cache-busting import gets a
+// fresh instance per test (same pattern as solver-inputs-version.test.js).
 async function importStore() {
   return import('../../../api/services/settings-store.ts?' + Date.now());
 }
@@ -34,7 +34,6 @@ describe('settings-store validate-on-save', () => {
     await expect(saveSettings({ ...defaultSettings, batteryCapacity_Wh: NaN }))
       .rejects.toThrow('Invalid numeric setting: batteryCapacity_Wh');
 
-    // Nothing was persisted.
     await expect(readFile(path.join(tmpDir, 'settings.json'), 'utf8'))
       .rejects.toMatchObject({ code: 'ENOENT' });
   });

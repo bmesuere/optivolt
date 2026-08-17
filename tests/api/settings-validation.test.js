@@ -4,9 +4,8 @@ import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-// The settings store resolves DATA_DIR at module load, so point it at a temp
-// dir before the app (and its stores) are imported. No mocks here: these tests
-// exercise the real validate-on-save path end to end.
+// The stores resolve DATA_DIR at module load, so point it at a temp dir
+// before importing the app. No mocks: this exercises the real store.
 const tmpDir = await mkdtemp(path.join(tmpdir(), 'optivolt-settings-test-'));
 process.env.DATA_DIR = tmpDir;
 const { default: app } = await import('../../api/app.ts');
@@ -32,7 +31,6 @@ describe('POST /settings validation', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Invalid numeric setting: stepSize_m');
-    // Nothing was written, so a subsequent load still works.
     await expect(readFile(settingsPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     const get = await request(app).get('/settings');
     expect(get.status).toBe(200);
@@ -53,7 +51,6 @@ describe('POST /settings validation', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBe(message);
     await expect(readFile(settingsPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
-    // The stored settings are untouched, so GET still serves the defaults.
     const get = await request(app).get('/settings');
     expect(get.status).toBe(200);
   });

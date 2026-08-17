@@ -33,8 +33,6 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       'settings payload must be an object',
     );
 
-    // Whitelist incoming keys against the known Settings shape (the defaults
-    // file covers every field) so unknown keys are never persisted.
     const incoming = pickKnownKeys(payload, await loadDefaultSettings());
 
     const prevSettings = await loadSettings();
@@ -44,16 +42,13 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       dataSources: { ...prevSettings.dataSources, ...incoming.dataSources },
     };
     try {
-      // saveSettings validates before writing; a bad value must become a 400,
-      // not a persisted broken file.
       await saveSettings(mergedSettings);
     } catch (error) {
       if (error instanceof SettingsValidationError) throw toHttpError(error, 400);
       throw error;
     }
 
-    // Re-read so the response and the horizon comparison use the normalized
-    // (validated/clamped) form — the same shape a subsequent GET returns.
+    // Re-read so the response and the horizon comparison use the clamped form.
     const savedSettings = await loadSettings();
     let forecastsRefreshed = false;
     if (savedSettings.extendedHorizonDays !== prevSettings.extendedHorizonDays) {
@@ -97,11 +92,7 @@ async function refreshForecastsForNewHorizon(settings: Settings): Promise<boolea
   }
 }
 
-/**
- * Keep only keys that exist in the known Settings shape (represented by the
- * defaults object), including the nested dataSources keys. Unknown keys are
- * dropped so they are neither persisted nor echoed back.
- */
+/** Drop keys absent from the known Settings shape (the defaults object), including nested dataSources keys. */
 function pickKnownKeys(payload: Record<string, unknown>, defaults: Settings): Partial<Settings> {
   const picked: Record<string, unknown> = {};
   for (const key of Object.keys(defaults)) {
@@ -118,7 +109,6 @@ function pickKnownKeys(payload: Record<string, unknown>, defaults: Settings): Pa
     }
     picked.dataSources = filtered;
   } else if (dataSources !== undefined) {
-    // A non-object dataSources would clobber the nested merge; ignore it.
     delete picked.dataSources;
   }
 

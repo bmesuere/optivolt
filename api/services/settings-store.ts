@@ -20,9 +20,7 @@ const NUMERIC_FIELDS: (keyof Settings)[] = [
   'extendedHorizonDays',
 ];
 
-// Strictly positive: a zero step size fails the solver-step check, zero
-// capacities make SoC conversions meaningless, and zero hold hours / charge
-// currents are nonsensical.
+// Strictly positive: zero step size, capacities, hold hours, or charge currents are unusable.
 const POSITIVE_FIELDS: (keyof Settings)[] = [
   'stepSize_m', 'batteryCapacity_Wh', 'rebalanceHoldHours',
   'evMinChargeCurrent_A', 'evMaxChargeCurrent_A', 'evBatteryCapacity_kWh',
@@ -121,8 +119,7 @@ function validateSettings(s: Settings): Settings {
     [s.minSoc_percent, s.maxSoc_percent] = [s.maxSoc_percent, s.minSoc_percent];
   }
 
-  // Same ordering guarantee for the EV charge-current window: a min above the
-  // max would make the EV charging constraints infeasible.
+  // Keep the EV charge-current window ordered; min above max is infeasible.
   if (s.evMaxChargeCurrent_A < s.evMinChargeCurrent_A) {
     [s.evMinChargeCurrent_A, s.evMaxChargeCurrent_A] = [s.evMaxChargeCurrent_A, s.evMinChargeCurrent_A];
   }
@@ -170,10 +167,7 @@ let lastSavedJson: string | undefined;
 
 /**
  * Persist settings to DATA_DIR/settings.json (pretty-printed).
- *
- * Validates (and clamps) before writing, so a bad payload throws a
- * SettingsValidationError instead of poisoning the stored file — a broken
- * settings.json would make every subsequent loadSettings() call fail.
+ * Validates and clamps before writing, so a bad payload can never poison the stored file.
  */
 export async function saveSettings(settings: Settings): Promise<void> {
   const validated = validateSettings({ ...settings });

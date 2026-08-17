@@ -26,7 +26,6 @@ describe('POST /settings — forecast refresh on horizon change', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     saveSettings.mockResolvedValue(undefined);
-    // The route whitelists incoming keys against the defaults shape.
     loadDefaultSettings.mockResolvedValue(settingsWith(0));
     buildPredictionRunConfig.mockResolvedValue({ sensors: [] });
     runCombinedPredictionForecast.mockResolvedValue({ load: null, pv: null });
