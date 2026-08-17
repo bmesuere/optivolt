@@ -2,7 +2,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDataDir, readJson, writeJson } from './json-store.ts';
 import { bumpSolverInputsVersion } from './solver-inputs-version.ts';
-import type { Settings } from '../types.ts';
+import type { Settings, DataSources } from '../types.ts';
+import type { TerminalSocValuation } from '../../lib/types.ts';
 
 const DATA_DIR = resolveDataDir();
 const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
@@ -19,10 +20,95 @@ const NUMERIC_FIELDS: (keyof Settings)[] = [
   'extendedHorizonDays',
 ];
 
+// Strictly positive: zero step size, capacities, hold hours, or charge currents are unusable.
+const POSITIVE_FIELDS: (keyof Settings)[] = [
+  'stepSize_m', 'batteryCapacity_Wh', 'rebalanceHoldHours',
+  'evMinChargeCurrent_A', 'evMaxChargeCurrent_A', 'evBatteryCapacity_kWh',
+];
+
+// Zero is a valid limit/cost (e.g. no grid export allowed); negative is not.
+const NON_NEGATIVE_FIELDS: (keyof Settings)[] = [
+  'maxChargePower_W', 'maxDischargePower_W', 'maxGridImport_W', 'maxGridExport_W',
+  'batteryCost_cent_per_kWh', 'idleDrain_W',
+];
+
+// Efficiencies divide LP cost coefficients: zero would produce infinite costs.
+const EFFICIENCY_FIELDS: (keyof Settings)[] = [
+  'chargeEfficiency_percent', 'dischargeEfficiency_percent', 'evChargeEfficiency_percent',
+];
+
+const BOOLEAN_FIELDS: (keyof Settings)[] = [
+  'blockFeedInOnNegativePrices', 'rebalanceEnabled', 'evEnabled',
+];
+
+const STRING_FIELDS: (keyof Settings)[] = ['haUrl', 'haToken', 'evSocSensor', 'evPlugSensor'];
+
+const TERMINAL_SOC_VALUATIONS: readonly TerminalSocValuation[] = ['zero', 'min', 'avg', 'max', 'custom'];
+
+const DATA_SOURCE_DOMAINS: Record<keyof DataSources, readonly string[]> = {
+  load: ['vrm', 'api'],
+  pv: ['vrm', 'api'],
+  prices: ['vrm', 'api'],
+  soc: ['mqtt', 'api'],
+};
+
+/** Thrown when settings fail validation; lets callers map it to a 400 instead of a generic 500. */
+export class SettingsValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SettingsValidationError';
+  }
+}
+
 function validateSettings(s: Settings): Settings {
   for (const field of NUMERIC_FIELDS) {
     if (!Number.isFinite(s[field] as number)) {
-      throw new Error(`Invalid numeric setting: ${field}`);
+      throw new SettingsValidationError(`Invalid numeric setting: ${field}`);
+    }
+  }
+  for (const field of POSITIVE_FIELDS) {
+    if ((s[field] as number) <= 0) {
+      throw new SettingsValidationError(`Invalid setting: ${field} must be > 0`);
+    }
+  }
+  for (const field of NON_NEGATIVE_FIELDS) {
+    if ((s[field] as number) < 0) {
+      throw new SettingsValidationError(`Invalid setting: ${field} must be >= 0`);
+    }
+  }
+  for (const field of EFFICIENCY_FIELDS) {
+    const value = s[field] as number;
+    if (value <= 0 || value > 100) {
+      throw new SettingsValidationError(`Invalid setting: ${field} must be in (0, 100]`);
+    }
+  }
+  for (const field of BOOLEAN_FIELDS) {
+    if (typeof s[field] !== 'boolean') {
+      throw new SettingsValidationError(`Invalid setting: ${field} must be a boolean`);
+    }
+  }
+  for (const field of STRING_FIELDS) {
+    if (typeof s[field] !== 'string') {
+      throw new SettingsValidationError(`Invalid setting: ${field} must be a string`);
+    }
+  }
+
+  if (!TERMINAL_SOC_VALUATIONS.includes(s.terminalSocValuation)) {
+    throw new SettingsValidationError(
+      `Invalid setting: terminalSocValuation must be one of ${TERMINAL_SOC_VALUATIONS.join(', ')}`,
+    );
+  }
+
+  const sources = s.dataSources as unknown;
+  if (!sources || typeof sources !== 'object' || Array.isArray(sources)) {
+    throw new SettingsValidationError('Invalid setting: dataSources must be an object');
+  }
+  for (const [key, domain] of Object.entries(DATA_SOURCE_DOMAINS)) {
+    const value = (sources as Record<string, unknown>)[key];
+    if (typeof value !== 'string' || !domain.includes(value)) {
+      throw new SettingsValidationError(
+        `Invalid setting: dataSources.${key} must be one of ${domain.join(', ')}`,
+      );
     }
   }
 
@@ -31,6 +117,11 @@ function validateSettings(s: Settings): Settings {
   s.maxSoc_percent = Math.round(100 * Math.max(0, Math.min(1, s.maxSoc_percent / 100)));
   if (s.maxSoc_percent < s.minSoc_percent) {
     [s.minSoc_percent, s.maxSoc_percent] = [s.maxSoc_percent, s.minSoc_percent];
+  }
+
+  // Keep the EV charge-current window ordered; min above max is infeasible.
+  if (s.evMaxChargeCurrent_A < s.evMinChargeCurrent_A) {
+    [s.evMinChargeCurrent_A, s.evMaxChargeCurrent_A] = [s.evMaxChargeCurrent_A, s.evMinChargeCurrent_A];
   }
 
   // A negative valuation would invert the incentive and penalize EV charging.
@@ -76,14 +167,16 @@ let lastSavedJson: string | undefined;
 
 /**
  * Persist settings to DATA_DIR/settings.json (pretty-printed).
+ * Validates and clamps before writing, so a bad payload can never poison the stored file.
  */
 export async function saveSettings(settings: Settings): Promise<void> {
-  const json = JSON.stringify(settings);
+  const validated = validateSettings({ ...settings });
+  const json = JSON.stringify(validated);
   if (json !== lastSavedJson) {
     lastSavedJson = json;
     bumpSolverInputsVersion();
   }
-  await writeJson(SETTINGS_PATH, settings);
+  await writeJson(SETTINGS_PATH, validated);
 }
 
 /**

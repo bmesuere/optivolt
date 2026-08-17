@@ -1,7 +1,12 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { assertCondition, toHttpError } from '../http-errors.ts';
-import { loadSettings, saveSettings } from '../services/settings-store.ts';
+import {
+  loadSettings,
+  saveSettings,
+  loadDefaultSettings,
+  SettingsValidationError,
+} from '../services/settings-store.ts';
 import {
   buildPredictionRunConfig,
   runCombinedPredictionForecast,
@@ -21,19 +26,29 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
 
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const incoming = req.body ?? {};
+    const payload = req.body ?? {};
     assertCondition(
-      incoming && typeof incoming === 'object' && !Array.isArray(incoming),
+      payload && typeof payload === 'object' && !Array.isArray(payload),
       400,
       'settings payload must be an object',
     );
 
-    const prevSettings = await loadSettings();
-    const mergedSettings = { ...prevSettings, ...incoming };
-    await saveSettings(mergedSettings);
+    const incoming = pickKnownKeys(payload, await loadDefaultSettings());
 
-    // Re-read so the comparison uses the normalized value (clamping and
-    // rounding happen on load, not on save).
+    const prevSettings = await loadSettings();
+    const mergedSettings = {
+      ...prevSettings,
+      ...incoming,
+      dataSources: { ...prevSettings.dataSources, ...incoming.dataSources },
+    };
+    try {
+      await saveSettings(mergedSettings);
+    } catch (error) {
+      if (error instanceof SettingsValidationError) throw toHttpError(error, 400);
+      throw error;
+    }
+
+    // Re-read so the response and the horizon comparison use the clamped form.
     const savedSettings = await loadSettings();
     let forecastsRefreshed = false;
     if (savedSettings.extendedHorizonDays !== prevSettings.extendedHorizonDays) {
@@ -43,7 +58,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     // Reported so the client can re-read the stored series: the Predictions tab
     // caches them, and would otherwise show the old window until a manual
     // forecast run or a page reload.
-    res.json({ message: 'Settings saved successfully.', settings: mergedSettings, forecastsRefreshed });
+    res.json({ message: 'Settings saved successfully.', settings: savedSettings, forecastsRefreshed });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to save settings'));
   }
@@ -75,6 +90,29 @@ async function refreshForecastsForNewHorizon(settings: Settings): Promise<boolea
     );
     return false;
   }
+}
+
+/** Drop keys absent from the known Settings shape (the defaults object), including nested dataSources keys. */
+function pickKnownKeys(payload: Record<string, unknown>, defaults: Settings): Partial<Settings> {
+  const picked: Record<string, unknown> = {};
+  for (const key of Object.keys(defaults)) {
+    if (!Object.hasOwn(payload, key)) continue;
+    picked[key] = payload[key];
+  }
+
+  const dataSources = picked.dataSources;
+  if (dataSources && typeof dataSources === 'object' && !Array.isArray(dataSources)) {
+    const filtered: Record<string, unknown> = {};
+    for (const key of Object.keys(defaults.dataSources)) {
+      if (!Object.hasOwn(dataSources as Record<string, unknown>, key)) continue;
+      filtered[key] = (dataSources as Record<string, unknown>)[key];
+    }
+    picked.dataSources = filtered;
+  } else if (dataSources !== undefined) {
+    delete picked.dataSources;
+  }
+
+  return picked as Partial<Settings>;
 }
 
 export default router;
