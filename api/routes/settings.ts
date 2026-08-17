@@ -7,6 +7,7 @@ import {
   loadDefaultSettings,
   SettingsValidationError,
 } from '../services/settings-store.ts';
+import { HA_TOKEN_SENTINEL, redactSettingsForClient } from '../settings-redaction.ts';
 import {
   buildPredictionRunConfig,
   runCombinedPredictionForecast,
@@ -18,7 +19,7 @@ const router = express.Router();
 router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const settings = await loadSettings();
-    res.json({ ...settings, isAddon: !!process.env.SUPERVISOR_TOKEN });
+    res.json({ ...redactSettingsForClient(settings), isAddon: !!process.env.SUPERVISOR_TOKEN });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to read settings'));
   }
@@ -36,6 +37,9 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     const incoming = pickKnownKeys(payload, await loadDefaultSettings());
 
     const prevSettings = await loadSettings();
+    if (incoming.haToken === HA_TOKEN_SENTINEL) {
+      incoming.haToken = prevSettings.haToken;
+    }
     const mergedSettings = {
       ...prevSettings,
       ...incoming,
@@ -58,7 +62,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     // Reported so the client can re-read the stored series: the Predictions tab
     // caches them, and would otherwise show the old window until a manual
     // forecast run or a page reload.
-    res.json({ message: 'Settings saved successfully.', settings: savedSettings, forecastsRefreshed });
+    res.json({ message: 'Settings saved successfully.', settings: redactSettingsForClient(savedSettings), forecastsRefreshed });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to save settings'));
   }

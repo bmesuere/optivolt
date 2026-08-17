@@ -8,7 +8,7 @@ vi.mock('../../api/services/data-store.ts');
 vi.mock('../../api/services/vrm-refresh.ts');
 vi.mock('../../api/services/mqtt-service.ts');
 
-import { loadSettings } from '../../api/services/settings-store.ts';
+import { loadSettings, saveSettings, loadDefaultSettings } from '../../api/services/settings-store.ts';
 import { loadData } from '../../api/services/data-store.ts';
 import { refreshSeriesFromVrmAndPersist } from '../../api/services/vrm-refresh.ts';
 import { setDynamicEssSchedule } from '../../api/services/mqtt-service.ts';
@@ -67,6 +67,12 @@ describe('Integration: API', () => {
 
     vi.resetAllMocks();
     loadSettings.mockResolvedValue({ ...mockSettings });
+    // The POST whitelist iterates the defaults' keys, so haToken/dataSources must be present.
+    loadDefaultSettings.mockResolvedValue({
+      ...mockSettings,
+      haToken: '',
+      dataSources: { load: 'vrm', pv: 'vrm', prices: 'vrm', soc: 'mqtt' },
+    });
     loadData.mockResolvedValue({ ...mockData });
     refreshSeriesFromVrmAndPersist.mockResolvedValue();
     setDynamicEssSchedule.mockResolvedValue();
@@ -88,6 +94,71 @@ describe('Integration: API', () => {
     const res = await request(app).get('/settings');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ stepSize_m: 60 });
+  });
+
+  describe('haToken redaction', () => {
+    // Hardcoded so an accidental change to HA_TOKEN_SENTINEL breaks the tests.
+    const SENTINEL = '__optivolt_redacted__';
+
+    it('GET /settings returns the sentinel instead of the stored token', async () => {
+      loadSettings.mockResolvedValue({ ...mockSettings, haToken: 'secret-ha-token' });
+
+      const res = await request(app).get('/settings');
+
+      expect(res.status).toBe(200);
+      expect(res.body.haToken).toBe(SENTINEL);
+      expect(JSON.stringify(res.body)).not.toContain('secret-ha-token');
+    });
+
+    it('GET /settings returns an empty haToken when none is stored', async () => {
+      loadSettings.mockResolvedValue({ ...mockSettings, haToken: '' });
+
+      const res = await request(app).get('/settings');
+
+      expect(res.status).toBe(200);
+      expect(res.body.haToken).toBe('');
+    });
+
+    it('POST /settings with the sentinel keeps the stored token', async () => {
+      loadSettings.mockResolvedValue({ ...mockSettings, haToken: 'secret-ha-token' });
+
+      const res = await request(app)
+        .post('/settings')
+        .send({ haToken: SENTINEL, maxSoc_percent: 90 });
+
+      expect(res.status).toBe(200);
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ haToken: 'secret-ha-token', maxSoc_percent: 90 }),
+      );
+      expect(res.body.settings.haToken).toBe(SENTINEL);
+      expect(JSON.stringify(res.body)).not.toContain('secret-ha-token');
+    });
+
+    it('POST /settings with a new token replaces the stored one', async () => {
+      loadSettings.mockResolvedValue({ ...mockSettings, haToken: 'secret-ha-token' });
+
+      const res = await request(app).post('/settings').send({ haToken: 'new-ha-token' });
+
+      expect(res.status).toBe(200);
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ haToken: 'new-ha-token' }),
+      );
+      expect(res.body.settings.haToken).toBe(SENTINEL);
+      expect(JSON.stringify(res.body)).not.toContain('new-ha-token');
+    });
+
+    it('POST /settings with an empty string clears the stored token', async () => {
+      // The response echoes a re-read: first call is prevSettings, second the cleared form.
+      loadSettings
+        .mockResolvedValueOnce({ ...mockSettings, haToken: 'secret-ha-token' })
+        .mockResolvedValueOnce({ ...mockSettings, haToken: '' });
+
+      const res = await request(app).post('/settings').send({ haToken: '' });
+
+      expect(res.status).toBe(200);
+      expect(saveSettings).toHaveBeenCalledWith(expect.objectContaining({ haToken: '' }));
+      expect(res.body.settings.haToken).toBe('');
+    });
   });
 
   it('POST /calculate runs the solver', async () => {

@@ -2,6 +2,7 @@ import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { HttpError, assertCondition, toHttpError } from '../http-errors.ts';
 import { refreshSettingsFromVrmAndPersist } from '../services/vrm-refresh.ts';
+import { redactSettingsForClient } from '../settings-redaction.ts';
 
 const router = express.Router();
 
@@ -21,7 +22,7 @@ router.post('/refresh-settings', async (_req: Request, res: Response, next: Next
   try {
     validateEnvOrThrow();
     const saved = await refreshSettingsFromVrmAndPersist();
-    res.json({ message: 'System settings updated from VRM and saved.', settings: saved });
+    res.json({ message: 'System settings updated from VRM and saved.', settings: redactSettingsForClient(saved) });
   } catch (error) {
     next(asHttp(error, 'Failed to refresh VRM system settings'));
   }
