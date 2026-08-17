@@ -52,10 +52,45 @@ async function writeJsonAtomic(resolvedPath: string, obj: unknown): Promise<void
   );
 
   try {
-    await fs.writeFile(tmpPath, json, 'utf8');
+    const fh = await fs.open(tmpPath, 'w');
+    try {
+      await fh.writeFile(json, 'utf8');
+      // Flush the temp file's contents to disk before the rename, so a
+      // power loss right after the rename can't leave the new directory
+      // entry pointing at data that never made it past the page cache.
+      await fh.sync();
+    } finally {
+      await fh.close();
+    }
+
     await fs.rename(tmpPath, resolvedPath);
+    await syncDirectoryBestEffort(dir);
   } catch (err) {
     await fs.rm(tmpPath, { force: true });
     throw err;
+  }
+}
+
+// Syncing the parent directory persists the rename itself (the new/updated
+// directory entry), so recovery after a power loss yields either the
+// complete old file or the complete new file, never a missing/partial one.
+// Directory fsync is supported on Linux (the deployment target) but some
+// platforms (e.g. Windows) reject opening a directory as a file handle, so
+// this is best-effort and swallows that specific failure.
+async function syncDirectoryBestEffort(dir: string): Promise<void> {
+  let dh: fs.FileHandle | undefined;
+  try {
+    dh = await fs.open(dir, 'r');
+    await dh.sync();
+  } catch {
+    // Best-effort: not all platforms/filesystems support fsync on a
+    // directory handle. The file rename above is still durable on those
+    // that don't support it, just without the extra directory-entry guarantee.
+  } finally {
+    try {
+      await dh?.close();
+    } catch {
+      // Ignore close errors too — nothing more we can do here.
+    }
   }
 }

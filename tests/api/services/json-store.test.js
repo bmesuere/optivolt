@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, readdir } from 'node:fs/promises';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, rm, readdir, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -115,6 +115,61 @@ describe('json-store', () => {
 
       const entries = await readdir(tmpDir);
       expect(entries.sort()).toEqual(['a.json', 'b.json']);
+    });
+  });
+
+  describe('durability', () => {
+    it('flushes the temp file and syncs the parent directory before completing', async () => {
+      const { writeJson } = await importStore();
+      const filePath = path.join(tmpDir, 'durable.json');
+
+      // All FileHandle instances share one prototype, so spying on it here
+      // observes sync() calls made on both the temp-file handle and the
+      // directory handle inside writeJson.
+      const probe = await open(path.join(tmpDir, '.probe'), 'w');
+      const fileHandleProto = Object.getPrototypeOf(probe);
+      await probe.close();
+      await rm(path.join(tmpDir, '.probe'), { force: true });
+
+      const syncSpy = vi.spyOn(fileHandleProto, 'sync');
+
+      await writeJson(filePath, { a: 1 });
+
+      // Expect at least two sync() calls: one for the temp file's contents,
+      // one for the parent directory (to persist the rename itself).
+      expect(syncSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+      syncSpy.mockRestore();
+    });
+
+    it('tolerates a directory that cannot be fsynced (e.g. unsupported platform)', async () => {
+      const { writeJson } = await importStore();
+      const filePath = path.join(tmpDir, 'no-dir-sync.json');
+
+      const probe = await open(path.join(tmpDir, '.probe2'), 'w');
+      const fileHandleProto = Object.getPrototypeOf(probe);
+      await probe.close();
+      await rm(path.join(tmpDir, '.probe2'), { force: true });
+
+      const originalSync = fileHandleProto.sync;
+      let callIndex = 0;
+      const syncSpy = vi.spyOn(fileHandleProto, 'sync').mockImplementation(function (...args) {
+        callIndex += 1;
+        // Let the first call (temp file flush) succeed, but reject the
+        // second call (directory sync) to simulate a platform where
+        // fsync-ing a directory handle isn't supported.
+        if (callIndex === 2) {
+          return Promise.reject(new Error('EPERM: operation not permitted, fsync'));
+        }
+        return originalSync.apply(this, args);
+      });
+
+      await expect(writeJson(filePath, { ok: true })).resolves.toBeUndefined();
+
+      const { readJson } = await importStore();
+      expect(await readJson(filePath)).toEqual({ ok: true });
+
+      syncSpy.mockRestore();
     });
   });
 });
