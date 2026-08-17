@@ -1,8 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { getSolverInputsVersion } from '../../../api/services/solver-inputs-version.ts';
+
+// saveSettings validates before writing, so the test payload must be a full
+// valid Settings object; start from the shipped defaults.
+const defaultSettings = JSON.parse(
+  await readFile(new URL('../../../api/defaults/default-settings.json', import.meta.url), 'utf8'),
+);
 
 let tmpDir;
 
@@ -46,7 +52,7 @@ describe('solver-inputs versioning', () => {
 
   it('saveSettings bumps on content changes, not on identical rewrites', async () => {
     const { saveSettings } = await import('../../../api/services/settings-store.ts?' + Date.now());
-    const settings = { stepSize_m: 15, batteryCapacity_Wh: 10000 };
+    const settings = { ...defaultSettings, stepSize_m: 15, batteryCapacity_Wh: 10000 };
 
     const before = getSolverInputsVersion();
     await saveSettings(settings);

@@ -19,10 +19,18 @@ const NUMERIC_FIELDS: (keyof Settings)[] = [
   'extendedHorizonDays',
 ];
 
+/** Thrown when settings fail validation; lets callers map it to a 400 instead of a generic 500. */
+export class SettingsValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SettingsValidationError';
+  }
+}
+
 function validateSettings(s: Settings): Settings {
   for (const field of NUMERIC_FIELDS) {
     if (!Number.isFinite(s[field] as number)) {
-      throw new Error(`Invalid numeric setting: ${field}`);
+      throw new SettingsValidationError(`Invalid numeric setting: ${field}`);
     }
   }
 
@@ -76,14 +84,19 @@ let lastSavedJson: string | undefined;
 
 /**
  * Persist settings to DATA_DIR/settings.json (pretty-printed).
+ *
+ * Validates (and clamps) before writing, so a bad payload throws a
+ * SettingsValidationError instead of poisoning the stored file — a broken
+ * settings.json would make every subsequent loadSettings() call fail.
  */
 export async function saveSettings(settings: Settings): Promise<void> {
-  const json = JSON.stringify(settings);
+  const validated = validateSettings({ ...settings });
+  const json = JSON.stringify(validated);
   if (json !== lastSavedJson) {
     lastSavedJson = json;
     bumpSolverInputsVersion();
   }
-  await writeJson(SETTINGS_PATH, settings);
+  await writeJson(SETTINGS_PATH, validated);
 }
 
 /**

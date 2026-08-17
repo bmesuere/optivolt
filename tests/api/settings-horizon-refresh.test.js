@@ -5,7 +5,7 @@ import app from '../../api/app.ts';
 vi.mock('../../api/services/settings-store.ts');
 vi.mock('../../api/services/prediction-forecast-runner.ts');
 
-import { loadSettings, saveSettings } from '../../api/services/settings-store.ts';
+import { loadSettings, saveSettings, loadDefaultSettings } from '../../api/services/settings-store.ts';
 import {
   buildPredictionRunConfig,
   runCombinedPredictionForecast,
@@ -26,6 +26,8 @@ describe('POST /settings — forecast refresh on horizon change', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     saveSettings.mockResolvedValue(undefined);
+    // The route whitelists incoming keys against the defaults shape.
+    loadDefaultSettings.mockResolvedValue(settingsWith(0));
     buildPredictionRunConfig.mockResolvedValue({ sensors: [] });
     runCombinedPredictionForecast.mockResolvedValue({ load: null, pv: null });
   });
