@@ -1,6 +1,20 @@
 #!/usr/bin/with-contenv bashio
 set -euo pipefail
 
+# Type stripping is default only on Node >=22.18 <23 or >=23.6; older Node
+# can't even parse api/index.ts, so this must run before the exec below.
+NODE_VERSION_STRING="$(node --version 2>/dev/null || true)"
+NODE_VERSION="${NODE_VERSION_STRING#v}"
+NODE_MAJOR="${NODE_VERSION%%.*}"
+NODE_MINOR="$(echo "${NODE_VERSION}" | cut -d. -f2)"
+if [ -z "${NODE_MAJOR}" ] \
+  || [ "${NODE_MAJOR}" -lt 22 ] \
+  || { [ "${NODE_MAJOR}" -eq 22 ] && [ "${NODE_MINOR}" -lt 18 ]; } \
+  || { [ "${NODE_MAJOR}" -eq 23 ] && [ "${NODE_MINOR}" -lt 6 ]; }; then
+  bashio::log.fatal "OptiVolt requires Node >=22.18 <23 or >=23.6 for TypeScript type stripping; found ${NODE_VERSION_STRING:-none}"
+  exit 1
+fi
+
 APP_DIR="/opt/optivolt"
 
 export HOST="0.0.0.0"

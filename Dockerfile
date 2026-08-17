@@ -1,7 +1,15 @@
 # Home Assistant passes BUILD_FROM automatically when building from this repo.
 # Default to the official Home Assistant base image based on architecture.
+# Pinned to a concrete tag (Alpine 3.24, docker-base release 2026.06.1)
+# rather than `:latest`: an unpinned tag ties our Node version (installed
+# below via `apk add nodejs`, unpinned since exact Alpine package versions
+# are brittle across releases) to whatever Alpine happens to ship on the
+# day of the build. If that ever drops below the Node version we need for
+# TypeScript type stripping (>=22.18), the add-on fails to boot with a
+# confusing parse error that's invisible to CI. Bump this deliberately when
+# updating.
 ARG BUILD_ARCH=amd64
-ARG BUILD_FROM=ghcr.io/home-assistant/${BUILD_ARCH}-base:latest
+ARG BUILD_FROM=ghcr.io/home-assistant/${BUILD_ARCH}-base:3.24-2026.06.1
 FROM $BUILD_FROM
 
 # Minimal runtime env

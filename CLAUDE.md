@@ -54,7 +54,7 @@ Tests use vitest with supertest for API tests. Test files mirror the source stru
 
 - ESM modules throughout (`"type": "module"` in package.json).
 - TypeScript is used in `api/` and `lib/`; browser files under `app/` remain build-free JavaScript modules.
-- Node.js >= 22 required.
+- Node.js >= 22.18 required (that's the version type stripping is enabled by default; earlier 22.x releases cannot run `api/index.ts` directly).
 - Express 5.
 - Unused variables prefixed with `_` (eslint rule).
 - ESLint also checks `.md` and `.css` files.

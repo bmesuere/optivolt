@@ -38,6 +38,8 @@ Plan and control a home energy system with forecasts, dynamic tariffs, and a day
 
 ### Standalone / Local Development
 
+Requires **Node.js >= 22.18** (server code runs as TypeScript directly via Node's type stripping, which is only enabled by default from that version onward).
+
 ```bash
 npm install
 npm run api       # or: npm run dev  (loads .env.local via dotenv-cli + nodemon)
