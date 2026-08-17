@@ -153,7 +153,7 @@ export interface PlanRow {
   pv2ev: number;        // PV → EV W
   b2ev: number;         // battery → EV W
   ev_charge: number;    // total EV charge power W
-  ev_charge_A: number;  // charge current A (ev_charge / 230 / phases)
+  ev_charge_A: number;  // charge current A (ev_charge / 230, single-phase)
   ev_charge_mode: EvChargeMode;
   ev_soc_percent: number;  // EV SoC %
 }
