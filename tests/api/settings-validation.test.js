@@ -39,6 +39,25 @@ describe('POST /settings validation', () => {
     expect(get.body.stepSize_m).toBe(15);
   });
 
+  it.each([
+    [{ dataSources: { load: 'bogus' } }, 'Invalid setting: dataSources.load must be one of vrm, api'],
+    [{ terminalSocValuation: 'bogus' }, 'Invalid setting: terminalSocValuation must be one of zero, min, avg, max, custom'],
+    [{ rebalanceEnabled: 'yes' }, 'Invalid setting: rebalanceEnabled must be a boolean'],
+    [{ haUrl: 42 }, 'Invalid setting: haUrl must be a string'],
+    [{ stepSize_m: 0 }, 'Invalid setting: stepSize_m must be > 0'],
+    [{ dischargeEfficiency_percent: 0 }, 'Invalid setting: dischargeEfficiency_percent must be in (0, 100]'],
+    [{ maxGridImport_W: -1 }, 'Invalid setting: maxGridImport_W must be >= 0'],
+  ])('rejects %j with a 400 and persists nothing', async (payload, message) => {
+    const res = await request(app).post('/settings').send(payload);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe(message);
+    await expect(readFile(settingsPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    // The stored settings are untouched, so GET still serves the defaults.
+    const get = await request(app).get('/settings');
+    expect(get.status).toBe(200);
+  });
+
   it('drops unknown keys from the payload and the persisted file', async () => {
     const res = await request(app).post('/settings').send({ bogusKey: 42, stepSize_m: 30 });
 
