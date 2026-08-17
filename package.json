@@ -23,7 +23,7 @@
     "lint": "npx eslint ."
   },
   "engines": {
-    "node": ">=22.18"
+    "node": ">=22.18 <23 || >=23.6"
   },
   "dependencies": {
     "express": "^5.2.1",
