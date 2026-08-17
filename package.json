@@ -15,15 +15,15 @@
   "type": "module",
   "main": "api/index.ts",
   "scripts": {
-    "api": "node ./api/index.ts",
-    "dev": "dotenv -e .env.local -- nodemon --exec node --ignore 'data/' ./api/index.ts",
+    "api": "node scripts/check-node-version.mjs && node ./api/index.ts",
+    "dev": "node scripts/check-node-version.mjs && dotenv -e .env.local -- nodemon --exec node --ignore 'data/' ./api/index.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "npx eslint ."
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
   "dependencies": {
     "express": "^5.2.1",
