@@ -13,6 +13,7 @@ import { refreshSeriesFromVrmAndPersist } from './vrm-refresh.ts';
 import { refreshPriceForecastAndPersist } from './price-forecast-service.ts';
 import { setDynamicEssSchedule } from './mqtt-service.ts';
 import { getRebalanceNudge, type RebalanceNudge } from './rebalance-nudge.ts';
+import { getSolverInputsVersion } from './solver-inputs-version.ts';
 import type { PlanRowWithDess, Data } from '../types.ts';
 
 // How many slots we push into Dynamic ESS
@@ -52,6 +53,10 @@ export interface RebalanceWindow {
 export interface ComputePlanResult {
   cfg: SolverConfig;
   data: Data;
+  /** Wall-clock time the solve finished; lets clients judge cache freshness. */
+  computedAtMs: number;
+  /** Solver-inputs version this plan was built from; see solver-inputs-version.ts. */
+  inputsVersion: number;
   timing: { startMs: number; stepMin: number };
   result: HighsSolution;
   rows: PlanRowWithDess[];
@@ -171,6 +176,10 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
     cfg = buildSolverConfigFromSettings(settings, applyPredictionAdjustmentsToData(data), timing.startMs);
   }
 
+  // Captured after all pre-solve persistence so a plan built from inputs that
+  // are mutated later (even by our own post-solve bookkeeping) reads as stale.
+  const inputsVersion = getSolverInputsVersion();
+
   const lpText = buildLP(cfg);
   const highs = await getHighsInstance();
   const hasRebalance = (cfg.rebalanceRemainingSlots ?? 0) > 0;
@@ -232,7 +241,7 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const rebalanceNudge = getRebalanceNudge(data);
 
-  lastPlan = { cfg, data, timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
+  lastPlan = { cfg, data, computedAtMs: Date.now(), inputsVersion, timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
   return lastPlan;
 }
 

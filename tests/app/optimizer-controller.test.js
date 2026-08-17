@@ -51,6 +51,7 @@ function setupController(overrides = {}) {
     drawLoadPvGrouped: vi.fn(),
     drawPricesStepLines: vi.fn(),
     drawSocChart: vi.fn(),
+    fetchLastPlan: vi.fn().mockRejectedValue(new Error('no cached plan')),
     renderTable: vi.fn(),
     requestRemoteSolve: vi.fn().mockResolvedValue({
       initialSoc_percent: 42,
@@ -221,6 +222,43 @@ describe('optimizer controller', () => {
 
     expect(document.querySelector('.chart-empty span').textContent)
       .toBe('Run the optimizer to see results');
+  });
+
+  it('renders the server-cached plan without solving and returns the payload', async () => {
+    const { controller, els, rows, services, summary } = setupController();
+    const payload = {
+      computedAtMs: Date.now() - 5 * 60_000,
+      initialSoc_percent: 42,
+      inputsCurrent: true,
+      rows,
+      solverStatus: 'optimal',
+      summary,
+      tsStart: '2026-05-01T12:00:00.000Z',
+    };
+    services.fetchLastPlan.mockResolvedValue(payload);
+
+    await expect(controller.loadLastPlan()).resolves.toBe(payload);
+
+    expect(services.requestRemoteSolve).not.toHaveBeenCalled();
+    expect(services.updateSummaryUI).toHaveBeenCalledWith(els, summary);
+    expect(services.renderTable).toHaveBeenCalledTimes(1);
+    expect(services.updateEvPanel).toHaveBeenCalledWith(els, rows, summary, 30, expect.anything());
+    expect(els.status.textContent).toBe('Loaded existing plan');
+  });
+
+  it('reports no cached plan without touching the UI', async () => {
+    const { controller, els, services } = setupController();
+
+    // 404 surfaces as a rejection from the API client.
+    await expect(controller.loadLastPlan()).resolves.toBeNull();
+
+    // An empty plan is equally unusable.
+    services.fetchLastPlan.mockResolvedValue({ rows: [] });
+    await expect(controller.loadLastPlan()).resolves.toBeNull();
+
+    expect(services.updateSummaryUI).not.toHaveBeenCalled();
+    expect(services.renderTable).not.toHaveBeenCalled();
+    expect(els.status.textContent).toBe('');
   });
 
   it('re-reads the cached forecasts when the server regenerated them', async () => {

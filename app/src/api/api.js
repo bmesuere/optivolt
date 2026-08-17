@@ -18,6 +18,11 @@ export function requestRemoteSolve(body = {}) {
   return postJson("/calculate", body);
 }
 
+// The server's cached last plan; 404s (throws) when none is current.
+export function fetchLastPlan() {
+  return getJson("/calculate/last");
+}
+
 // --- Data ---
 export function fetchStoredData() {
   return getJson("/data");

@@ -38,6 +38,18 @@ describe('mountViewToggles', () => {
     setStandardWindowEndMs(null);
   });
 
+  it('styles the segments at mount, before the first update()', () => {
+    localStorage.setItem('optivolt:flowsResolution', '60');
+    const el = host();
+    mountViewToggles(el);
+
+    // The stored choice reads as active straight away; no bare buttons while
+    // the initial solve runs.
+    expect(el.querySelector('[data-res="60"]').getAttribute('aria-pressed')).toBe('true');
+    expect(el.querySelector('[data-res="15"]').getAttribute('aria-pressed')).toBe('false');
+    expect(el.querySelector('[data-res="15"]').className).not.toBe('');
+  });
+
   it('always shows the resolution pair, and the range pair only when extended', () => {
     const el = host();
     const toggles = mountViewToggles(el);

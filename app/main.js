@@ -1,4 +1,4 @@
-import { refreshVrmSettings } from "./src/api/api.js";
+import { fetchLastPlan, refreshVrmSettings } from "./src/api/api.js";
 import { loadInitialConfig } from "./src/config-store.js";
 import { initPredictionsTab, reloadStoredForecasts } from "./src/predictions.js";
 import {
@@ -126,7 +126,7 @@ async function boot() {
   });
 
   setupTabSwitcher();
-  await initPredictionsTab();
+  const { forecastRun } = await initPredictionsTab();
 
   // Wire inputs with callbacks
   wireGlobalInputs(els, {
@@ -169,8 +169,24 @@ async function boot() {
   const optimizerPanel = document.getElementById('panel-optimizer');
   if (optimizerPanel) revealCards(optimizerPanel);
 
-  // Initial compute
-  await optimizer.onRun();
+  // Initial display: paint the server's cached plan first (instant when one
+  // still covers now). Whether the boot solve can be skipped is decided only
+  // after the forecast run kicked off by the predictions tab settles, because
+  // that run may rewrite the stored load/PV series the plan was built from —
+  // so the plan is re-checked afterwards. The solve is skipped only when the
+  // plan is younger than one HA recompute period (the automation recomputes
+  // every quarter hour, so such a plan is what a fresh solve would produce)
+  // AND no solver input changed since it solved.
+  const CACHED_PLAN_FRESH_MS = 16 * 60_000;
+  const painted = await optimizer.loadLastPlan();
+  if (painted) await forecastRun;
+  const cached = painted ? await fetchLastPlan().catch(() => null) : null;
+  const canSkipSolve =
+    cached?.inputsCurrent === true &&
+    Date.now() - cached.computedAtMs <= CACHED_PLAN_FRESH_MS;
+  if (!canSkipSolve) {
+    await optimizer.onRun();
+  }
 }
 
 // ---------- Actions ----------

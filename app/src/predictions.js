@@ -52,7 +52,10 @@ export async function initPredictionsTab() {
     onPvForecast,
   });
   forecastChart.wireAdjustmentPopover();
-  onForecastAll();
+  // Kicked off but not awaited: the forecast run must not block boot. The
+  // promise is handed back so boot can wait for it before judging whether the
+  // cached plan's inputs are still current — this run may rewrite them.
+  return { forecastRun: onForecastAll() };
 }
 
 function refreshAdjustedForecastsFromRaw() {
