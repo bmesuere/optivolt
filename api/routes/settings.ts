@@ -30,8 +30,6 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     );
 
     const prevSettings = await loadSettings();
-    // GET /settings redacts the HA token to a sentinel and the UI posts the
-    // full form snapshot back, so the sentinel means "keep the stored token".
     if (incoming.haToken === HA_TOKEN_SENTINEL) {
       incoming.haToken = prevSettings.haToken;
     }

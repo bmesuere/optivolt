@@ -91,8 +91,7 @@ describe('Integration: API', () => {
   });
 
   describe('haToken redaction', () => {
-    // Must match HA_TOKEN_SENTINEL in api/settings-redaction.ts; hardcoded so
-    // an accidental sentinel change breaks the tests.
+    // Hardcoded so an accidental change to HA_TOKEN_SENTINEL breaks the tests.
     const SENTINEL = '__optivolt_redacted__';
 
     it('GET /settings returns the sentinel instead of the stored token', async () => {
@@ -125,7 +124,6 @@ describe('Integration: API', () => {
       expect(saveSettings).toHaveBeenCalledWith(
         expect.objectContaining({ haToken: 'secret-ha-token', maxSoc_percent: 90 }),
       );
-      // The echoed settings are redacted too.
       expect(res.body.settings.haToken).toBe(SENTINEL);
       expect(JSON.stringify(res.body)).not.toContain('secret-ha-token');
     });

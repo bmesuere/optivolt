@@ -57,7 +57,7 @@ Create a `.env.local` file in the project root to set these variables for local 
 
 Optivolt is designed to be coordinated heavily via Home Assistant. Below are the steps and examples to automate its features.
 
-> **Note:** The examples below call the App over a direct host port (`localhost:3070`). This port mapping is **disabled by default** — the App is only reachable through ingress until you map container port `3000` to a host port (e.g. `3070`) in the Optivolt App's network configuration. Be aware that this exposes the unauthenticated API to your LAN.
+> **Note:** The examples below call the App over the direct host port (`localhost:3070`, mapped by default). This API is unauthenticated, so any device on your LAN can reach it; if you don't need direct access, clear the port mapping in the Optivolt App's network configuration to make it ingress-only.
 
 ### 1. Trigger the Optimizer Loop
 Optivolt relies on a periodic trigger to fetch new data, calculate a plan, and (optionally) push it to Victron. Create a REST command to call the `/calculate/` endpoint:

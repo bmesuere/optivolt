@@ -16,13 +16,10 @@ panel_title: Optivolt
 panel_icon: mdi:home-battery-outline
 homeassistant_api: true
 
-# Direct LAN access to the (unauthenticated) API is opt-in: no host port is
-# mapped by default, so the add-on is only reachable through ingress. Set a
-# port (e.g. 3070) in the add-on's network configuration to enable it.
 ports:
-  "3000/tcp": null
+  "3000/tcp": 3070
 ports_description:
-  "3000/tcp": Direct API access, disabled by default (use ingress for UI)
+  "3000/tcp": Direct API access (use ingress for UI)
 
 # Persist add-on state in /data
 map:
