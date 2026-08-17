@@ -8,7 +8,7 @@ vi.mock('../../api/services/data-store.ts');
 vi.mock('../../api/services/vrm-refresh.ts');
 vi.mock('../../api/services/mqtt-service.ts');
 
-import { loadSettings, saveSettings } from '../../api/services/settings-store.ts';
+import { loadSettings, saveSettings, loadDefaultSettings } from '../../api/services/settings-store.ts';
 import { loadData } from '../../api/services/data-store.ts';
 import { refreshSeriesFromVrmAndPersist } from '../../api/services/vrm-refresh.ts';
 import { setDynamicEssSchedule } from '../../api/services/mqtt-service.ts';
@@ -67,6 +67,12 @@ describe('Integration: API', () => {
 
     vi.resetAllMocks();
     loadSettings.mockResolvedValue({ ...mockSettings });
+    // The POST whitelist iterates the defaults' keys, so haToken/dataSources must be present.
+    loadDefaultSettings.mockResolvedValue({
+      ...mockSettings,
+      haToken: '',
+      dataSources: { load: 'vrm', pv: 'vrm', prices: 'vrm', soc: 'mqtt' },
+    });
     loadData.mockResolvedValue({ ...mockData });
     refreshSeriesFromVrmAndPersist.mockResolvedValue();
     setDynamicEssSchedule.mockResolvedValue();
@@ -142,7 +148,10 @@ describe('Integration: API', () => {
     });
 
     it('POST /settings with an empty string clears the stored token', async () => {
-      loadSettings.mockResolvedValue({ ...mockSettings, haToken: 'secret-ha-token' });
+      // The response echoes a re-read: first call is prevSettings, second the cleared form.
+      loadSettings
+        .mockResolvedValueOnce({ ...mockSettings, haToken: 'secret-ha-token' })
+        .mockResolvedValueOnce({ ...mockSettings, haToken: '' });
 
       const res = await request(app).post('/settings').send({ haToken: '' });
 

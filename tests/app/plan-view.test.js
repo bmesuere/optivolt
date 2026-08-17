@@ -93,6 +93,21 @@ describe('aggregateRowsHourly', () => {
     expect(hourly[1].g2l).toBe(1000);
   });
 
+  it('averages ev_charge_A as energy-mean, not the last slot value', () => {
+    // Only the first of four 15-min slots has EV charging.
+    const rows = makeRows(new Date(2026, 4, 1, 10, 0), 4, { ev_charge: 0, ev_charge_A: 0 });
+    rows[0].ev_charge = 4600; rows[0].ev_charge_A = 20;
+    const [hour] = aggregateRowsHourly(rows, 15);
+    // 20 A for one of four slots → energy-mean 5 A, not the last slot's 0 A.
+    expect(hour.ev_charge_A).toBe(5);
+  });
+
+  it('keeps ev_charge_A unchanged for a full-hour constant charge', () => {
+    const rows = makeRows(new Date(2026, 4, 1, 10, 0), 4, { ev_charge: 4600, ev_charge_A: 20 });
+    const [hour] = aggregateRowsHourly(rows, 15);
+    expect(hour.ev_charge_A).toBe(20);
+  });
+
   it('only carries original predictions when a slot had one', () => {
     const rows = makeRows(new Date(2026, 4, 1, 10, 0), 4);
     expect(aggregateRowsHourly(rows, 15)[0].originalLoad).toBeUndefined();
