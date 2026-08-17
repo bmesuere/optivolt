@@ -65,7 +65,7 @@ export function clampRebalanceWindow(window, visibleLength) {
 const ENERGY_MEAN_KEYS = [
   "load", "pv",
   "g2l", "g2b", "pv2l", "pv2b", "pv2g", "b2l", "b2g",
-  "g2ev", "pv2ev", "b2ev", "ev_charge",
+  "g2ev", "pv2ev", "b2ev", "ev_charge", "ev_charge_A",
   "imp", "exp",
 ];
 const SUM_KEYS = ["importCost_cents", "exportCost_cents"];
