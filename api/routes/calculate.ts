@@ -35,12 +35,12 @@ function planCoversNow(plan: ComputePlanResult): boolean {
   return Date.now() < lastRow.timestampMs + plan.timing.stepMin * 60_000;
 }
 
-router.get('/last', (_req: Request, res: Response) => {
+router.get('/last', (_req: Request, res: Response, next: NextFunction) => {
   const plan = getLastPlan();
   // Only an optimal plan is worth serving: computePlan caches every solve,
   // and an infeasible/unbounded one holds all-zero garbage rows.
   if (!plan || plan.result.Status !== 'Optimal' || !planCoversNow(plan)) {
-    res.status(404).json({ error: 'No current plan available' });
+    next(new HttpError(404, 'No current plan available'));
     return;
   }
   res.json({
