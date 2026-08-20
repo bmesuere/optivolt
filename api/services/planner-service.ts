@@ -16,7 +16,7 @@ import { getQuarterStart } from '../../lib/time-series-utils.ts';
 import { refreshSeriesFromVrmAndPersist } from './vrm-refresh.ts';
 import { refreshPriceForecastAndPersist } from './price-forecast-service.ts';
 import { setDynamicEssSchedule } from './mqtt-service.ts';
-import { getRebalanceNudge, type RebalanceNudge } from './rebalance-nudge.ts';
+import { getRebalanceNudge, recordFullSocObservation, type RebalanceNudge } from './rebalance-nudge.ts';
 import { getSolverInputsVersion } from './solver-inputs-version.ts';
 import type { PlanRowWithDess, Data, Settings } from '../types.ts';
 
@@ -149,7 +149,10 @@ async function readEvStateFromHa(settings: Settings): Promise<EvLiveState | unde
 
 /**
  * Pre-solve normalization of persisted state: record the live EV state, prune
- * expired prediction adjustments, and normalize EV schedule entries.
+ * expired prediction adjustments, normalize EV schedule entries, and backfill
+ * the full-SoC observation (saveData also applies it, but the in-memory data
+ * must carry it too — the rebalance nudge is computed from it, and persisted
+ * data from before the centralization may lack it).
  */
 function normalizePersistedData(loadedData: Data, evState: EvLiveState | undefined, startMs: number): { data: Data; changed: boolean } {
   const withEvState = recordEvLastState(loadedData, evState, startMs);
@@ -157,9 +160,10 @@ function normalizePersistedData(loadedData: Data, evState: EvLiveState | undefin
   // Pass the just-fetched EV state: the persisted evLastState's observedAt only moves on state
   // changes, so normalization would otherwise treat a long-unchanged plug state as stale.
   const prunedEv = normalizeEvScheduleEntries(pruned.data, startMs, evState);
+  const observed = recordFullSocObservation(prunedEv.data);
   return {
-    data: prunedEv.data,
-    changed: withEvState !== loadedData || pruned.changed || prunedEv.changed,
+    data: observed,
+    changed: withEvState !== loadedData || pruned.changed || prunedEv.changed || observed !== prunedEv.data,
   };
 }
 

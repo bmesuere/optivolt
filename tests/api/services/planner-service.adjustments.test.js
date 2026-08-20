@@ -66,4 +66,23 @@ describe('getSolverInputs — prediction adjustments', () => {
     expect(data.pv.values).toEqual([200, 200, 200, 200]);
     expect(saveData).not.toHaveBeenCalled();
   });
+
+  it('backfills a missing lastFullSocAt into the returned data and persists it', async () => {
+    // Persisted data from before saveData recorded the observation itself:
+    // soc already 100% but no lastFullSocAt, and nothing else to normalize.
+    loadData.mockResolvedValue({
+      load: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [100, 100, 100, 100] },
+      pv: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [200, 200, 200, 200] },
+      importPrice: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [10, 10, 10, 10] },
+      exportPrice: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [5, 5, 5, 5] },
+      soc: { timestamp: '2099-01-01T00:00:00.000Z', value: 100 },
+    });
+
+    const { data } = await getSolverInputs();
+
+    expect(data.lastFullSocAt).toBe('2099-01-01T00:00:00.000Z');
+    expect(saveData).toHaveBeenCalledWith(expect.objectContaining({
+      lastFullSocAt: '2099-01-01T00:00:00.000Z',
+    }));
+  });
 });
