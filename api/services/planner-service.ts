@@ -1,5 +1,3 @@
-// @ts-expect-error — no .d.ts alongside the vendor build artifact; type is asserted via HighsInstance below
-import highsFactory from '../../vendor/highs-build/highs.js';
 import { mapRowsToDessV2 } from '../../lib/dess-mapper.ts';
 import { buildLP } from '../../lib/build-lp.ts';
 import { parseSolution, type HighsSolution } from '../../lib/parse-solution.ts';
@@ -18,6 +16,7 @@ import { refreshPriceForecastAndPersist } from './price-forecast-service.ts';
 import { setDynamicEssSchedule } from './mqtt-service.ts';
 import { getRebalanceNudge, recordFullSocObservation, type RebalanceNudge } from './rebalance-nudge.ts';
 import { getSolverInputsVersion } from './solver-inputs-version.ts';
+import { solveLp } from './solve-runner.ts';
 import type { PlanRowWithDess, Data, Settings } from '../types.ts';
 
 // How many slots we push into Dynamic ESS
@@ -34,20 +33,6 @@ const SOLVE_TIME_LIMIT_S = 30;
 const MIP_REL_GAP = 0.005;
 const MIP_REL_GAP_LARGE = 0.02;
 const LARGE_MILP_SLOTS = 200;
-
-// Lazy, shared HiGHS instance
-type HighsInstance = Awaited<ReturnType<typeof highsFactory>>;
-let highsPromise: Promise<HighsInstance> | undefined;
-
-async function getHighsInstance(): Promise<HighsInstance> {
-  if (!highsPromise) {
-    highsPromise = highsFactory({}).catch((error: unknown) => {
-      highsPromise = undefined;
-      throw error;
-    });
-  }
-  return highsPromise;
-}
 
 export type { RebalanceWindow };
 
@@ -101,11 +86,12 @@ function attachOriginalPredictionValues(rows: PlanRow[], data: Data): PlanRow[] 
 }
 
 /**
- * Solver options for a config. The solve runs synchronously on the event
- * loop, so a runaway MIP would block every HTTP request; the time limit
- * bounds that (a limited solve comes back non-Optimal and is refused for
- * hardware writes). The EV × rebalance combination on a multi-day horizon
- * gets the loosened MIP gap; everything else keeps the tight default.
+ * Solver options for a config. The solve runs on a worker thread, so a
+ * runaway MIP no longer blocks HTTP requests; the time limit still bounds
+ * how long a schedule write can be delayed (a limited solve comes back
+ * non-Optimal and is refused for hardware writes). The EV × rebalance
+ * combination on a multi-day horizon gets the loosened MIP gap; everything
+ * else keeps the tight default.
  */
 export function selectSolveOptions(cfg: SolverConfig): { mip_rel_gap?: number; mip_abs_gap?: number; time_limit: number } {
   const hasEv = cfg.ev != null;
@@ -247,17 +233,10 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   const inputsVersion = getSolverInputsVersion();
 
   const lpText = buildLP(cfg);
-  const highs = await getHighsInstance();
   const hasRebalance = (cfg.rebalance?.remainingSlots ?? 0) > 0;
   const solveOptions = selectSolveOptions(cfg);
-  let result: ReturnType<typeof highs.solve>;
   const t0 = performance.now();
-  try {
-    result = highs.solve(lpText, solveOptions);
-  } catch (err) {
-    highsPromise = undefined; // force re-initialisation on next call
-    throw err;
-  }
+  const result = await solveLp(lpText, solveOptions);
   const solveMs = performance.now() - t0;
   const evCfg = cfg.ev;
   const evInfo = evCfg ? {
