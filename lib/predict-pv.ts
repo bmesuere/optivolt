@@ -19,7 +19,7 @@
  *   - Bird Clear Sky: evaluated at mid-interval (e.g. 13:30 UTC).
  */
 
-import { type ForecastSeries, computeErrorMetrics, type PredictionResult, type ValidationMetrics } from './time-series-utils.ts';
+import { computeErrorMetrics, type PredictionResult, type ValidationMetrics } from './time-series-utils.ts';
 
 // ----------------------------- Helpers -----------------------------------
 
