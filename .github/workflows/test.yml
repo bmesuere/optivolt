@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Use Node.js 24
       uses: actions/setup-node@v4
@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     # ubuntu-latest runners are amd64, matching the Dockerfile's pinned
     # default-base stage (the HA builder overrides BUILD_FROM per arch).
@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     # frenck/action-addon-linter was renamed upstream to
     # frenck/action-app-linter (Home Assistant "add-ons" -> "apps"); it
