@@ -9,6 +9,7 @@ import {
   loadActiveAdjustmentsAndPrune,
   updateStoredPredictionAdjustment,
 } from '../services/prediction-adjustment-store.ts';
+import { isAddon } from '../env.ts';
 import {
   buildPredictionRunConfig,
   executeLoadForecast,
@@ -26,7 +27,7 @@ router.get('/config', async (_req: Request, res: Response, next: NextFunction) =
     const config = await loadPredictionConfig();
     res.json({
       ...config,
-      isAddon: !!process.env.SUPERVISOR_TOKEN,
+      isAddon: isAddon(),
     });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to read prediction config'));

@@ -1,16 +1,12 @@
 import { VictronMqttClient } from './victron-mqtt-client.ts';
 import type { PlanRowWithDess } from '../types.ts';
+import { getMqttEnv } from '../env.ts';
 
 let victronClient: VictronMqttClient | null = null;
 
 function getVictronClient(): VictronMqttClient {
   if (!victronClient) {
-    const host = process.env.MQTT_HOST ?? 'venus.local';
-    const port = Number(process.env.MQTT_PORT ?? '1883');
-    const username = process.env.MQTT_USERNAME ?? '';
-    const password = process.env.MQTT_PASSWORD ?? '';
-
-    victronClient = new VictronMqttClient({ host, port, username, password });
+    victronClient = new VictronMqttClient(getMqttEnv());
   }
 
   return victronClient;

@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { HttpError, toHttpError } from '../http-errors.ts';
 import { loadSettings } from '../services/settings-store.ts';
 import { fetchHaEntityState } from '../services/ha-client.ts';
+import { isAddon } from '../env.ts';
 
 const router = express.Router();
 
@@ -14,7 +15,7 @@ router.get('/entity/:entityId', async (req: Request, res: Response, next: NextFu
     }
 
     const settings = await loadSettings();
-    if (!settings.haUrl && !process.env.SUPERVISOR_TOKEN) {
+    if (!settings.haUrl && !isAddon()) {
       throw new HttpError(422, 'HA URL is not configured');
     }
 

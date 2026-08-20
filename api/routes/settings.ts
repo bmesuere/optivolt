@@ -13,13 +13,14 @@ import {
   runCombinedPredictionForecast,
 } from '../services/prediction-forecast-runner.ts';
 import type { Settings } from '../types.ts';
+import { isAddon } from '../env.ts';
 
 const router = express.Router();
 
 router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const settings = await loadSettings();
-    res.json({ ...redactSettingsForClient(settings), isAddon: !!process.env.SUPERVISOR_TOKEN });
+    res.json({ ...redactSettingsForClient(settings), isAddon: isAddon() });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to read settings'));
   }
