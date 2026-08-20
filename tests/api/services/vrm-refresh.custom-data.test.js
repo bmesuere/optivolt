@@ -169,4 +169,31 @@ describe('vrm-refresh logic with custom data', () => {
       lastFullSocAt: '2024-01-01T00:00:00.000Z',
     }));
   });
+
+  it('preserves persisted fields the refresh does not know about', async () => {
+    // Regression: the refresh once rebuilt data from an explicit key list and
+    // silently dropped evLastState when it was added. The spread must carry
+    // every field, including ones added after this test was written.
+    mockFetchForecasts.mockResolvedValue({ timestamps: ['2024-01-13T10:00:00.000Z'], load_W: [1], pv_W: [2] });
+    mockFetchPrices.mockResolvedValue({ timestamps: ['2024-01-13T10:00:00.000Z'], importPrice_cents_per_kwh: [3], exportPrice_cents_per_kwh: [4] });
+    const evLastState = { pluggedIn: true, soc_percent: 63, observedAt: '2024-01-13T09:00:00.000Z' };
+    loadData.mockResolvedValue({
+      load: { start: '2024-01-01T00:00:00.000Z', values: [] },
+      pv: { start: '2024-01-01T00:00:00.000Z', values: [] },
+      importPrice: { start: '2024-01-01T00:00:00.000Z', values: [] },
+      exportPrice: { start: '2024-01-01T00:00:00.000Z', values: [] },
+      soc: { value: 50, timestamp: '2024-01-01T00:00:00.000Z' },
+      evLastState,
+      schemaVersion: 1,
+      someFutureField: 'must survive',
+    });
+
+    await refreshSeriesFromVrmAndPersist();
+
+    expect(saveData).toHaveBeenCalledWith(expect.objectContaining({
+      evLastState,
+      schemaVersion: 1,
+      someFutureField: 'must survive',
+    }));
+  });
 });

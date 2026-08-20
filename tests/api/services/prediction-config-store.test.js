@@ -111,4 +111,50 @@ describe('prediction-config-store', () => {
       expect(config).not.toHaveProperty('activeConfig');
     });
   });
+
+  describe('schema versioning', () => {
+    it('stamps schemaVersion on save and returns it on load', async () => {
+      const { loadPredictionConfig, savePredictionConfig, PREDICTION_CONFIG_SCHEMA_VERSION } = await importStore();
+
+      const config = await loadPredictionConfig();
+      expect(config.schemaVersion).toBe(PREDICTION_CONFIG_SCHEMA_VERSION);
+
+      await savePredictionConfig(config);
+      const reloaded = await loadPredictionConfig();
+      expect(reloaded.schemaVersion).toBe(PREDICTION_CONFIG_SCHEMA_VERSION);
+    });
+
+    it('preserves a newer on-disk schemaVersion through load and save (downgrade safety)', async () => {
+      const { loadPredictionConfig, savePredictionConfig, PREDICTION_CONFIG_SCHEMA_VERSION } = await importStore();
+      await writeFile(
+        path.join(tmpDir, 'prediction-config.json'),
+        JSON.stringify({ sensors: [], derived: [], schemaVersion: PREDICTION_CONFIG_SCHEMA_VERSION + 1 }),
+        'utf8',
+      );
+
+      const config = await loadPredictionConfig();
+      expect(config.schemaVersion).toBe(PREDICTION_CONFIG_SCHEMA_VERSION + 1);
+
+      await savePredictionConfig(config);
+      const reloaded = await loadPredictionConfig();
+      expect(reloaded.schemaVersion).toBe(PREDICTION_CONFIG_SCHEMA_VERSION + 1);
+    });
+
+    it('still migrates a pre-versioning activeConfig file', async () => {
+      await writeFile(
+        path.join(tmpDir, 'prediction-config.json'),
+        JSON.stringify({
+          activeConfig: { sensor: 'sensor.load', lookbackWeeks: 3, dayFilter: 'all', aggregation: 'mean' },
+        }),
+        'utf8',
+      );
+
+      const { loadPredictionConfig } = await importStore();
+      const config = await loadPredictionConfig();
+
+      expect(config.activeType).toBe('historical');
+      expect(config.historicalPredictor).toMatchObject({ sensor: 'sensor.load', lookbackWeeks: 3 });
+      expect(config.activeConfig).toBeUndefined();
+    });
+  });
 });

@@ -75,15 +75,35 @@ export function validateData(d: Data): Data {
   return d;
 }
 
+export const DATA_SCHEMA_VERSION = 1;
+
 /**
- * Load stored data or fall back to defaults.
+ * Bring persisted data of any prior shape up to the current schema.
+ * Version 0 = files written before versioning existed. Missing keys fall back
+ * to defaults instead of throwing on boot, so adding a required field to Data
+ * can never brick an existing install.
+ */
+function migrateData(raw: Partial<Data>, defaults: Data): Data {
+  const version = typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 0;
+  if (version > DATA_SCHEMA_VERSION) {
+    console.warn(`data.json schemaVersion ${version} is newer than supported ${DATA_SCHEMA_VERSION}; loading best-effort`);
+  }
+  // v0 → v1: no shape change — versioning introduced.
+  // A newer on-disk marker is preserved (not downgraded): relabelling a
+  // v(N+1) file as vN would make the next upgrade re-run its migration on
+  // already-migrated state.
+  return { ...defaults, ...raw, schemaVersion: Math.max(version, DATA_SCHEMA_VERSION) };
+}
+
+/**
+ * Load stored data (migrated to the current schema) or fall back to defaults.
  */
 export async function loadData(): Promise<Data> {
+  const defaults = await readJson<Data>(DEFAULT_PATH);
   try {
-    return validateData(await readJson<Data>(DATA_PATH));
+    return validateData(migrateData(await readJson<Partial<Data>>(DATA_PATH), defaults));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    const defaults = await readJson<Data>(DEFAULT_PATH);
 
     // Shift defaults to "start of current hour" so we have full 24h of future data
     const now = new Date();
@@ -96,7 +116,7 @@ export async function loadData(): Promise<Data> {
     defaults.exportPrice.start = startTimeStr;
     defaults.soc.timestamp = startTimeStr;
 
-    return validateData(defaults);
+    return validateData({ ...defaults, schemaVersion: DATA_SCHEMA_VERSION });
   }
 }
 
@@ -113,7 +133,7 @@ let lastSavedJson: string | undefined;
  * up-to-date lastFullSocAt even when the caller's in-memory copy does not.
  */
 export async function saveData(data: Data): Promise<void> {
-  const next = recordFullSocObservation(validateData(data));
+  const next = recordFullSocObservation(validateData({ ...data, schemaVersion: Math.max(data.schemaVersion ?? 0, DATA_SCHEMA_VERSION) }));
   const json = JSON.stringify(next);
   if (json !== lastSavedJson) {
     lastSavedJson = json;
