@@ -1,16 +1,18 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
-import { HttpError, assertCondition, toHttpError } from '../http-errors.ts';
+import { HttpError, toHttpError } from '../http-errors.ts';
 import { refreshSettingsFromVrmAndPersist } from '../services/vrm-refresh.ts';
 import { redactSettingsForClient } from '../settings-redaction.ts';
+import { getVrmCredentials } from '../env.ts';
 
 const router = express.Router();
 
 function validateEnvOrThrow(): void {
-  const installationId = (process.env.VRM_INSTALLATION_ID ?? '').trim();
-  const token = (process.env.VRM_TOKEN ?? '').trim();
-  assertCondition(installationId.length > 0, 400, 'VRM Site ID not configured in add-on settings');
-  assertCondition(token.length > 0, 400, 'VRM API token not configured in add-on settings');
+  try {
+    getVrmCredentials();
+  } catch (err) {
+    throw new HttpError(400, err instanceof Error ? err.message : String(err));
+  }
 }
 
 function asHttp(error: unknown, message: string, defaultStatus = 502): HttpError {

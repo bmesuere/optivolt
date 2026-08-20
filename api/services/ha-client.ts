@@ -8,6 +8,7 @@
 
 import type { HaReading } from '../../lib/ha-postprocess.ts';
 import { fetchWithTimeout } from '../../lib/fetch-utils.ts';
+import { supervisorToken } from '../env.ts';
 
 const HA_ENTITY_TIMEOUT_MS = 5000;
 
@@ -50,9 +51,9 @@ export async function fetchHaEntityState({
   entityId,
   timeoutMs = HA_ENTITY_TIMEOUT_MS,
 }: FetchHaEntityStateOptions): Promise<HaEntityState> {
-  const isAddon = !!process.env.SUPERVISOR_TOKEN;
-  const baseUrl = isAddon ? 'http://supervisor/core' : wsUrlToHttp(haUrl);
-  const token: string = isAddon ? process.env.SUPERVISOR_TOKEN! : haToken;
+  const addonToken = supervisorToken();
+  const baseUrl = addonToken ? 'http://supervisor/core' : wsUrlToHttp(haUrl);
+  const token: string = addonToken ?? haToken;
 
   const url = `${baseUrl}/api/states/${encodeURIComponent(entityId)}`;
   const res = await fetchWithTimeout(
@@ -98,9 +99,9 @@ export async function fetchHaStats({
   timeoutMs = 30000,
 }: FetchHaStatsOptions): Promise<Record<string, HaReading[]>> {
   // If running as an add-on, always prioritize the supervisor proxy
-  const isAddon = !!process.env.SUPERVISOR_TOKEN;
-  const targetUrl = isAddon ? 'ws://supervisor/core/websocket' : haUrl;
-  const targetToken: string = isAddon ? process.env.SUPERVISOR_TOKEN! : haToken;
+  const addonToken = supervisorToken();
+  const targetUrl = addonToken ? 'ws://supervisor/core/websocket' : haUrl;
+  const targetToken: string = addonToken ?? haToken;
 
   const ws = new WebSocket(targetUrl);
 

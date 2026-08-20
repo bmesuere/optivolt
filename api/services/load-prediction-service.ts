@@ -15,6 +15,7 @@ import {
 import type { DayFilter, Aggregation } from '../../lib/load-predictor-historical.ts';
 import type { PredictionRunConfig } from '../types.ts';
 import { getForecastTimeRange, buildForecastSeries, computeErrorMetrics, type ForecastSeries, type PredictionResult } from '../../lib/time-series-utils.ts';
+import { isAddon } from '../env.ts';
 
 type PredictTarget = Pick<StatRecord, 'date' | 'time' | 'hour' | 'dayOfWeek'> & { value?: number | null };
 
@@ -114,7 +115,7 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
       config.includeRecent !== false &&
       historicalPredictor?.sensor &&
       sensors.length > 0 &&
-      (!!process.env.SUPERVISOR_TOKEN || (haUrl.length > 0 && haToken.length > 0));
+      (isAddon() || (haUrl.length > 0 && haToken.length > 0));
 
     if (!canComputeAccuracy) {
       return { forecast, recent: [], metrics: { mae: NaN, rmse: NaN, mape: NaN, n: 0 } };

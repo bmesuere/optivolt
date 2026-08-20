@@ -9,6 +9,7 @@ import { loadData, saveData } from './data-store.ts';
 import { loadSettings } from './settings-store.ts';
 import { applyPredictionAdjustmentsToSeries, pruneExpiredPredictionAdjustments } from './prediction-adjustments.ts';
 import { loadActiveAdjustmentsAndPrune } from './prediction-adjustment-store.ts';
+import { isAddon } from '../env.ts';
 
 export async function buildPredictionRunConfig(): Promise<PredictionRunConfig> {
   const [config, settings] = await Promise.all([loadPredictionConfig(), loadSettings()]);
@@ -134,7 +135,7 @@ function logPredictionCall(type: string, meta: Record<string, unknown>): void {
 
 function assertHaConnection(config: PredictionRunConfig): void {
   assertCondition(
-    !!process.env.SUPERVISOR_TOKEN || (config.haUrl.length > 0 && config.haToken.length > 0),
+    isAddon() || (config.haUrl.length > 0 && config.haToken.length > 0),
     400,
     'haUrl and haToken are required when not running as an add-on'
   );

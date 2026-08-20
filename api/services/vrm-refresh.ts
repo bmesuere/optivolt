@@ -5,13 +5,10 @@ import { loadSettings, saveSettings } from './settings-store.ts';
 import { loadData, saveData } from './data-store.ts';
 import { readVictronSocPercent, readVictronSocLimits } from './mqtt-service.ts';
 import type { Data } from '../types.ts';
+import { getVrmCredentials } from '../env.ts';
 
 function createClientFromEnv(): VRMClient {
-  const installationId = (process.env.VRM_INSTALLATION_ID ?? '').trim();
-  const token = (process.env.VRM_TOKEN ?? '').trim();
-  if (!installationId) throw new Error('VRM Site ID not configured');
-  if (!token) throw new Error('VRM API token not configured');
-  return new VRMClient({ installationId, token });
+  return new VRMClient(getVrmCredentials());
 }
 
 function getStart(obj: VRMForecasts | VRMPrices, label: string): string {
