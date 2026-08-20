@@ -1,4 +1,4 @@
-import { VictronMqttClient } from '../../lib/victron-mqtt.ts';
+import { VictronMqttClient } from './victron-mqtt-client.ts';
 import type { PlanRowWithDess } from '../types.ts';
 
 let victronClient: VictronMqttClient | null = null;

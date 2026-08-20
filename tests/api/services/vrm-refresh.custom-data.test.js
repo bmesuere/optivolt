@@ -13,7 +13,7 @@ const { mockFetchForecasts, mockFetchPrices } = vi.hoisted(() => {
 });
 
 // 2. Mock VRMClient manually using a class to support 'new'
-vi.mock('../../../lib/vrm-api.ts', () => {
+vi.mock('../../../api/services/vrm-client.ts', () => {
   return {
     VRMClient: class {
       constructor() {

@@ -1,5 +1,6 @@
-import { VRMClient } from '../../lib/vrm-api.ts';
-import type { VRMForecasts, VRMPrices } from '../../lib/vrm-api.ts';
+import { VRMClient } from './vrm-client.ts';
+import type { VRMForecasts, VRMPrices } from './vrm-client.ts';
+import { windowOptimizationHorizon } from '../../lib/vrm-payloads.ts';
 import { loadSettings, saveSettings } from './settings-store.ts';
 import { loadData, saveData } from './data-store.ts';
 import { readVictronSocPercent, readVictronSocLimits } from './mqtt-service.ts';
@@ -73,7 +74,7 @@ export async function refreshSeriesFromVrmAndPersist(): Promise<void> {
   // actually returns. The prices window stays standard — VRM prices are
   // day-ahead actuals; further days come from the price forecast feed.
   const extraDays = settings.extendedHorizonDays > 0 ? settings.extendedHorizonDays : 0;
-  const forecastWindow = extraDays > 0 ? VRMClient.windowOptimizationHorizon(extraDays) : {};
+  const forecastWindow = extraDays > 0 ? windowOptimizationHorizon(extraDays) : {};
 
   // Concurrent IO
   const [forecastsResult, pricesResult, socResult] = await Promise.allSettled([
