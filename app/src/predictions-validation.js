@@ -38,8 +38,6 @@ async function onRunValidation({ readFormValues, renderHistoricalConfig, setComp
 
     setComparisonStatus('Fetching HA data and running validation…');
     if (resultsEl) resultsEl.hidden = true;
-    const noResultsEl = document.getElementById('pred-no-results');
-    if (noResultsEl) noResultsEl.hidden = true;
 
     try {
       const result = await runValidation();
@@ -63,9 +61,6 @@ function renderResults({ sensorNames, results }, deps) {
   if (!resultsEl) return;
 
   resultsEl.hidden = false;
-
-  const noResultsEl = document.getElementById('pred-no-results');
-  if (noResultsEl) noResultsEl.hidden = true;
 
   renderSensorTabs(sensorNames, deps);
 

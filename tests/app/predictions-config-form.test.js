@@ -54,9 +54,6 @@ function setupDom() {
     </select>
     <button id="pred-load-forecast" type="button"></button>
     <button id="pred-pv-forecast" type="button"></button>
-    <button id="pred-settings-toggle" type="button"></button>
-    <div id="pred-settings-body" class="hidden"></div>
-    <span id="pred-settings-toggle-icon"></span>
     <div id="pred-status"></div>
     <input id="unowned-input" />
   `;
@@ -156,10 +153,8 @@ describe('prediction config form', () => {
 
     document.getElementById('pred-load-forecast').click();
     document.getElementById('pred-pv-forecast').click();
-    document.getElementById('pred-settings-toggle').click();
 
     expect(onForecastAll).toHaveBeenCalledTimes(1);
     expect(onPvForecast).toHaveBeenCalledTimes(1);
-    expect(document.getElementById('pred-settings-body').classList.contains('hidden')).toBe(false);
   });
 });
