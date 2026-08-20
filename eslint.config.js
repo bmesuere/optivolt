@@ -6,8 +6,8 @@ import tseslint from "typescript-eslint";
 import { defineConfig } from "eslint/config";
 
 export default defineConfig([
-  // Ignore generated files in app/lib and vendor directory
-  { ignores: ["app/lib/**", "vendor/**", "coverage/**"] },
+  // Ignore vendored/generated third-party code (committed, but not ours to lint)
+  { ignores: ["app/vendor/**", "vendor/**", "coverage/**"] },
   {
     files: ["**/*.{js,mjs,cjs}"],
     plugins: { js },

@@ -6,25 +6,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Optivolt</title>
 
-  <!-- Tailwind (CDN) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            card: { DEFAULT: "#ffffff", dark: "#111827" },
-            ink: { DEFAULT: "#0f172a", soft: "#475569" }
-          },
-          boxShadow: {
-            soft: "0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06)"
-          },
-          borderRadius: { pill: "9999px" }
-        }
-      },
-      darkMode: "class"
-    };
-  </script>
+  <!-- Fonts (self-hosted; see app/vendor/README.md) -->
+  <link rel="stylesheet" href="./vendor/fonts/fonts.css">
+
   <style>
     :root {
       color-scheme: light;
@@ -479,17 +463,23 @@
     }
   </style>
 
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet">
+  <!--
+    Tailwind, built ahead of time from ../tailwind.config.js (which also holds the
+    theme extensions that used to live in an inline `tailwind.config` block here).
+    Regenerate with:
+      npx tailwindcss@3.4.19 -o app/vendor/tailwind.css --minify
+
+    Must stay AFTER the <style> block above: the Play CDN it replaces appended its
+    stylesheet to the end of <head>, so utilities win same-specificity ties against
+    the hand-written rules above (e.g. `hidden` over `.summary-row`, `pr-16` over
+    `.form-input`). Moving this link earlier silently breaks those elements.
+  -->
+  <link rel="stylesheet" href="./vendor/tailwind.css">
 
   <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="./vendor/chart.umd.js"></script>
   <!-- Pattern fills for striped forecast bars -->
-  <script src="https://cdn.jsdelivr.net/npm/patternomaly@1.3.2/dist/patternomaly.min.js"></script>
+  <script src="./vendor/patternomaly.min.js"></script>
   <meta name="color-scheme" content="light dark">
 </head>
 
