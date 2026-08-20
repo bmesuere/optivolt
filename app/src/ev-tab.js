@@ -1,21 +1,12 @@
 import { SOLUTION_COLORS, toRGBA, drawEvPowerChart, drawEvSocChartTab } from "./charts.js";
 import { formatKWh, updateStackedBarContainer } from "./state.js";
-import {
-  aggregateRowsHourly,
-  getStoredViewRange,
-  planExceedsStandardView,
-  rowsSpanHours,
-  sliceRowsToStandardView,
-} from "./plan-view.js";
-import {
-  getStandardWindowEndMs,
-  mountViewToggles,
-  resolveFlowsResolution,
-  subscribeViewToggles,
-} from "./view-toggles.js";
+import { resolvePlanView } from "./plan-view.js";
+import { getPlan } from "./plan-store.js";
+import { mountViewToggles, subscribeViewToggles } from "./view-toggles.js";
 
-// Last plan rendered into the tab, replayed when a view toggle changes.
-let lastPanelArgs = null;
+// The non-plan inputs of the last render (elements, step size, EV settings);
+// the plan itself is re-read from the store on replay.
+let lastRenderInputs = null;
 let viewToggles = null;
 
 /**
@@ -25,7 +16,9 @@ let viewToggles = null;
 export function initEvPanelToggles(els) {
   viewToggles = mountViewToggles(els.evViewToggles);
   subscribeViewToggles(() => {
-    if (lastPanelArgs) updateEvPanel(...lastPanelArgs);
+    if (!lastRenderInputs) return;
+    const plan = getPlan();
+    renderEvPanel({ ...lastRenderInputs, rows: plan.rows, summary: plan.summary });
   });
 }
 
@@ -67,7 +60,11 @@ export function updateEvPanel(els, rows, summary, stepSize_m = 15, evSettings = 
   // Callers pass null explicitly when EV support is off, and a default parameter only covers
   // undefined — so normalise here rather than relying on one.
   const ev = evSettings ?? { arrivals: [], departures: [], targets: [], trips: [] };
-  lastPanelArgs = [els, rows, summary, stepSize_m, ev];
+  lastRenderInputs = { els, stepSize_m, ev };
+  renderEvPanel({ els, rows, summary, stepSize_m, ev });
+}
+
+function renderEvPanel({ els, rows, summary, stepSize_m, ev }) {
   const evTotal = summary?.evChargeTotal_kWh ?? 0;
   const hasEv = evTotal > 0;
 
@@ -119,19 +116,18 @@ export function updateEvPanel(els, rows, summary, stepSize_m = 15, evSettings = 
 
   // The stat panel stays whole-plan (it summarises the plan, not the view);
   // only the charts and the table follow the view toggles, as on the optimizer.
-  const standardEndMs = getStandardWindowEndMs();
-  const hasExtended = planExceedsStandardView(rows, standardEndMs);
-  const view = hasExtended ? getStoredViewRange() : "standard";
-  const viewRows = view === "full" ? rows : sliceRowsToStandardView(rows, standardEndMs);
-  const resolution = resolveFlowsResolution(rowsSpanHours(viewRows));
-  viewToggles?.update({ hasExtended, view, resolution });
+  const planView = resolvePlanView({
+    rows,
+    stepSize_m,
+    standardEndMs: getPlan().standardWindowEndMs,
+  });
+  viewToggles?.update(planView);
 
   if (els.evPowerChart) {
-    const powerRows = resolution === "60" ? aggregateRowsHourly(viewRows, stepSize_m) : viewRows;
-    drawEvPowerChart(els.evPowerChart, powerRows, resolution === "60" ? 60 : stepSize_m, ev);
+    drawEvPowerChart(els.evPowerChart, planView.chartRows, planView.chartStepSize_m, ev);
   }
-  if (els.evSocChartTab) drawEvSocChartTab(els.evSocChartTab, viewRows, ev);
-  renderEvTable(viewRows.filter(r => (r.ev_soc_percent ?? 0) > 0), els.evScheduleTable, stepSize_m, ev);
+  if (els.evSocChartTab) drawEvSocChartTab(els.evSocChartTab, planView.rows, ev);
+  renderEvTable(planView.rows.filter(r => (r.ev_soc_percent ?? 0) > 0), els.evScheduleTable, stepSize_m, ev);
 }
 
 const MODE_CONFIG = [

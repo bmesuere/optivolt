@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createOptimizerController } from '../../app/src/optimizer-controller.js';
+import { resetPlanStore } from '../../app/src/plan-store.js';
 
 function checkbox(checked = false) {
   const input = document.createElement('input');
@@ -22,6 +23,9 @@ function immediateDebounce(fn) {
 }
 
 function setupController(overrides = {}) {
+  // Each controller subscribes to the shared plan store; drop the previous
+  // test's subscriber (and its plan) before mounting a new one.
+  resetPlanStore();
   const rows = [{ tIdx: 0, timestampMs: 1714586400000, soc_percent: 55 }];
   const rebalanceWindow = { startIdx: 0, endIdx: 0 };
   const summary = { netGridCost_cents: 12.5 };
@@ -103,7 +107,7 @@ describe('optimizer controller', () => {
       1714586400000,
     );
     expect(services.updateSummaryUI).toHaveBeenCalledWith(els, summary);
-    expect(services.updateRebalanceNudgeUI).toHaveBeenCalledWith(els, undefined);
+    expect(services.updateRebalanceNudgeUI).toHaveBeenCalledWith(els, null);
 
     const tableArgs = services.renderTable.mock.calls[0][0];
     expect(tableArgs.rows).toBe(rows);

@@ -8,12 +8,26 @@ vi.mock('../../app/src/api/api.js', () => ({
   updatePredictionAdjustment: vi.fn(),
 }));
 
+// Chart.js is not available in jsdom; the drawn dataset is what these tests read.
+const renderChart = vi.fn();
+vi.mock('../../app/src/charts.js', () => ({
+  SOLUTION_COLORS: { g2l: '#ef4444', pv2g: '#f59e0b' },
+  buildTimeAxisFromTimestamps: (timestamps) => ({
+    labels: timestamps.map(String),
+    tooltipTitleCb: () => '',
+  }),
+  getBaseOptions: (_axis, extra) => ({ ...extra }),
+  renderChart: (...args) => renderChart(...args),
+  toRGBA: (color) => color,
+}));
+
 import {
   deletePredictionAdjustment,
   fetchPredictionAdjustments,
   updatePredictionAdjustment,
 } from '../../app/src/api/api.js';
 import { createForecastChartController } from '../../app/src/predictions/forecast-chart.js';
+import { resetPlanStore, setPlan } from '../../app/src/plan-store.js';
 
 const flushPromises = () => new Promise(resolve => setTimeout(resolve, 0));
 
@@ -49,6 +63,33 @@ describe('prediction forecast chart controller', () => {
 
   afterEach(() => {
     document.body.innerHTML = '';
+    localStorage.clear();
+    resetPlanStore();
+  });
+
+  // Boot renders the stored forecasts before the first plan is adopted, so the
+  // server's window boundary lands after this chart already drew the
+  // browser-local fallback cut.
+  it('redraws with the server boundary when a plan arrives after the first render', () => {
+    document.body.insertAdjacentHTML('beforeend', '<canvas id="forecast-chart"></canvas>');
+    // 4 days of 15-min load forecast from 14:00 local; the local rule cuts at
+    // midnight tomorrow (34 h → 136 slots).
+    const startMs = new Date(2026, 4, 1, 14, 0).getTime();
+    const load = { start: new Date(startMs).toISOString(), step: 15, values: Array(384).fill(400) };
+    const controller = createForecastChartController({ getForecasts: () => ({ load }) });
+    const drawnBars = () => renderChart.mock.lastCall[1].data.datasets[0].data.length;
+
+    controller.render();
+    expect(drawnBars()).toBe(136);
+
+    // A server in another timezone cuts at 24 h instead.
+    setPlan({ rows: [], standardWindowEndMs: startMs + 24 * 3_600_000 });
+    expect(drawnBars()).toBe(96);
+
+    // A plan that leaves the boundary alone costs no redraw.
+    const draws = renderChart.mock.calls.length;
+    setPlan({ rows: [], standardWindowEndMs: startMs + 24 * 3_600_000 });
+    expect(renderChart.mock.calls).toHaveLength(draws);
   });
 
   it('loads, prunes through the API response, and renders active adjustments', async () => {

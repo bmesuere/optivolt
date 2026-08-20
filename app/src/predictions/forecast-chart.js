@@ -16,14 +16,9 @@ import {
   makeAdjustmentOverlayPlugin,
   makeForecastOriginalMarkersPlugin,
 } from '../charts/overlays.js';
-import { standardViewEndMs } from '../plan-view.js';
-import {
-  getStandardWindowEndMs,
-  getStoredViewRange,
-  mountViewToggles,
-  resolveFlowsResolution,
-  subscribeViewToggles,
-} from '../view-toggles.js';
+import { resolveFlowsResolution, resolveViewWindow } from '../plan-view.js';
+import { getPlan, subscribePlan } from '../plan-store.js';
+import { mountViewToggles, subscribeViewToggles } from '../view-toggles.js';
 
 const stripe = (c) => window.pattern?.draw('diagonal', c) || c;
 
@@ -43,6 +38,9 @@ export function createForecastChartController({ getForecasts, onAdjustmentsChang
   let forecastChartSelection = null;
   let forecastChartDrag = null;
   let adjustmentDraft = null;
+  // Standard-window boundary the chart was last drawn with; the plan store is
+  // the only thing that can change it, so it is all the plan state to track.
+  let renderedStandardWindowEndMs;
 
   function getAdjustments() {
     return predictionAdjustments;
@@ -65,9 +63,10 @@ export function createForecastChartController({ getForecasts, onAdjustmentsChang
   }
 
   /**
-   * Apply the shared view toggles to the forecast series. The standard-window
-   * boundary comes from the last plan when one has run, otherwise from the
-   * browser-local day-ahead rule.
+   * Apply the shared view toggles to the forecast series. Series-shaped data
+   * cannot go through resolvePlanView, but the window decision is the same one
+   * the plan tabs make — standard-window boundary from the last plan when one
+   * has run, browser-local day-ahead rule otherwise.
    */
   function resolveForecastView({ load, pv, rawLoad, rawPv }) {
     const reference = load ?? pv;
@@ -82,21 +81,22 @@ export function createForecastChartController({ getForecasts, onAdjustmentsChang
     const startMs = new Date(reference.start).getTime();
     const stepMs = (reference.step || 15) * 60_000;
     const endMs = startMs + reference.values.length * stepMs;
-    const standardEndMs = getStandardWindowEndMs() ?? standardViewEndMs(startMs);
 
-    const hasExtended = endMs > standardEndMs;
-    const range = hasExtended ? getStoredViewRange() : 'standard';
-    const cut = range === 'full' ? null : standardEndMs;
-    const spanH = ((cut != null ? Math.min(endMs, cut) : endMs) - startMs) / 3_600_000;
+    const { hasExtended, view, cutMs } = resolveViewWindow({
+      firstMs: startMs,
+      lastMs: endMs - stepMs,
+      standardEndMs: getPlan().standardWindowEndMs,
+    });
+    const spanH = ((cutMs != null ? Math.min(endMs, cutMs) : endMs) - startMs) / 3_600_000;
 
     return {
-      view: { hasExtended, range },
+      view: { hasExtended, range: view },
       resolution: resolveFlowsResolution(spanH),
       series: {
-        load: sliceForecastToEnd(load, cut),
-        pv: sliceForecastToEnd(pv, cut),
-        rawLoad: sliceForecastToEnd(rawLoad, cut),
-        rawPv: sliceForecastToEnd(rawPv, cut),
+        load: sliceForecastToEnd(load, cutMs),
+        pv: sliceForecastToEnd(pv, cutMs),
+        rawLoad: sliceForecastToEnd(rawLoad, cutMs),
+        rawPv: sliceForecastToEnd(rawPv, cutMs),
       },
     };
   }
@@ -107,7 +107,15 @@ export function createForecastChartController({ getForecasts, onAdjustmentsChang
     if (!viewToggles) {
       viewToggles = mountViewToggles(document.getElementById('forecast-view-toggles'));
       subscribeViewToggles(renderCombinedForecastChart);
+      // Boot renders the stored forecasts before the first plan is adopted, so
+      // the authoritative boundary usually lands *after* this chart went up
+      // with the browser-local fallback. Wired once per page load alongside the
+      // toggles: neither subscription is ever torn down.
+      subscribePlan(({ standardWindowEndMs }) => {
+        if (standardWindowEndMs !== renderedStandardWindowEndMs) renderCombinedForecastChart();
+      });
     }
+    renderedStandardWindowEndMs = getPlan().standardWindowEndMs;
 
     const raw = getForecasts();
     const { view, resolution, series } = resolveForecastView(raw);

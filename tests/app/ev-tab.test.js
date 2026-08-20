@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { collectEvSettings, updateEvPanel } from '../../app/src/ev-tab.js';
+import { collectEvSettings, initEvPanelToggles, updateEvPanel } from '../../app/src/ev-tab.js';
+import { resetPlanStore, setPlan } from '../../app/src/plan-store.js';
 
 describe('collectEvSettings — trips', () => {
   const trip = {
@@ -40,6 +41,8 @@ describe('updateEvPanel', () => {
 
   afterEach(() => {
     document.body.innerHTML = '';
+    localStorage.clear();
+    resetPlanStore();
   });
 
   // The optimizer controller passes null whenever the EV toggle is off, and a default parameter
@@ -72,5 +75,27 @@ describe('updateEvPanel', () => {
     expect(evScheduleTable.innerHTML).toContain('arrives');
     expect(evScheduleTable.innerHTML).toContain('leaves');
     expect(evScheduleTable.innerHTML).toContain('target 80%');
+  });
+
+  // The tab keeps no plan of its own: a view-toggle replay re-reads the store,
+  // so it can never redraw a plan the store has already replaced.
+  it('replays a view-toggle change from the plan store', () => {
+    document.body.innerHTML = '<div id="ev-toggles"></div>';
+    const els = {
+      evViewToggles: document.getElementById('ev-toggles'),
+      evScheduleTable: document.createElement('table'),
+    };
+    initEvPanelToggles(els);
+    updateEvPanel(els, rows, { evChargeTotal_kWh: 1.8 }, 15, null);
+    expect(els.evScheduleTable.innerHTML).toContain('55.0%');
+
+    setPlan({
+      rows: [{ ...rows[0], ev_soc_percent: 77 }],
+      summary: { evChargeTotal_kWh: 0.9 },
+    });
+    document.querySelector('[data-res="60"]').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(els.evScheduleTable.innerHTML).toContain('77.0%');
+    expect(els.evScheduleTable.innerHTML).not.toContain('55.0%');
   });
 });

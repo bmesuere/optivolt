@@ -1,9 +1,16 @@
 /**
  * plan-view.js
  *
- * Pure helpers for the extended-horizon dashboard views: slicing plan rows to
- * the standard (day-ahead) window, hourly aggregation for bar charts, and the
- * client-side persistence of the view toggles.
+ * How a plan is turned into what a tab actually draws: resolving the visible
+ * window from the view toggles, slicing to it, picking a bar resolution,
+ * aggregating to hourly, and re-expressing the rebalance window on the result.
+ *
+ * `resolvePlanView` is that whole sequence for row-shaped data (optimizer and
+ * EV tabs); the forecast chart is series-shaped and shares the window half via
+ * `resolveViewWindow`. The individual steps stay exported because they are
+ * independently useful (and independently testable).
+ *
+ * Also holds the client-side persistence of the view toggles themselves.
  */
 
 const VIEW_RANGE_KEY = "optivolt:viewRange";
@@ -26,6 +33,11 @@ function resolveStandardEndMs(rows, standardEndMs) {
   return Number.isFinite(standardEndMs) ? standardEndMs : standardViewEndMs(rows[0].timestampMs);
 }
 
+function sliceRowsAtCut(rows, cutMs) {
+  const idx = rows.findIndex((r) => r.timestampMs >= cutMs);
+  return idx < 0 ? rows : rows.slice(0, idx);
+}
+
 /**
  * Rows within the standard window (a prefix of the plan, so slot indices are
  * preserved). `standardEndMs` is the server-provided boundary; without it the
@@ -33,15 +45,29 @@ function resolveStandardEndMs(rows, standardEndMs) {
  */
 export function sliceRowsToStandardView(rows, standardEndMs = null) {
   if (!Array.isArray(rows) || rows.length === 0) return rows ?? [];
-  const endMs = resolveStandardEndMs(rows, standardEndMs);
-  const idx = rows.findIndex((r) => r.timestampMs >= endMs);
-  return idx < 0 ? rows : rows.slice(0, idx);
+  return sliceRowsAtCut(rows, resolveStandardEndMs(rows, standardEndMs));
 }
 
-/** True when the plan extends beyond the standard window (i.e. a view toggle is useful). */
-export function planExceedsStandardView(rows, standardEndMs = null) {
-  if (!Array.isArray(rows) || rows.length === 0) return false;
-  return rows[rows.length - 1].timestampMs >= resolveStandardEndMs(rows, standardEndMs);
+/**
+ * Resolution for a view spanning `spanH` hours: the user's explicit choice if
+ * they made one, otherwise hourly beyond 48 h to keep multi-day bars readable.
+ */
+export function resolveFlowsResolution(spanH) {
+  return getStoredFlowsResolution() ?? (spanH > 48 ? "60" : "15");
+}
+
+/**
+ * Which part of a horizon the view toggles currently show. `firstMs`/`lastMs`
+ * are the first and last *slot start* timestamps of the data; `standardEndMs`
+ * is the server-provided window boundary, with the browser-local day-ahead
+ * rule as fallback. `cutMs` is where the standard view stops — null in full
+ * view, i.e. "show everything".
+ */
+export function resolveViewWindow({ firstMs, lastMs, standardEndMs = null }) {
+  const endMs = Number.isFinite(standardEndMs) ? standardEndMs : standardViewEndMs(firstMs);
+  const hasExtended = lastMs >= endMs;
+  const view = hasExtended ? getStoredViewRange() : "standard";
+  return { hasExtended, view, cutMs: view === "full" ? null : endMs };
 }
 
 /** Span of the given rows in hours (0 for empty/single-row input). */
@@ -136,6 +162,62 @@ export function mapRebalanceWindowToRows(window, sourceRows, targetRows) {
   const endIdx = containing(endMs);
   if (startIdx < 0 || endIdx < 0) return null;
   return { startIdx, endIdx };
+}
+
+/**
+ * The whole view pipeline for a plan: window → slice → resolution → aggregate
+ * → rebalance-window remap. Every tab that charts plan rows renders from this
+ * one result, so they cannot drift apart.
+ *
+ * Returns the visible rows (a prefix of the plan, slot indices preserved) plus
+ * the `chart*` fields, which are the same rows aggregated to hourly when the
+ * resolution says so — draw the charts from those, the table from `rows`.
+ */
+export function resolvePlanView({
+  rows = [],
+  stepSize_m = 15,
+  standardEndMs = null,
+  rebalanceWindow = null,
+} = {}) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return {
+      rows: [],
+      view: "standard",
+      hasExtended: false,
+      resolution: resolveFlowsResolution(0),
+      rebalanceWindow: null,
+      chartRows: [],
+      chartStepSize_m: stepSize_m,
+      chartRebalanceWindow: null,
+    };
+  }
+
+  const { hasExtended, view, cutMs } = resolveViewWindow({
+    firstMs: rows[0].timestampMs,
+    lastMs: rows[rows.length - 1].timestampMs,
+    standardEndMs,
+  });
+  const visibleRows = cutMs == null ? rows : sliceRowsAtCut(rows, cutMs);
+  const clamped = clampRebalanceWindow(rebalanceWindow, visibleRows.length);
+
+  // Hourly bars keep multi-day views readable, so that is the default beyond
+  // 48 h — but the control is always available, whatever the span.
+  const resolution = resolveFlowsResolution(rowsSpanHours(visibleRows));
+  const hourly = resolution === "60";
+  const chartRows = hourly ? aggregateRowsHourly(visibleRows, stepSize_m) : visibleRows;
+
+  return {
+    rows: visibleRows,
+    view,
+    hasExtended,
+    resolution,
+    rebalanceWindow: clamped,
+    chartRows,
+    chartStepSize_m: hourly ? 60 : stepSize_m,
+    chartRebalanceWindow: hourly
+      ? mapRebalanceWindowToRows(clamped, visibleRows, chartRows)
+      : clamped,
+  };
 }
 
 // ---------------------------------------------------------------------------

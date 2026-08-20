@@ -33,18 +33,6 @@ const MARKUP = `
   </div>
 `;
 
-// Server-provided end of the standard window, published once a plan has run.
-// Null until then; consumers fall back to the browser-local rule in plan-view.
-let standardWindowEndMs = null;
-
-export function setStandardWindowEndMs(ms) {
-  standardWindowEndMs = Number.isFinite(ms) ? ms : null;
-}
-
-export function getStandardWindowEndMs() {
-  return standardWindowEndMs;
-}
-
 const listeners = new Set();
 
 /** Re-render callback, invoked on every tab whenever either toggle changes. */
@@ -62,16 +50,6 @@ function broadcast() {
     }
   }
 }
-
-/**
- * Resolution for a view spanning `spanH` hours: the user's explicit choice if
- * they made one, otherwise hourly beyond 48 h to keep multi-day bars readable.
- */
-export function resolveFlowsResolution(spanH) {
-  return getStoredFlowsResolution() ?? (spanH > 48 ? "60" : "15");
-}
-
-export { getStoredViewRange };
 
 function setSegState(btn, active) {
   btn.className = active ? SEG_ACTIVE : SEG_INACTIVE;
