@@ -17,7 +17,7 @@ import {
   makeForecastOriginalMarkersPlugin,
 } from '../charts/overlays.js';
 import { resolveFlowsResolution, resolveViewWindow } from '../plan-view.js';
-import { getPlan } from '../plan-store.js';
+import { getPlan, subscribePlan } from '../plan-store.js';
 import { mountViewToggles, subscribeViewToggles } from '../view-toggles.js';
 
 const stripe = (c) => window.pattern?.draw('diagonal', c) || c;
@@ -38,6 +38,9 @@ export function createForecastChartController({ getForecasts, onAdjustmentsChang
   let forecastChartSelection = null;
   let forecastChartDrag = null;
   let adjustmentDraft = null;
+  // Standard-window boundary the chart was last drawn with; the plan store is
+  // the only thing that can change it, so it is all the plan state to track.
+  let renderedStandardWindowEndMs;
 
   function getAdjustments() {
     return predictionAdjustments;
@@ -104,7 +107,15 @@ export function createForecastChartController({ getForecasts, onAdjustmentsChang
     if (!viewToggles) {
       viewToggles = mountViewToggles(document.getElementById('forecast-view-toggles'));
       subscribeViewToggles(renderCombinedForecastChart);
+      // Boot renders the stored forecasts before the first plan is adopted, so
+      // the authoritative boundary usually lands *after* this chart went up
+      // with the browser-local fallback. Wired once per page load alongside the
+      // toggles: neither subscription is ever torn down.
+      subscribePlan(({ standardWindowEndMs }) => {
+        if (standardWindowEndMs !== renderedStandardWindowEndMs) renderCombinedForecastChart();
+      });
     }
+    renderedStandardWindowEndMs = getPlan().standardWindowEndMs;
 
     const raw = getForecasts();
     const { view, resolution, series } = resolveForecastView(raw);
