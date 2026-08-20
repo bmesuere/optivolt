@@ -15,21 +15,15 @@ import {
   updateRebalanceNudgeUI,
   updateSummaryUI,
 } from "./state.js";
+import { resolvePlanView } from "./plan-view.js";
 import {
-  aggregateRowsHourly,
-  clampRebalanceWindow,
-  getStoredViewRange,
-  mapRebalanceWindowToRows,
-  planExceedsStandardView,
-  rowsSpanHours,
-  sliceRowsToStandardView,
-} from "./plan-view.js";
-import {
-  mountViewToggles,
-  resolveFlowsResolution,
-  setStandardWindowEndMs,
-  subscribeViewToggles,
-} from "./view-toggles.js";
+  beginPlanRequest,
+  getPlan,
+  isCurrentPlanRequest,
+  setPlan,
+  subscribePlan,
+} from "./plan-store.js";
+import { mountViewToggles, subscribeViewToggles } from "./view-toggles.js";
 import { renderNowPanel, startNowPanelTicker } from "./now-panel.js";
 
 const CHART_PLACEHOLDER_IDLE = "Run the optimizer to see results";
@@ -67,51 +61,36 @@ export function createOptimizerController({
     ...services,
   };
 
-  let lastTableRows = [];
-  let lastTableRebalanceWindow = null;
-  let lastPricesKnownUntilMs = null;
-  let lastStandardWindowEndMs = null;
-  let lastInitialSoc_percent = null;
-
   const viewToggles = mountViewToggles(els.optimizerViewToggles);
   initEvPanelToggles(els);
   subscribeViewToggles(() => { renderVisuals(); });
 
+  // Everything the plan drives is painted from the store, so a plan set from
+  // anywhere (fresh solve, boot's cached fetch) renders the same way.
+  subscribePlan(renderPlan);
+
   // The "Now" block follows the wall clock, not the plan's first row, so it
   // keeps pointing at the right slot without a page reload.
   startNowPanelTicker(() => renderNowPanel(els, {
-    rows: lastTableRows,
+    rows: getPlan().rows,
     stepSize_m: getVizConfig().stepSize_m,
-    initialSoc_percent: lastInitialSoc_percent,
+    initialSoc_percent: getPlan().initialSoc_percent,
   }));
-
-  // Plan requests overlap (boot's cached fetch, debounced reruns, the Run
-  // button), and a slow older response must never overwrite a newer one, so
-  // each request takes a ticket and only the latest one is allowed to paint.
-  let planSeq = 0;
 
   const debounceRun = deps.debounce(onRun, 250);
   const persistConfigDebounced = deps.debounce((cfg) => {
     void persistConfig(cfg);
   }, 600);
 
-  // Cache a plan result (fresh solve or server-cached) and render everything
-  // that derives from it: meta, summary, charts, table, Now panel, EV panel.
-  function applyPlanResult(result) {
-    const rows = Array.isArray(result?.rows) ? result.rows : [];
-
-    lastTableRows = rows;
-    lastInitialSoc_percent = result.initialSoc_percent ?? null;
-    lastTableRebalanceWindow = result.rebalanceWindow ?? null;
-    lastPricesKnownUntilMs = result.pricesKnownUntilMs ?? null;
-    lastStandardWindowEndMs = result.standardWindowEndMs ?? null;
-    // Share the server boundary so the EV and forecast tabs slice alike.
-    setStandardWindowEndMs(lastStandardWindowEndMs);
+  // Render everything that derives from the plan: meta, summary, charts,
+  // table, Now panel, EV panel.
+  function renderPlan(plan) {
+    const { rows } = plan;
 
     // Plan end is the last planned slot's start, not the boundary after it.
-    deps.updatePlanMeta(els, result.tsStart, rows[rows.length - 1]?.timestampMs ?? null);
-    deps.updateSummaryUI(els, result.summary);
-    deps.updateRebalanceNudgeUI(els, result.rebalanceNudge);
+    deps.updatePlanMeta(els, plan.tsStart, rows[rows.length - 1]?.timestampMs ?? null);
+    deps.updateSummaryUI(els, plan.summary);
+    deps.updateRebalanceNudgeUI(els, plan.rebalanceNudge);
 
     const cfgForViz = getVizConfig();
 
@@ -119,9 +98,9 @@ export function createOptimizerController({
     renderNowPanel(els, {
       rows,
       stepSize_m: cfgForViz.stepSize_m,
-      initialSoc_percent: lastInitialSoc_percent,
+      initialSoc_percent: plan.initialSoc_percent,
     });
-    deps.updateEvPanel(els, rows, result.summary, cfgForViz.stepSize_m, getEvSettings());
+    deps.updateEvPanel(els, rows, plan.summary, cfgForViz.stepSize_m, getEvSettings());
     onPlanRows(rows);
   }
 
@@ -130,17 +109,17 @@ export function createOptimizerController({
   // a fresh solve is still warranted, or null — cheaply, without touching the
   // UI — when there is nothing usable to show.
   async function loadLastPlan() {
-    const seq = ++planSeq;
+    const seq = beginPlanRequest();
     let result;
     try {
       result = await deps.fetchLastPlan();
     } catch {
       return null;
     }
-    if (seq !== planSeq) return null;
+    if (!isCurrentPlanRequest(seq)) return null;
     if (!Array.isArray(result?.rows) || result.rows.length === 0) return null;
 
-    applyPlanResult(result);
+    setPlan(result);
     if (els.status) {
       els.status.textContent = "Loaded existing plan";
       els.status.className = "text-sm font-medium text-ink dark:text-slate-100";
@@ -153,7 +132,7 @@ export function createOptimizerController({
       persistConfigDebounced.cancel();
     }
 
-    const seq = ++planSeq;
+    const seq = beginPlanRequest();
 
     if (els.status) {
       els.status.textContent = "Calculating…";
@@ -176,7 +155,7 @@ export function createOptimizerController({
       const updateData = !!els.updateDataBeforeRun?.checked;
       const writeToVictron = !!els.pushToVictron?.checked;
       const result = await deps.requestRemoteSolve({ updateData, writeToVictron });
-      if (seq !== planSeq) return;
+      if (!isCurrentPlanRequest(seq)) return;
 
       const solverStatus =
         typeof result?.solverStatus === "string" ? result.solverStatus : "OK";
@@ -186,7 +165,7 @@ export function createOptimizerController({
       // fall through to the outer catch and wipe a summary that computed fine.
       try {
         updateRunStatus(solverStatus, writeToVictron);
-        applyPlanResult(result);
+        setPlan(result);
       } catch (renderError) {
         console.error("Failed to render plan", renderError);
         if (els.status) {
@@ -196,7 +175,7 @@ export function createOptimizerController({
       }
     } catch (err) {
       console.error(err);
-      if (seq !== planSeq) return;
+      if (!isCurrentPlanRequest(seq)) return;
       if (els.status) {
         els.status.textContent = `Error: ${err.message}`;
         els.status.className = "text-sm font-medium text-red-600 dark:text-red-400";
@@ -206,7 +185,7 @@ export function createOptimizerController({
     } finally {
       // A superseded run leaves the button alone: the run that replaced it is
       // still in flight and owns the spinner.
-      if (runBtn && seq === planSeq) {
+      if (runBtn && isCurrentPlanRequest(seq)) {
         runBtn.classList.remove('loading');
         runBtn.disabled = false;
       }
@@ -223,61 +202,49 @@ export function createOptimizerController({
     }
   }
 
-  // The rows currently shown: the full plan, or its standard-window prefix.
-  // The boundary comes from the server (plan timezone); browser-local fallback.
-  function getVisibleRows() {
-    if (!lastTableRows.length) return { rows: [], view: "standard", hasExtended: false };
-    const hasExtended = planExceedsStandardView(lastTableRows, lastStandardWindowEndMs);
-    const view = hasExtended ? getStoredViewRange() : "standard";
-    const rows = view === "full"
-      ? lastTableRows
-      : sliceRowsToStandardView(lastTableRows, lastStandardWindowEndMs);
-    return { rows, view, hasExtended };
+  // What the current plan looks like through the view toggles: visible rows,
+  // bar resolution, and the rebalance window remapped onto whatever gets drawn.
+  function currentPlanView() {
+    const plan = getPlan();
+    return resolvePlanView({
+      rows: plan.rows,
+      stepSize_m: getVizConfig().stepSize_m,
+      standardEndMs: plan.standardWindowEndMs,
+      rebalanceWindow: plan.rebalanceWindow,
+    });
   }
 
-  function renderScheduleTable() {
-    if (!lastTableRows.length) return false;
-    const { rows } = getVisibleRows();
+  function renderScheduleTable(planView = currentPlanView()) {
+    if (!planView.rows.length) return false;
     deps.renderTable({
-      rows,
+      rows: planView.rows,
       cfg: getVizConfig(),
       targets: { table: els.table, tableUnit: els.tableUnit },
       showKwh: !!els.tableKwh?.checked,
       showDess: !!els.tableDess?.checked,
-      rebalanceWindow: clampRebalanceWindow(lastTableRebalanceWindow, rows.length),
+      rebalanceWindow: planView.rebalanceWindow,
       evSettings: getEvSettings(),
     });
     return true;
   }
 
-  // Re-render charts + table from the cached plan (no solve).
+  // Re-render charts + table from the stored plan (no solve).
   function renderVisuals() {
-    if (!lastTableRows.length) return false;
+    const planView = currentPlanView();
+    if (!planView.rows.length) return false;
+    const { rows, chartRows, chartStepSize_m, chartRebalanceWindow } = planView;
     const cfg = getVizConfig();
     const evSettings = getEvSettings();
-    const { rows, view, hasExtended } = getVisibleRows();
-    const rebalanceWindow = clampRebalanceWindow(lastTableRebalanceWindow, rows.length);
 
-    // Hourly bars keep multi-day views readable, so that is the default beyond
-    // 48 h — but the control is always available, whatever the span.
-    const resolution = resolveFlowsResolution(rowsSpanHours(rows));
+    viewToggles.update(planView);
 
-    viewToggles.update({ hasExtended, view, resolution });
-
-    if (resolution === "60") {
-      const hourlyRows = aggregateRowsHourly(rows, cfg.stepSize_m);
-      deps.drawFlowsBarStackSigned(
-        els.flows, hourlyRows, 60,
-        mapRebalanceWindowToRows(rebalanceWindow, rows, hourlyRows),
-        evSettings,
-      );
-    } else {
-      deps.drawFlowsBarStackSigned(els.flows, rows, cfg.stepSize_m, rebalanceWindow, evSettings);
-    }
+    deps.drawFlowsBarStackSigned(
+      els.flows, chartRows, chartStepSize_m, chartRebalanceWindow, evSettings,
+    );
     deps.drawSocChart(els.soc, rows, cfg.stepSize_m, evSettings);
-    deps.drawPricesStepLines(els.prices, rows, cfg.stepSize_m, lastPricesKnownUntilMs);
+    deps.drawPricesStepLines(els.prices, rows, cfg.stepSize_m, getPlan().pricesKnownUntilMs);
     deps.drawLoadPvGrouped(els.loadpv, rows, cfg.stepSize_m);
-    renderScheduleTable();
+    renderScheduleTable(planView);
     return true;
   }
 

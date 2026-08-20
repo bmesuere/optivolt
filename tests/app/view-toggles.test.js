@@ -1,12 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  mountViewToggles,
-  resolveFlowsResolution,
-  setStandardWindowEndMs,
-  getStandardWindowEndMs,
-  subscribeViewToggles,
-} from '../../app/src/view-toggles.js';
+import { mountViewToggles, subscribeViewToggles } from '../../app/src/view-toggles.js';
+import { resolveFlowsResolution } from '../../app/src/plan-view.js';
 
 const host = () => {
   document.body.innerHTML = '<div id="host"></div>';
@@ -35,7 +30,6 @@ describe('resolveFlowsResolution', () => {
 describe('mountViewToggles', () => {
   beforeEach(() => {
     localStorage.clear();
-    setStandardWindowEndMs(null);
   });
 
   it('styles the segments at mount, before the first update()', () => {
@@ -105,13 +99,5 @@ describe('mountViewToggles', () => {
 
   it('tolerates a missing host', () => {
     expect(() => mountViewToggles(null).update({})).not.toThrow();
-  });
-
-  it('round-trips the shared standard-window boundary', () => {
-    expect(getStandardWindowEndMs()).toBeNull();
-    setStandardWindowEndMs(1234);
-    expect(getStandardWindowEndMs()).toBe(1234);
-    setStandardWindowEndMs(undefined);
-    expect(getStandardWindowEndMs()).toBeNull();
   });
 });

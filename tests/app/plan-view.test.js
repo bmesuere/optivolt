@@ -1,14 +1,22 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import {
   standardViewEndMs,
   sliceRowsToStandardView,
-  planExceedsStandardView,
   rowsSpanHours,
   clampRebalanceWindow,
   aggregateRowsHourly,
   mapRebalanceWindowToRows,
+  resolvePlanView,
+  resolveViewWindow,
 } from '../../app/src/plan-view.js';
+
+// The window helpers read the stored range; keep every case explicit.
+const viewWindow = (rows, standardEndMs = null) => resolveViewWindow({
+  firstMs: rows[0].timestampMs,
+  lastMs: rows[rows.length - 1].timestampMs,
+  standardEndMs,
+});
 
 // Build rows at 15-min steps starting from a local time.
 function makeRows(startLocal, count, fields = {}) {
@@ -42,13 +50,13 @@ describe('standard view slicing', () => {
     const sliced = sliceRowsToStandardView(rows);
     expect(sliced.length).toBe(136);
     expect(sliced[0]).toBe(rows[0]);
-    expect(planExceedsStandardView(rows)).toBe(true);
+    expect(viewWindow(rows).hasExtended).toBe(true);
   });
 
   it('returns the rows unchanged (same reference) when nothing extends past the window', () => {
     const rows = makeRows(new Date(2026, 4, 1, 14, 0), 96); // 24 h < 34 h window
     expect(sliceRowsToStandardView(rows)).toBe(rows);
-    expect(planExceedsStandardView(rows)).toBe(false);
+    expect(viewWindow(rows).hasExtended).toBe(false);
   });
 });
 
@@ -136,9 +144,72 @@ describe('server-provided standard boundary', () => {
     // local 34 h rule (136 slots): e.g. 24 h → 96 slots.
     const serverEndMs = rows[0].timestampMs + 24 * 3_600_000;
     expect(sliceRowsToStandardView(rows, serverEndMs)).toHaveLength(96);
-    expect(planExceedsStandardView(rows, serverEndMs)).toBe(true);
+    expect(viewWindow(rows, serverEndMs).hasExtended).toBe(true);
     // Non-finite boundary falls back to the local rule.
     expect(sliceRowsToStandardView(rows, null)).toHaveLength(136);
+  });
+});
+
+describe('resolvePlanView', () => {
+  // 14:00 local + 4 days of 15-min slots; the standard window ends at midnight
+  // tomorrow (34 h → 136 slots), so this plan is an extended one.
+  const rows = makeRows(new Date(2026, 4, 1, 14, 0), 384);
+
+  beforeEach(() => localStorage.clear());
+
+  it('slices to the standard window and charts it at slot resolution', () => {
+    const view = resolvePlanView({ rows, stepSize_m: 15, rebalanceWindow: { startIdx: 100, endIdx: 200 } });
+
+    expect(view.hasExtended).toBe(true);
+    expect(view.view).toBe('standard');
+    expect(view.rows).toHaveLength(136);
+    expect(view.resolution).toBe('15');
+    // Below the hourly threshold the charts draw the visible rows as they are.
+    expect(view.chartRows).toBe(view.rows);
+    expect(view.chartStepSize_m).toBe(15);
+    // The window is cut off with the rows, and needs no remapping.
+    expect(view.rebalanceWindow).toEqual({ startIdx: 100, endIdx: 135 });
+    expect(view.chartRebalanceWindow).toEqual(view.rebalanceWindow);
+  });
+
+  it('shows the whole plan hourly in full view, with the window remapped', () => {
+    localStorage.setItem('optivolt:viewRange', 'full');
+    const view = resolvePlanView({ rows, stepSize_m: 15, rebalanceWindow: { startIdx: 4, endIdx: 11 } });
+
+    expect(view.view).toBe('full');
+    expect(view.rows).toBe(rows);
+    // 95.75 h span → hourly bars by default.
+    expect(view.resolution).toBe('60');
+    expect(view.chartRows).toHaveLength(96);
+    expect(view.chartStepSize_m).toBe(60);
+    expect(view.rebalanceWindow).toEqual({ startIdx: 4, endIdx: 11 });
+    // Slots 4..11 of a 14:00 start → 15:00–16:45 → hourly indices 1..2.
+    expect(view.chartRebalanceWindow).toEqual({ startIdx: 1, endIdx: 2 });
+  });
+
+  it('honours an explicit hourly choice on a short plan', () => {
+    localStorage.setItem('optivolt:flowsResolution', '60');
+    const view = resolvePlanView({ rows: makeRows(new Date(2026, 4, 1, 14, 0), 8), stepSize_m: 15 });
+
+    expect(view.hasExtended).toBe(false);
+    expect(view.chartRows).toHaveLength(2);
+    expect(view.chartStepSize_m).toBe(60);
+  });
+
+  it('is safe on an empty plan', () => {
+    const view = resolvePlanView({ rows: [], stepSize_m: 15 });
+
+    expect(view).toEqual({
+      rows: [],
+      view: 'standard',
+      hasExtended: false,
+      resolution: '15',
+      rebalanceWindow: null,
+      chartRows: [],
+      chartStepSize_m: 15,
+      chartRebalanceWindow: null,
+    });
+    expect(resolvePlanView()).toEqual(view);
   });
 });
 
