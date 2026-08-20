@@ -4,6 +4,7 @@ import { mapRowsToDessV2 } from '../../lib/dess-mapper.ts';
 import { buildLP } from '../../lib/build-lp.ts';
 import { parseSolution, type HighsSolution } from '../../lib/parse-solution.ts';
 import { buildPlanSummary } from '../../lib/plan-summary.ts';
+import { extractRebalanceWindow, type RebalanceWindow } from '../../lib/lp-vars.ts';
 import type { SolverConfig, PlanSummary, PlanRow, TimeSeries } from '../../lib/types.ts';
 import { getSolverInputs, buildSolverConfigFromSettings } from './config-builder.ts';
 import { saveSettings } from './settings-store.ts';
@@ -45,10 +46,7 @@ async function getHighsInstance(): Promise<HighsInstance> {
   return highsPromise;
 }
 
-export interface RebalanceWindow {
-  startIdx: number;
-  endIdx: number;
-}
+export type { RebalanceWindow };
 
 export interface ComputePlanResult {
   cfg: SolverConfig;
@@ -63,26 +61,6 @@ export interface ComputePlanResult {
   summary: PlanSummary;
   rebalanceWindow?: RebalanceWindow;
   rebalanceNudge: RebalanceNudge;
-}
-
-/**
- * Find which contiguous slot range the MILP solver selected for rebalancing.
- * Scans solution columns for the `start_balance_k` binary that equals 1.
- */
-function extractRebalanceWindow(
-  columns: Record<string, { Primal?: number }>,
-  remainingSlots: number,
-): RebalanceWindow | undefined {
-  if (remainingSlots <= 0) return undefined;
-  for (const [name, col] of Object.entries(columns)) {
-    if (name.startsWith('start_balance_') && Math.round(col.Primal ?? 0) === 1) {
-      const m = /_(\d+)$/.exec(name);
-      if (!m) continue;
-      const k = Number(m[1]);
-      return { startIdx: k, endIdx: k + remainingSlots - 1 };
-    }
-  }
-  return undefined;
 }
 
 function roundPower(value: number): number {

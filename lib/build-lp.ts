@@ -1,4 +1,5 @@
 import type { SolverConfig, TerminalSocValuation } from './types.ts';
+import { lpVar } from './lp-vars.ts';
 
 export function buildLP({
   // time series data of length T
@@ -93,14 +94,14 @@ export function buildLP({
     T - D,
     rebalanceMaxStartSlot != null ? Math.max(0, Math.trunc(rebalanceMaxStartSlot)) : Infinity,
   );
-  const startBalance = (k: number) => `start_balance_${k}`;
+  const startBalance = lpVar.startBalance.name;
 
   // EV variable name helpers
-  const gridToEv    = (t: number) => `grid_to_ev_${t}`;
-  const pvToEv      = (t: number) => `pv_to_ev_${t}`;
-  const batteryToEv = (t: number) => `battery_to_ev_${t}`;
-  const evOn        = (t: number) => `ev_on_${t}`;
-  const evSocVar    = (t: number) => `ev_soc_${t}`;
+  const gridToEv    = lpVar.gridToEv.name;
+  const pvToEv      = lpVar.pvToEv.name;
+  const batteryToEv = lpVar.batteryToEv.name;
+  const evOn        = lpVar.evOn.name;
+  const evSocVar    = lpVar.evSoc.name;
 
   // EV derived constants (only used when ev is defined)
   const evActive        = ev != null;
@@ -138,15 +139,15 @@ export function buildLP({
     .map((tg) => ({ slot: tg.slot, soc_Wh: Math.min(tg.soc_Wh, evCapacityWh) }));
 
   // Variable name helpers
-  const gridToLoad = (t: number) => `grid_to_load_${t}`;
-  const gridToBattery = (t: number) => `grid_to_battery_${t}`;
-  const pvToLoad = (t: number) => `pv_to_load_${t}`;
-  const pvToBattery = (t: number) => `pv_to_battery_${t}`;
-  const pvToGrid = (t: number) => `pv_to_grid_${t}`;
-  const batteryToLoad = (t: number) => `battery_to_load_${t}`;
-  const batteryToGrid = (t: number) => `battery_to_grid_${t}`;
-  const soc = (t: number) => `soc_${t}`;
-  const socShortfall = (t: number) => `soc_shortfall_${t}`;
+  const gridToLoad = lpVar.gridToLoad.name;
+  const gridToBattery = lpVar.gridToBattery.name;
+  const pvToLoad = lpVar.pvToLoad.name;
+  const pvToBattery = lpVar.pvToBattery.name;
+  const pvToGrid = lpVar.pvToGrid.name;
+  const batteryToLoad = lpVar.batteryToLoad.name;
+  const batteryToGrid = lpVar.batteryToGrid.name;
+  const soc = lpVar.soc.name;
+  const socShortfall = lpVar.socShortfall.name;
 
   const lines: string[] = [];
 
