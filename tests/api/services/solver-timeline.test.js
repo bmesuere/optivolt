@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { buildSolverConfigFromSettings } from '../../../api/services/config-builder.ts';
 
+const cfgOf = (...args) => buildSolverConfigFromSettings(...args).cfg;
+
 /**
  * These tests verify the "Smart Reader" logic in config-builder.js.
  *
@@ -55,7 +57,7 @@ describe('Solver Timeline Logic (Refactored)', () => {
 
     // Case 1: Data limits the horizon (25h total, starting 2h before now -> 23h remaining)
     // 23 hours * 4 slots = 92 slots
-    const config = buildSolverConfigFromSettings(mockSettings, mockData);
+    const config = cfgOf(mockSettings, mockData);
     expect(config.load_W.length).toBe(92);
     expect(config.pv_W.length).toBe(92);
 
@@ -71,7 +73,7 @@ describe('Solver Timeline Logic (Refactored)', () => {
       soc: mockData.soc
     };
 
-    const configFull = buildSolverConfigFromSettings(mockSettings, longData);
+    const configFull = cfgOf(mockSettings, longData);
     expect(configFull.load_W.length).toBe(96); // 24h * 4
   });
 
@@ -116,18 +118,19 @@ describe('Solver Timeline Logic (Refactored)', () => {
     };
 
     // Without the setting: forecast ignored, horizon ends at 14:00 (8 slots from 12:00).
-    const base = buildSolverConfigFromSettings(mockSettings, data);
+    const base = cfgOf(mockSettings, data);
     expect(base.importPrice.length).toBe(8);
-    expect(base.pricesKnownUntilMs).toBeUndefined();
+    expect(buildSolverConfigFromSettings(mockSettings, data).pricesKnownUntilMs).toBeUndefined();
 
     // With the setting: horizon runs to the forecast end (13:00 + 40×15min = 23:00 → 44 slots from 12:00),
     // actual values win up to 14:00, forecast values fill the tail.
-    const extended = buildSolverConfigFromSettings({ ...mockSettings, extendedHorizonDays: 2 }, data);
+    const extended = cfgOf({ ...mockSettings, extendedHorizonDays: 2 }, data);
     expect(extended.importPrice.length).toBe(44);
     expect(extended.importPrice.slice(0, 8).every(v => v === 10)).toBe(true);
     expect(extended.importPrice.slice(8).every(v => v === 20)).toBe(true);
     expect(extended.exportPrice.slice(8).every(v => v === 15)).toBe(true);
-    expect(extended.pricesKnownUntilMs).toBe(new Date('2024-01-01T14:00:00Z').getTime());
+    expect(buildSolverConfigFromSettings({ ...mockSettings, extendedHorizonDays: 2 }, data).pricesKnownUntilMs)
+      .toBe(new Date('2024-01-01T14:00:00Z').getTime());
   });
 
   it('caps rebalance window starts to day 1 only on the extended horizon', () => {
@@ -140,11 +143,11 @@ describe('Solver Timeline Logic (Refactored)', () => {
     };
     const rebalanceSettings = { ...mockSettings, rebalanceEnabled: true, rebalanceHoldHours: 3 };
 
-    const standard = buildSolverConfigFromSettings(rebalanceSettings, data);
-    expect(standard.rebalanceMaxStartSlot).toBeUndefined();
+    const standard = cfgOf(rebalanceSettings, data);
+    expect(standard.rebalance?.maxStartSlot).toBeUndefined();
 
-    const extended = buildSolverConfigFromSettings({ ...rebalanceSettings, extendedHorizonDays: 2 }, data);
-    expect(extended.rebalanceMaxStartSlot).toBe(95); // 24 h of 15-min slots, 0-indexed
+    const extended = cfgOf({ ...rebalanceSettings, extendedHorizonDays: 2 }, data);
+    expect(extended.rebalance?.maxStartSlot).toBe(95); // 24 h of 15-min slots, 0-indexed
   });
 
   it('ignores a forecast that leaves a gap after the actual prices', () => {
@@ -159,9 +162,9 @@ describe('Solver Timeline Logic (Refactored)', () => {
       soc: { timestamp: '2024-01-01T12:00:00Z', value: 50 }
     };
 
-    const config = buildSolverConfigFromSettings({ ...mockSettings, extendedHorizonDays: 2 }, data);
+    const config = cfgOf({ ...mockSettings, extendedHorizonDays: 2 }, data);
     expect(config.importPrice.length).toBe(8);
-    expect(config.pricesKnownUntilMs).toBeUndefined();
+    expect(buildSolverConfigFromSettings({ ...mockSettings, extendedHorizonDays: 2 }, data).pricesKnownUntilMs).toBeUndefined();
   });
 
   it('allows a PV series that starts after the plan window begins (leading zeros = no sun)', () => {
@@ -173,7 +176,7 @@ describe('Solver Timeline Logic (Refactored)', () => {
       soc: { timestamp: '2024-01-01T12:00:00Z', value: 50 }
     };
 
-    const config = buildSolverConfigFromSettings(mockSettings, data);
+    const config = cfgOf(mockSettings, data);
     // Slots between 12:00 and 14:00 are zero-padded PV.
     expect(config.pv_W.slice(0, 8).every(v => v === 0)).toBe(true);
     expect(config.pv_W[8]).toBe(500);

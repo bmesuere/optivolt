@@ -20,6 +20,11 @@ function getSeriesEndMs(source: TimeSeries): number {
  * Settings and data are already validated by their respective stores.
  * Throws 422 when there is insufficient future data to optimise.
  *
+ * Also returns `pricesKnownUntilMs` — the instant after which price slots
+ * come from a forecast feed instead of published actuals (absent when all
+ * prices in the window are actual). It is display metadata, never read by
+ * the solver, so it rides alongside the config instead of inside it.
+ *
  * `nowMs` defaults to the start of the current slot so tests can call this
  * directly without worrying about timing. Production callers should pass a
  * pre-computed value so the same instant is used for both the window and the
@@ -30,7 +35,7 @@ export function buildSolverConfigFromSettings(
   data: Data,
   nowMs = getQuarterStart(new Date(), settings.stepSize_m),
   evState?: { pluggedIn: boolean; soc_percent: number },
-): SolverConfig {
+): { cfg: SolverConfig; pricesKnownUntilMs?: number } {
   // Extended horizon: append forecast prices past the end of the actual price
   // series. Actual values always win — the forecast never overrides them, and
   // pricesKnownUntilMs marks where actuals end so the UI can flag the rest.
@@ -123,11 +128,6 @@ export function buildSolverConfigFromSettings(
     initialSoc_percent:                   Math.min(data.soc.value, settings.maxSoc_percent),
   };
 
-  // Only meaningful when forecast slots actually made it into the window.
-  if (pricesKnownUntilMs != null && pricesKnownUntilMs < alignedEndMs) {
-    base.pricesKnownUntilMs = pricesKnownUntilMs;
-  }
-
   if (settings.rebalanceEnabled) {
     // Math.ceil ensures the hold is never shorter than requested; Math.max(1, …) prevents 0-slot holds
     // from a bad/zero rebalanceHoldHours setting (which would immediately complete the cycle).
@@ -139,24 +139,30 @@ export function buildSolverConfigFromSettings(
     const remainingSlots = startMs_ != null
       ? Math.max(0, holdSlots - slotsElapsed)
       : holdSlots;
-    base.rebalanceHoldSlots = holdSlots;
-    base.rebalanceRemainingSlots = remainingSlots;
-    base.rebalanceTargetSoc_percent = settings.maxSoc_percent;
+    base.rebalance = {
+      holdSlots,
+      remainingSlots,
+      targetSoc_percent: settings.maxSoc_percent,
+    };
     // On an extended horizon, keep "hold once" a day-1 decision: the window
     // must start within the first 24 h instead of drifting days out. This also
     // caps the start_balance binary count at one day's worth of slots.
     if (settings.extendedHorizonDays > 0) {
-      base.rebalanceMaxStartSlot = Math.max(0, Math.floor((24 * 60) / settings.stepSize_m) - 1);
+      base.rebalance.maxStartSlot = Math.max(0, Math.floor((24 * 60) / settings.stepSize_m) - 1);
     }
   }
 
   const ev = buildEvConfig(settings, data.evScheduleEntries ?? [], evState, nowMs, base.load_W.length);
   if (ev) base.ev = ev;
 
-  return base;
+  // Only meaningful when forecast slots actually made it into the window.
+  return {
+    cfg: base,
+    ...(pricesKnownUntilMs != null && pricesKnownUntilMs < alignedEndMs ? { pricesKnownUntilMs } : {}),
+  };
 }
 
-export async function getSolverInputs(): Promise<{ cfg: SolverConfig; timing: { startMs: number; stepMin: number }; data: Data; settings: Settings }> {
+export async function getSolverInputs(): Promise<{ cfg: SolverConfig; pricesKnownUntilMs?: number; timing: { startMs: number; stepMin: number }; data: Data; settings: Settings }> {
   const [settings, loadedData] = await Promise.all([loadSettings(), loadData()]);
   const startMs = getQuarterStart(new Date(), settings.stepSize_m);
 
@@ -200,6 +206,6 @@ export async function getSolverInputs(): Promise<{ cfg: SolverConfig; timing: { 
   if (shouldSaveData) await saveData(data);
 
   const adjustedData = applyPredictionAdjustmentsToData(data);
-  const cfg = buildSolverConfigFromSettings(settings, adjustedData, startMs, evState);
-  return { cfg, timing: { startMs, stepMin: settings.stepSize_m }, data, settings };
+  const { cfg, pricesKnownUntilMs } = buildSolverConfigFromSettings(settings, adjustedData, startMs, evState);
+  return { cfg, pricesKnownUntilMs, timing: { startMs, stepMin: settings.stepSize_m }, data, settings };
 }

@@ -223,17 +223,17 @@ describe('selectSolveOptions', () => {
 
   it('keeps the tight gap for a single binary family, even on large horizons', () => {
     expect(selectSolveOptions({ ...baseCfg(384), ev }).mip_rel_gap).toBe(0.005);
-    expect(selectSolveOptions({ ...baseCfg(384), rebalanceRemainingSlots: 12 }).mip_rel_gap).toBe(0.005);
+    expect(selectSolveOptions({ ...baseCfg(384), rebalance: { holdSlots: 12, remainingSlots: 12, targetSoc_percent: 100 } }).mip_rel_gap).toBe(0.005);
   });
 
   it('loosens the gap only for EV × rebalance beyond 200 slots', () => {
-    const combo = (slots) => selectSolveOptions({ ...baseCfg(slots), ev, rebalanceRemainingSlots: 12 });
+    const combo = (slots) => selectSolveOptions({ ...baseCfg(slots), ev, rebalance: { holdSlots: 12, remainingSlots: 12, targetSoc_percent: 100 } });
     expect(combo(200).mip_rel_gap).toBe(0.005); // boundary: 200 is still tight
     expect(combo(201).mip_rel_gap).toBe(0.02);  // boundary: first loosened size
     expect(combo(384)).toEqual({ mip_rel_gap: 0.02, mip_abs_gap: 0.01, time_limit: 30 });
   });
 
   it('treats a completed rebalance (0 remaining slots) as no rebalance', () => {
-    expect(selectSolveOptions({ ...baseCfg(384), ev, rebalanceRemainingSlots: 0 }).mip_rel_gap).toBe(0.005);
+    expect(selectSolveOptions({ ...baseCfg(384), ev, rebalance: { holdSlots: 12, remainingSlots: 0, targetSoc_percent: 100 } }).mip_rel_gap).toBe(0.005);
   });
 });

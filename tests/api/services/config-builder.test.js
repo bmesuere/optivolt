@@ -45,52 +45,52 @@ describe('buildSolverConfigFromSettings — rebalancing', () => {
     vi.useRealTimers();
   });
 
-  it('does not include rebalance fields when rebalanceEnabled is false', () => {
-    const cfg = buildSolverConfigFromSettings(mockSettings, makeData(), NOW_MS);
-    expect(cfg.rebalanceHoldSlots).toBeUndefined();
-    expect(cfg.rebalanceRemainingSlots).toBeUndefined();
-    expect(cfg.rebalanceTargetSoc_percent).toBeUndefined();
+  it('does not include rebalance config when rebalanceEnabled is false', () => {
+    const { cfg } = buildSolverConfigFromSettings(mockSettings, makeData(), NOW_MS);
+    expect(cfg.rebalance?.holdSlots).toBeUndefined();
+    expect(cfg.rebalance?.remainingSlots).toBeUndefined();
+    expect(cfg.rebalance?.targetSoc_percent).toBeUndefined();
   });
 
-  it('sets rebalanceRemainingSlots = holdSlots when startMs is null (not started)', () => {
+  it('sets remainingSlots = holdSlots when startMs is null (not started)', () => {
     const settings = { ...mockSettings, rebalanceEnabled: true, rebalanceHoldHours: 3 };
     // 3h / (15min / 60) = 3 / 0.25 = 12 slots
-    const cfg = buildSolverConfigFromSettings(settings, makeData({ startMs: null }), NOW_MS);
-    expect(cfg.rebalanceHoldSlots).toBe(12);
-    expect(cfg.rebalanceRemainingSlots).toBe(12);
-    expect(cfg.rebalanceTargetSoc_percent).toBe(100);
+    const { cfg } = buildSolverConfigFromSettings(settings, makeData({ startMs: null }), NOW_MS);
+    expect(cfg.rebalance?.holdSlots).toBe(12);
+    expect(cfg.rebalance?.remainingSlots).toBe(12);
+    expect(cfg.rebalance?.targetSoc_percent).toBe(100);
   });
 
   it('counts down correctly when startMs is set (mid-cycle)', () => {
     const settings = { ...mockSettings, rebalanceEnabled: true, rebalanceHoldHours: 3 };
     // 2 slots elapsed (30 min ago): remaining = 12 - 2 = 10
     const startMs = NOW_MS - 2 * 15 * 60_000;
-    const cfg = buildSolverConfigFromSettings(settings, makeData({ startMs }), NOW_MS);
-    expect(cfg.rebalanceHoldSlots).toBe(12);
-    expect(cfg.rebalanceRemainingSlots).toBe(10);
+    const { cfg } = buildSolverConfigFromSettings(settings, makeData({ startMs }), NOW_MS);
+    expect(cfg.rebalance?.holdSlots).toBe(12);
+    expect(cfg.rebalance?.remainingSlots).toBe(10);
   });
 
-  it('returns rebalanceRemainingSlots = 0 when cycle is complete', () => {
+  it('returns remainingSlots = 0 when cycle is complete', () => {
     const settings = { ...mockSettings, rebalanceEnabled: true, rebalanceHoldHours: 3 };
     // Started 12 slots (3h) ago — cycle is done
     const startMs = NOW_MS - 12 * 15 * 60_000;
-    const cfg = buildSolverConfigFromSettings(settings, makeData({ startMs }), NOW_MS);
-    expect(cfg.rebalanceRemainingSlots).toBe(0);
+    const { cfg } = buildSolverConfigFromSettings(settings, makeData({ startMs }), NOW_MS);
+    expect(cfg.rebalance?.remainingSlots).toBe(0);
   });
 
   it('uses Math.ceil so the hold is never shorter than requested (fractional hours)', () => {
     // 1.1h / 0.25h = 4.4 → ceil → 5 slots (not round-down 4)
     const settings = { ...mockSettings, rebalanceEnabled: true, rebalanceHoldHours: 1.1 };
-    const cfg = buildSolverConfigFromSettings(settings, makeData({ startMs: null }), NOW_MS);
-    expect(cfg.rebalanceHoldSlots).toBe(5); // ceil(4.4) = 5
-    expect(cfg.rebalanceRemainingSlots).toBe(5);
+    const { cfg } = buildSolverConfigFromSettings(settings, makeData({ startMs: null }), NOW_MS);
+    expect(cfg.rebalance?.holdSlots).toBe(5); // ceil(4.4) = 5
+    expect(cfg.rebalance?.remainingSlots).toBe(5);
   });
 
   it('clamps holdSlots to at least 1 when rebalanceHoldHours is 0', () => {
     const settings = { ...mockSettings, rebalanceEnabled: true, rebalanceHoldHours: 0 };
-    const cfg = buildSolverConfigFromSettings(settings, makeData({ startMs: null }), NOW_MS);
-    expect(cfg.rebalanceHoldSlots).toBeGreaterThanOrEqual(1);
-    expect(cfg.rebalanceRemainingSlots).toBeGreaterThanOrEqual(1);
+    const { cfg } = buildSolverConfigFromSettings(settings, makeData({ startMs: null }), NOW_MS);
+    expect(cfg.rebalance?.holdSlots).toBeGreaterThanOrEqual(1);
+    expect(cfg.rebalance?.remainingSlots).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -99,7 +99,7 @@ describe('buildSolverConfigFromSettings — timeline normalization', () => {
     const data = makeData();
     data.load = { start: NOW_STRING, step: 60, values: Array(24).fill(400) };
 
-    const cfg = buildSolverConfigFromSettings(mockSettings, data, NOW_MS);
+    const { cfg } = buildSolverConfigFromSettings(mockSettings, data, NOW_MS);
 
     expect(cfg.load_W).toHaveLength(96);
     expect(cfg.pv_W).toHaveLength(96);
@@ -112,7 +112,7 @@ describe('buildSolverConfigFromSettings — timeline normalization', () => {
     const data = makeData();
     data.load.values = [100, 200, 300, 400, ...Array(92).fill(0)];
 
-    const cfg = buildSolverConfigFromSettings({ ...mockSettings, stepSize_m: 60 }, data, NOW_MS);
+    const { cfg } = buildSolverConfigFromSettings({ ...mockSettings, stepSize_m: 60 }, data, NOW_MS);
 
     expect(cfg.load_W[0]).toBe(250);
     expect(cfg.load_W).toHaveLength(24);
@@ -139,19 +139,19 @@ const dataWithEntries = (entries) => ({ ...makeData(), evScheduleEntries: entrie
 
 describe('buildSolverConfigFromSettings — EV config (wiring)', () => {
   it('does not add ev when evEnabled is false', () => {
-    const cfg = buildSolverConfigFromSettings(mockSettings, makeData(), NOW_MS);
+    const { cfg } = buildSolverConfigFromSettings(mockSettings, makeData(), NOW_MS);
     expect(cfg.ev).toBeUndefined();
   });
 
   it('does not add ev when the car is neither present nor expected', () => {
-    const cfg = buildSolverConfigFromSettings(
+    const { cfg } = buildSolverConfigFromSettings(
       evSettings, makeData(), NOW_MS, { pluggedIn: false, soc_percent: 50 },
     );
     expect(cfg.ev).toBeUndefined();
   });
 
   it('wires buildEvConfig in from data.evScheduleEntries when plugged in', () => {
-    const cfg = buildSolverConfigFromSettings(
+    const { cfg } = buildSolverConfigFromSettings(
       evSettings, dataWithEntries([evEntry({ soc_percent: 80 })]), NOW_MS, { pluggedIn: true, soc_percent: 50 },
     );
     expect(cfg.ev).toBeDefined();
@@ -160,7 +160,7 @@ describe('buildSolverConfigFromSettings — EV config (wiring)', () => {
   });
 
   it('passes evSocValue_cents_per_kWh through to the solver config', () => {
-    const cfg = buildSolverConfigFromSettings(
+    const { cfg } = buildSolverConfigFromSettings(
       { ...evSettings, evSocValue_cents_per_kWh: 15 },
       dataWithEntries([evEntry()]), NOW_MS, { pluggedIn: true, soc_percent: 50 },
     );
@@ -187,7 +187,7 @@ describe('buildSolverConfigFromSettings — extended horizon clamping', () => {
     [1, 236],
     [2, 332],
   ])('plans %i extra day(s) as %i slots regardless of stored data length', (extendedHorizonDays, expected) => {
-    const cfg = buildSolverConfigFromSettings(
+    const { cfg } = buildSolverConfigFromSettings(
       { ...mockSettings, extendedHorizonDays }, longData(), NOW_MS,
     );
     expect(cfg.load_W).toHaveLength(expected);
@@ -199,7 +199,7 @@ describe('buildSolverConfigFromSettings — extended horizon clamping', () => {
     for (const key of ['load', 'pv', 'importPrice', 'exportPrice']) {
       short[key].values = short[key].values.slice(0, 96);
     }
-    const cfg = buildSolverConfigFromSettings(
+    const { cfg } = buildSolverConfigFromSettings(
       { ...mockSettings, extendedHorizonDays: 2 }, short, NOW_MS,
     );
     expect(cfg.load_W).toHaveLength(96);

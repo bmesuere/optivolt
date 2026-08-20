@@ -84,20 +84,20 @@ describe('buildLP — MILP rebalancing', () => {
     maxSoc_percent: 100,
   };
 
-  it('does NOT include Binaries block when rebalanceRemainingSlots is 0', () => {
-    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: 0 });
+  it('does NOT include Binaries block when rebalance remainingSlots is 0', () => {
+    const lp = buildLP({ ...mockData, rebalance: { holdSlots: 0, remainingSlots: 0, targetSoc_percent: 100 } });
     expect(lp).not.toContain('Binaries');
     expect(lp).not.toContain('start_balance_');
   });
 
-  it('does NOT include Binaries block when rebalanceRemainingSlots is undefined', () => {
+  it('does NOT include Binaries block when rebalance is undefined', () => {
     const lp = buildLP(mockData);
     expect(lp).not.toContain('Binaries');
     expect(lp).not.toContain('start_balance_');
   });
 
   it('includes a Binaries block with start_balance_k variables when D > 0', () => {
-    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: 100 });
+    const lp = buildLP({ ...mockData, rebalance: { holdSlots: D, remainingSlots: D, targetSoc_percent: 100 } });
     expect(lp).toContain('Binaries');
     // T=8, D=3 → start positions 0..5 (T-D = 5)
     for (let k = 0; k <= T - D; k++) {
@@ -108,7 +108,7 @@ describe('buildLP — MILP rebalancing', () => {
   });
 
   it('includes exactly-one-start constraint', () => {
-    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: 100 });
+    const lp = buildLP({ ...mockData, rebalance: { holdSlots: D, remainingSlots: D, targetSoc_percent: 100 } });
     // All T-D+1 start variables must appear in c_balance_start
     expect(lp).toContain('c_balance_start:');
     expect(lp).toMatch(/c_balance_start:.*= 1/);
@@ -116,15 +116,15 @@ describe('buildLP — MILP rebalancing', () => {
 
   it('includes per-slot SoC forcing constraints referencing targetSoc_Wh', () => {
     const targetSoc_Wh = (100 / 100) * 10000; // = 10000
-    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: 100 });
+    const lp = buildLP({ ...mockData, rebalance: { holdSlots: D, remainingSlots: D, targetSoc_percent: 100 } });
     // Every slot that can be in the window should have a c_rebalance_t constraint
     expect(lp).toContain('c_rebalance_0:');
     expect(lp).toContain(`${targetSoc_Wh}`);
   });
 
-  it('clamps D to T when rebalanceRemainingSlots > T, constraining the entire horizon', () => {
+  it('clamps D to T when remainingSlots > T, constraining the entire horizon', () => {
     // D = 20 > T = 8 → clamp to T=8; only one start position (k=0), whole horizon constrained
-    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: 20, rebalanceTargetSoc_percent: 100 });
+    const lp = buildLP({ ...mockData, rebalance: { holdSlots: 20, remainingSlots: 20, targetSoc_percent: 100 } });
     expect(lp).toContain('Binaries');
     expect(lp).toContain('start_balance_0');
     // No start_balance_1 — only k=0 is valid when D=T
@@ -132,9 +132,9 @@ describe('buildLP — MILP rebalancing', () => {
     expect(lp).toContain('c_balance_start: start_balance_0 = 1');
   });
 
-  it('caps window start positions at rebalanceMaxStartSlot', () => {
+  it('caps window start positions at maxStartSlot', () => {
     // T=8, D=3 → starts would be 0..5; cap at 2 → only 0..2
-    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: 100, rebalanceMaxStartSlot: 2 });
+    const lp = buildLP({ ...mockData, rebalance: { holdSlots: D, remainingSlots: D, targetSoc_percent: 100, maxStartSlot: 2 } });
     expect(lp).toContain('start_balance_2');
     expect(lp).not.toContain('start_balance_3');
     expect(lp).toContain('c_balance_start: start_balance_0 + start_balance_1 + start_balance_2 = 1');
@@ -143,30 +143,30 @@ describe('buildLP — MILP rebalancing', () => {
     expect(lp).not.toContain('c_rebalance_5:');
   });
 
-  it('ignores a rebalanceMaxStartSlot beyond T - D', () => {
-    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: 100, rebalanceMaxStartSlot: 99 });
+  it('ignores a maxStartSlot beyond T - D', () => {
+    const lp = buildLP({ ...mockData, rebalance: { holdSlots: D, remainingSlots: D, targetSoc_percent: 100, maxStartSlot: 99 } });
     expect(lp).toContain(`start_balance_${T - D}`);
     expect(lp).not.toContain(`start_balance_${T - D + 1}`);
   });
 
-  it('clamps a negative rebalanceMaxStartSlot so k=0 always exists', () => {
-    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: 100, rebalanceMaxStartSlot: -5 });
+  it('clamps a negative maxStartSlot so k=0 always exists', () => {
+    const lp = buildLP({ ...mockData, rebalance: { holdSlots: D, remainingSlots: D, targetSoc_percent: 100, maxStartSlot: -5 } });
     expect(lp).toContain('c_balance_start: start_balance_0 = 1');
   });
 
-  it('truncates fractional rebalanceRemainingSlots to integer', () => {
+  it('truncates fractional remainingSlots to integer', () => {
     // 2.9 should be treated as 2, not 3
-    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: 2.9, rebalanceTargetSoc_percent: 100 });
+    const lp = buildLP({ ...mockData, rebalance: { holdSlots: 3, remainingSlots: 2.9, targetSoc_percent: 100 } });
     // With D=2, T=8: start positions 0..6 (T-D=6)
     expect(lp).toContain('start_balance_6');
     expect(lp).not.toContain('start_balance_7'); // would only exist if D were treated as 1
   });
 
-  it('clamps rebalanceTargetSoc_percent to maxSoc_percent to prevent infeasible models', () => {
+  it('clamps targetSoc_percent to maxSoc_percent to prevent infeasible models', () => {
     // If target exceeds max, model would be infeasible (soc_t >= targetSoc > maxSoc_Wh upper bound).
     // Clamping ensures the forced target == max bound.
     const targetAboveMax = 120; // > maxSoc_percent=100
-    const lp = buildLP({ ...mockData, rebalanceRemainingSlots: D, rebalanceTargetSoc_percent: targetAboveMax });
+    const lp = buildLP({ ...mockData, rebalance: { holdSlots: D, remainingSlots: D, targetSoc_percent: targetAboveMax } });
     // The actual Wh coefficient in constraints must be based on maxSoc_percent (100%), not 120%
     const expectedTargetSoc_Wh = (100 / 100) * 10000; // = 10000
     expect(lp).toContain(`${expectedTargetSoc_Wh} start_balance_`);
@@ -560,7 +560,7 @@ describe('buildLP — multi-day horizon (~384 slots)', () => {
   };
 
   it('keeps the escalating symmetry-break penalties well below real cost coefficients', () => {
-    const lp = buildLP({ ...base, ev, rebalanceRemainingSlots: 12, rebalanceTargetSoc_percent: 100, rebalanceMaxStartSlot: 95 });
+    const lp = buildLP({ ...base, ev, rebalance: { holdSlots: 12, remainingSlots: 12, targetSoc_percent: 100, maxStartSlot: 95 } });
 
     // Largest EV symmetry penalty: 1e-6 × 384 = 0.000384 c€ on the last slot.
     expect(lp).toContain('0.000384 ev_on_383');

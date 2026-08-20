@@ -87,14 +87,14 @@ describe('extended horizon — full pipeline with real HiGHS solve', () => {
 
   it('solves a 4-day plan with merged forecast prices and a multi-day EV target', async () => {
     const nowMs = new Date(NOW_ISO).getTime();
-    const cfg = buildSolverConfigFromSettings(
+    const { cfg, pricesKnownUntilMs } = buildSolverConfigFromSettings(
       settings, buildData(), nowMs,
       { pluggedIn: true, soc_percent: 30 },
     );
 
     // The merge extended the horizon to the full 4 days, actuals first.
     expect(cfg.load_W.length).toBe(T);
-    expect(cfg.pricesKnownUntilMs).toBe(nowMs + 96 * SLOT_MS);
+    expect(pricesKnownUntilMs).toBe(nowMs + 96 * SLOT_MS);
     // Forecast slots carry the +1 offset applied above.
     expect(cfg.importPrice[96]).toBeCloseTo(cfg.importPrice[0] + 1, 6);
 
