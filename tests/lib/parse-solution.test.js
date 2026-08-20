@@ -33,7 +33,7 @@ describe('parseSolution', () => {
     expect(rows[0].g2l).toBe(400);
     expect(rows[0].pv2l).toBe(100);
     expect(rows[1].g2l).toBe(600);
-    expect(rows[0].soc).toBe(200);
+    expect(rows[0].soc_Wh).toBe(200);
     expect(rows[0].soc_percent).toBe(20);
     expect(rows[0].timestampMs).toBe(1700000000000);
     expect(rows[1].timestampMs).toBe(1700000000000 + 3600000);
@@ -53,8 +53,8 @@ describe('parseSolution', () => {
 
     const rows = parseSolution(result, cfg, opts);
 
-    expect(rows[0].soc).toBe(200);
-    expect(rows[1].soc).toBe(150);
+    expect(rows[0].soc_Wh).toBe(200);
+    expect(rows[1].soc_Wh).toBe(150);
   });
 
   it('computes per-slot import and export costs', () => {
@@ -126,7 +126,7 @@ describe('parseSolution — solver status guard', () => {
   it('still parses a feasible incumbent under "Time limit reached"', () => {
     const rows = parseSolution({ Status: 'Time limit reached', Columns: columns }, cfg, opts);
     expect(rows).toHaveLength(2);
-    expect(rows[0].soc).toBe(200);
+    expect(rows[0].soc_Wh).toBe(200);
   });
 
   it('throws for "Time limit reached" with empty columns (no incumbent found)', () => {

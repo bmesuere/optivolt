@@ -9,7 +9,7 @@ function makeRow(overrides = {}) {
     tIdx: 0, timestampMs: 0,
     load: 0, pv: 0, ic: 0, ec: 0,
     g2l: 0, g2b: 0, pv2l: 0, pv2b: 0, pv2g: 0, b2l: 0, b2g: 0,
-    imp: 0, exp: 0, soc: 0, soc_percent: 0,
+    imp: 0, exp: 0, soc_Wh: 0, soc_percent: 0,
     g2ev: 0, pv2ev: 0, b2ev: 0,
     ev_charge: 0, ev_charge_A: 0, ev_charge_mode: 'off', ev_soc_percent: 0,
     ...overrides,

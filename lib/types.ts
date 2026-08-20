@@ -127,7 +127,7 @@ export interface TimeSeries {
 
 /**
  * A single per-slot row produced by parseSolution.
- * All flow values are in W (rounded to 3 decimal places); soc is in Wh.
+ * All flow values are in W (rounded to 3 decimal places).
  */
 export interface PlanRow {
   tIdx: number;
@@ -149,7 +149,7 @@ export interface PlanRow {
   exp: number;   // total export W (pv2g + b2g)
   importCost_cents: number;  // import energy cost for this slot, in c€
   exportCost_cents: number;  // export energy value for this slot, in c€
-  soc: number;   // battery SoC Wh
+  soc_Wh: number;   // battery SoC Wh
   soc_percent: number;  // battery SoC %
   g2ev: number;         // grid → EV W
   pv2ev: number;        // PV → EV W

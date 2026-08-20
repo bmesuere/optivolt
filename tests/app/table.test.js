@@ -21,7 +21,7 @@ function makeRow(overrides = {}) {
     b2g: 0,
     imp: 0,
     exp: 0,
-    soc: 0,
+    soc_Wh: 0,
     soc_percent: 0,
     g2ev: 0,
     pv2ev: 0,
