@@ -15,7 +15,7 @@ updates:
     schedule:
       interval: 'monthly'
 
-  - package-ecosystem: "docker" # Keep the pinned BUILD_FROM base image in the Dockerfile up to date
+  - package-ecosystem: "docker" # Bumps the Dockerfile's literal `FROM ...-base` pin (the default-base stage)
     directory: "/"
     schedule:
       interval: 'monthly'

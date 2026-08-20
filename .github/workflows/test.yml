@@ -38,11 +38,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # ubuntu-latest runners are amd64, matching the Dockerfile's default
-    # BUILD_ARCH; passed explicitly so a future runner-arch change can't
-    # silently flip this to the aarch64 base without anyone noticing.
+    # ubuntu-latest runners are amd64, matching the Dockerfile's pinned
+    # default-base stage (the HA builder overrides BUILD_FROM per arch).
     - name: Build image
-      run: docker build --build-arg BUILD_ARCH=amd64 -t optivolt-smoke:ci .
+      run: docker build -t optivolt-smoke:ci .
 
     - name: Start container
       run: docker run -d --name optivolt-smoke -p 3000:3000 optivolt-smoke:ci
