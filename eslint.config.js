@@ -7,7 +7,7 @@ import { defineConfig } from "eslint/config";
 
 export default defineConfig([
   // Ignore generated files in app/lib and vendor directory
-  { ignores: ["app/lib/**", "vendor/**"] },
+  { ignores: ["app/lib/**", "vendor/**", "coverage/**"] },
   {
     files: ["**/*.{js,mjs,cjs}"],
     plugins: { js },
