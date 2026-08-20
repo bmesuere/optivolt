@@ -43,6 +43,13 @@ export interface ComputePlanResult {
   computedAtMs: number;
   /** Solver-inputs version this plan was built from; see solver-inputs-version.ts. */
   inputsVersion: number;
+  /**
+   * True when settings/data changed while the solve was running on the worker
+   * (the await opens a window the old synchronous solve never had). Such a
+   * plan is display-only: post-solve bookkeeping was skipped and hardware
+   * writes are refused — the caller should recompute.
+   */
+  inputsChangedDuringSolve: boolean;
   /** Extended horizon: prices past this instant are forecast, not actuals. */
   pricesKnownUntilMs: number | null;
   timing: { startMs: number; stepMin: number };
@@ -238,6 +245,15 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   const t0 = performance.now();
   const result = await solveLp(lpText, solveOptions);
   const solveMs = performance.now() - t0;
+  // The await above yields the event loop, so settings/data routes can run
+  // mid-solve. When they did, this plan's snapshots are stale: persisting
+  // them would clobber the newer state, so all post-solve bookkeeping below
+  // is skipped (the recompute the stale plan triggers redoes it), and
+  // planAndMaybeWrite refuses to push the schedule to hardware.
+  const inputsChangedDuringSolve = getSolverInputsVersion() !== inputsVersion;
+  if (inputsChangedDuringSolve) {
+    console.warn('[calculate] solver inputs changed during solve; plan is display-only');
+  }
   const evCfg = cfg.ev;
   const evInfo = evCfg ? {
     windows: evCfg.availabilityWindows.map((w) => [w.startSlot, w.endSlot]),
@@ -268,13 +284,16 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const rowsWithDess: PlanRowWithDess[] = rows.map((row, i) => ({ ...row, dess: perSlot[i] }));
 
-  // Post-solve bookkeeping — reached only when solve + parse succeeded, so a
-  // failed solve never flips settings or persisted rebalance state.
-  if (rebalanceCycleComplete) {
-    ({ settings, data } = await finishCompletedRebalanceCycle(settings, data));
-  }
-  if (settings.rebalanceEnabled) {
-    data = await recordRebalanceStartIfAtTarget(settings, data, timing.startMs);
+  // Post-solve bookkeeping — reached only when solve + parse succeeded (so a
+  // failed solve never flips settings or persisted rebalance state), and only
+  // when the snapshots it would persist are still the current state.
+  if (!inputsChangedDuringSolve) {
+    if (rebalanceCycleComplete) {
+      ({ settings, data } = await finishCompletedRebalanceCycle(settings, data));
+    }
+    if (settings.rebalanceEnabled) {
+      data = await recordRebalanceStartIfAtTarget(settings, data, timing.startMs);
+    }
   }
 
   const rebalanceCtx = settings.rebalanceEnabled ? {
@@ -287,7 +306,7 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const rebalanceNudge = getRebalanceNudge(data);
 
-  lastPlan = { cfg, data, computedAtMs: Date.now(), inputsVersion, pricesKnownUntilMs: pricesKnownUntilMs ?? null, timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
+  lastPlan = { cfg, data, computedAtMs: Date.now(), inputsVersion, inputsChangedDuringSolve, pricesKnownUntilMs: pricesKnownUntilMs ?? null, timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
   return lastPlan;
 }
 
@@ -305,6 +324,11 @@ export async function planAndMaybeWrite({
     // incumbent (e.g. "Time limit reached") is fine to display but not to write.
     if (plan.result.Status !== 'Optimal') {
       throw new Error(`Refusing to write schedule to Victron: solver status is "${plan.result.Status ?? 'unknown'}" (expected "Optimal")`);
+    }
+    // Nor a plan whose inputs changed mid-solve: the schedule no longer
+    // reflects the current settings/data. The caller should recompute.
+    if (plan.inputsChangedDuringSolve) {
+      throw new Error('Refusing to write schedule to Victron: solver inputs changed during the solve; recompute first');
     }
     await writePlanToVictron(plan.rows, plan.timing.stepMin);
   }

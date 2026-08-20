@@ -6,12 +6,26 @@ vi.mock('../../../api/services/data-store.ts');
 vi.mock('../../../api/services/vrm-refresh.ts');
 vi.mock('../../../api/services/mqtt-service.ts');
 
+// Pass-through wrapper around the real solver, with a hook to simulate work
+// (e.g. a settings edit) landing while the solve is running on the worker.
+const solveHook = vi.hoisted(() => ({ onSolve: null }));
+vi.mock('../../../api/services/solve-runner.ts', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    solveLp: (...args) => {
+      solveHook.onSolve?.();
+      return actual.solveLp(...args);
+    },
+  };
+});
+
 import { loadSettings, saveSettings } from '../../../api/services/settings-store.ts';
 import { loadData, saveData } from '../../../api/services/data-store.ts';
 import { refreshSeriesFromVrmAndPersist } from '../../../api/services/vrm-refresh.ts';
 import { setDynamicEssSchedule } from '../../../api/services/mqtt-service.ts';
 import { computePlan, planAndMaybeWrite, selectSolveOptions } from '../../../api/services/planner-service.ts';
 import { FeedIn, Strategy } from '../../../lib/dess-mapper.ts';
+import { bumpSolverInputsVersion } from '../../../api/services/solver-inputs-version.ts';
 
 const NOW_STRING = '2024-01-01T00:00:00Z';
 const NOW_MS = new Date(NOW_STRING).getTime();
@@ -200,6 +214,53 @@ describe('computePlan — rebalance bookkeeping', () => {
     });
     expect(result.rows[1].originalLoad).toBeUndefined();
     expect(result.rows[1].originalPv).toBeUndefined();
+  });
+});
+
+describe('computePlan — inputs changed during the solve', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(NOW_STRING));
+    vi.resetAllMocks();
+    refreshSeriesFromVrmAndPersist.mockResolvedValue();
+    setDynamicEssSchedule.mockResolvedValue();
+    saveSettings.mockResolvedValue();
+    saveData.mockResolvedValue();
+  });
+
+  afterEach(() => {
+    solveHook.onSolve = null;
+    vi.useRealTimers();
+  });
+
+  it('marks the plan display-only and skips rebalance bookkeeping', async () => {
+    // Cycle-complete scenario: without the mid-solve change, this would flip
+    // rebalanceEnabled off and persist both stores.
+    const startMs = NOW_MS - 2 * 60 * 60_000;
+    loadSettings.mockResolvedValue({ ...baseSettings, rebalanceEnabled: true, rebalanceHoldHours: 2 });
+    loadData.mockResolvedValue({ ...baseData, rebalanceState: { startMs } });
+    solveHook.onSolve = () => bumpSolverInputsVersion();
+
+    const result = await computePlan();
+
+    expect(result.inputsChangedDuringSolve).toBe(true);
+    expect(saveSettings).not.toHaveBeenCalled();
+    expect(saveData).not.toHaveBeenCalled();
+  });
+
+  it('refuses the hardware write and reports fresh inputs otherwise', async () => {
+    loadSettings.mockResolvedValue(baseSettings);
+    loadData.mockResolvedValue({ ...baseData });
+    solveHook.onSolve = () => bumpSolverInputsVersion();
+
+    await expect(planAndMaybeWrite({ writeToVictron: true }))
+      .rejects.toThrow(/inputs changed during the solve/);
+    expect(setDynamicEssSchedule).not.toHaveBeenCalled();
+
+    solveHook.onSolve = null;
+    const plan = await planAndMaybeWrite({ writeToVictron: true });
+    expect(plan.inputsChangedDuringSolve).toBe(false);
+    expect(setDynamicEssSchedule).toHaveBeenCalled();
   });
 });
 
