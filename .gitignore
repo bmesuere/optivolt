@@ -6,5 +6,6 @@ coverage
 app/lib/
 .env.local
 .claude/settings.local.json
+.claude/worktrees/
 .superpowers/
 docs/superpowers/
