@@ -55,7 +55,8 @@ what the Play CDN injected.)
 `tailwind.config.js` lists explicit globs (`app/index.html`, `app/main.js`,
 `app/src/**/*.js`) rather than `app/**` so this directory is not scanned. Class
 names are only ever written as whole literal strings in the sources — including
-the tab class strings in `app/main.js` — so no `safelist` is needed. If you ever
+the segmented-control class strings in `app/src/view-toggles.js` — so no
+`safelist` is needed. If you ever
 build a class name by concatenation (`` `bg-${color}-500` ``), the CLI cannot see
 it and you must add it to `safelist` in `tailwind.config.js`.
 
@@ -88,4 +89,4 @@ of a family share one file per subset; the per-weight `@font-face` blocks are
 kept as Google emitted them.
 
 Consumers keep their fallback stacks (`'Outfit', system-ui, sans-serif` and
-`'JetBrains Mono', ui-monospace, monospace`) in `app/index.html`.
+`'JetBrains Mono', ui-monospace, monospace`) in `app/styles.css`.
