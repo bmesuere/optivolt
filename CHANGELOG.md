@@ -2,9 +2,13 @@
 
 Coarse release notes for the Optivolt Home Assistant add-on, reconstructed
 from the merged pull requests behind each `config.yaml` version bump. The
-project is not tagged, so entries group work rather than list every change.
+project is not tagged and the version is bumped rarely, so each entry covers
+the period it was the current version rather than a single release date, and
+groups work rather than listing every change.
 
-## 0.2.0
+## 0.2.0 — 2026-02-22 onwards
+
+Still the current version; everything below has shipped under it.
 
 - Load forecasting from Home Assistant sensor history, with pluggable
   predictors and a fixed-load fallback.
@@ -25,9 +29,10 @@ project is not tagged, so entries group work rather than list every change.
 - Server and core logic migrated to TypeScript, run directly by Node's type
   stripping.
 
-## 0.1.0
+## 0.1.0 — 2025-10-19 to 2026-02-21
 
-- Initial Home Assistant add-on packaging, served through ingress.
+- Initial Home Assistant add-on packaging, served through ingress
+  (added 2025-11-11; the weeks before that were the pre-add-on prototype).
 - Day-ahead cost minimization over 15-minute slots with the HiGHS solver,
   covering battery, PV, grid and load.
 - Victron VRM integration for forecasts, prices, system limits and live SoC.
