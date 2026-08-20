@@ -145,7 +145,7 @@ describe('vrm-refresh logic with custom data', () => {
     expect(saveData).toHaveBeenCalledWith(expect.objectContaining({ evScheduleEntries: entries }));
   });
 
-  it('records the last full SoC timestamp when MQTT reports 100%', async () => {
+  it('passes a fresh 100% MQTT SoC through to saveData', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-13T12:34:56.000Z'));
     mqttService.readVictronSocPercent.mockResolvedValue(100);
@@ -162,9 +162,11 @@ describe('vrm-refresh logic with custom data', () => {
 
     await refreshSeriesFromVrmAndPersist();
 
+    // The full-SoC observation itself is recorded inside saveData; the refresh
+    // just passes the fresh soc through with the previous marker untouched.
     expect(saveData).toHaveBeenCalledWith(expect.objectContaining({
       soc: { timestamp: '2024-01-13T12:34:56.000Z', value: 100 },
-      lastFullSocAt: '2024-01-13T12:34:56.000Z',
+      lastFullSocAt: '2024-01-01T00:00:00.000Z',
     }));
   });
 });

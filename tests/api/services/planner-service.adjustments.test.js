@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSolverInputs } from '../../../api/services/config-builder.ts';
+import { getSolverInputs } from '../../../api/services/planner-service.ts';
 import { loadData, saveData } from '../../../api/services/data-store.ts';
 import { loadSettings } from '../../../api/services/settings-store.ts';
 
 vi.mock('../../../api/services/data-store.ts');
 vi.mock('../../../api/services/settings-store.ts');
 vi.mock('../../../api/services/ha-client.ts');
+vi.mock('../../../api/services/vrm-refresh.ts');
+vi.mock('../../../api/services/mqtt-service.ts');
 
 const NOW = '2099-01-01T00:05:00.000Z';
 
@@ -63,5 +65,24 @@ describe('getSolverInputs — prediction adjustments', () => {
     expect(data.load.values).toEqual([100, 100, 100, 100]);
     expect(data.pv.values).toEqual([200, 200, 200, 200]);
     expect(saveData).not.toHaveBeenCalled();
+  });
+
+  it('backfills a missing lastFullSocAt into the returned data and persists it', async () => {
+    // Persisted data from before saveData recorded the observation itself:
+    // soc already 100% but no lastFullSocAt, and nothing else to normalize.
+    loadData.mockResolvedValue({
+      load: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [100, 100, 100, 100] },
+      pv: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [200, 200, 200, 200] },
+      importPrice: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [10, 10, 10, 10] },
+      exportPrice: { start: '2099-01-01T00:00:00.000Z', step: 15, values: [5, 5, 5, 5] },
+      soc: { timestamp: '2099-01-01T00:00:00.000Z', value: 100 },
+    });
+
+    const { data } = await getSolverInputs();
+
+    expect(data.lastFullSocAt).toBe('2099-01-01T00:00:00.000Z');
+    expect(saveData).toHaveBeenCalledWith(expect.objectContaining({
+      lastFullSocAt: '2099-01-01T00:00:00.000Z',
+    }));
   });
 });
