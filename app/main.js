@@ -6,6 +6,7 @@ import {
   wireEvSensorInputs,
 } from "./src/ev-settings.js";
 import { createEvScheduleController } from "./src/ev-schedule.js";
+import { mountChartPlaceholders } from "./src/chart-empty.js";
 import { initOptimizerQuickSettings } from "./src/optimizer-quick-settings.js";
 import { createOptimizerController } from "./src/optimizer-controller.js";
 import {
@@ -28,6 +29,7 @@ function revealCards(panel) {
 }
 
 // ---------- DOM ----------
+mountChartPlaceholders();
 const els = getElements();
 let evSchedule = null;
 const optimizer = createOptimizerController({
@@ -48,9 +50,6 @@ let optimizerQuickSettings = null;
 boot();
 
 function setupTabSwitcher() {
-  const ACTIVE_CLS = 'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium bg-white text-ink shadow-sm dark:bg-slate-700 dark:text-slate-100 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50';
-  const INACTIVE_CLS = 'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all focus:outline-none focus:ring-2 focus:ring-sky-400/50';
-
   const tabs = [
     { tab: document.getElementById('tab-optimizer'),   panel: document.getElementById('panel-optimizer') },
     { tab: document.getElementById('tab-predictions'), panel: document.getElementById('panel-predictions') },
@@ -62,10 +61,9 @@ function setupTabSwitcher() {
   let pendingSwitch = null;
 
   function activateTab(newIndex) {
-    // Update tab button styles immediately
+    // Update tab button styles immediately (styles.css keys off aria-selected)
     tabs.forEach(({ tab }, i) => {
       tab.setAttribute('aria-selected', String(i === newIndex));
-      tab.className = i === newIndex ? ACTIVE_CLS : INACTIVE_CLS;
     });
 
     if (newIndex === activeIndex) return;
