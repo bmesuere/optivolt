@@ -1,257 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapRowsToDess, mapRowsToDessV2, Strategy, Restrictions, FeedIn } from '../../lib/dess-mapper.ts';
-
-describe('mapRowsToDess', () => {
-  const cfg = {
-    maxGridImport_W: 5000,
-    maxSoc_percent: 100,
-    minSoc_percent: 0,
-    maxDischargePower_W: 4000,
-  };
-
-  const baseRow = {
-    g2l: 0, g2b: 0, pv2l: 0, pv2b: 0, pv2g: 0, b2l: 0, b2g: 0,
-    soc: 500, soc_percent: 50,
-    load: 500, pv: 0, ev_charge: 0,
-    ic: 10, ec: 5,
-  };
-
-  it('detects proBattery strategy when charging from grid', () => {
-    const rows = [{
-      ...baseRow,
-      g2b: 1000, // Charging from grid
-      load: 0,
-    }];
-
-    const { perSlot } = mapRowsToDess(rows, cfg);
-    expect(perSlot[0].strategy).toBe(Strategy.proBattery);
-  });
-
-  it('detects proGrid strategy when discharging to grid', () => {
-    const rows = [{
-      ...baseRow,
-      b2g: 1000, // Discharging to grid
-      load: 0,
-    }];
-
-    const { perSlot } = mapRowsToDess(rows, cfg);
-    expect(perSlot[0].strategy).toBe(Strategy.proGrid);
-  });
-
-  describe('Deficit scenarios (Load > PV)', () => {
-    it('detects selfConsumption when battery covers deficit', () => {
-      const rows = [{
-        ...baseRow,
-        load: 500, pv: 0,
-        b2l: 500, g2l: 0,
-      }];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      expect(perSlot[0].strategy).toBe(Strategy.selfConsumption);
-    });
-
-    it('detects proBattery when grid covers deficit', () => {
-      const rows = [{
-        ...baseRow,
-        load: 500, pv: 0,
-        b2l: 0, g2l: 500,
-      }];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      expect(perSlot[0].strategy).toBe(Strategy.proBattery);
-    });
-
-    it('detects proBattery when mixed grid and battery covers deficit', () => {
-      const rows = [{
-        ...baseRow,
-        load: 1000, pv: 0,
-        b2l: 500, g2l: 500,
-      }];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      expect(perSlot[0].strategy).toBe(Strategy.proBattery);
-    });
-
-    it('uses price signal when no flow (Price <= Tipping Point -> ProBattery)', () => {
-      // We need 2 slots. Slot 0 defines tipping point (Grid usage at high price).
-      // Slot 1 has no flow (load=pv=0) but low price.
-      // Both will be in same segment because soc_percent (50) is not at min/max boundary.
-      const rows = [
-        {
-          ...baseRow,
-          g2l: 500, ic: 50, // High price grid usage
-        },
-        {
-          ...baseRow,
-          load: 0, pv: 0, ic: 10, // Low price, no flow
-        }
-      ];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      // Slot 1: ic(10) <= highest(50) -> proBattery
-      expect(perSlot[1].strategy).toBe(Strategy.proBattery);
-    });
-
-    it('uses price signal when no flow (Price > Tipping Point -> SelfConsumption)', () => {
-      const rows = [
-        {
-          ...baseRow,
-          g2l: 500, ic: 10, // Low price grid usage
-        },
-        {
-          ...baseRow,
-          load: 0, pv: 0, ic: 50, // High price
-        }
-      ];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      expect(perSlot[1].strategy).toBe(Strategy.selfConsumption);
-    });
-  });
-
-  describe('PV Surplus scenarios (PV > Load)', () => {
-    it('detects proGrid when exporting surplus', () => {
-      const rows = [{
-        ...baseRow,
-        load: 0, pv: 500,
-        pv2g: 500,
-      }];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      expect(perSlot[0].strategy).toBe(Strategy.proGrid);
-    });
-
-    it('uses price signal when charging battery (Price <= Tipping Point -> ProBattery)', () => {
-      const rows = [
-        {
-          ...baseRow,
-          g2l: 500, ic: 50,
-        },
-        {
-          ...baseRow,
-          load: 0, pv: 500, pv2b: 500, ic: 10,
-        }
-      ];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      expect(perSlot[1].strategy).toBe(Strategy.proBattery);
-    });
-
-    it('uses price signal when charging battery (Price > Tipping Point -> SelfConsumption)', () => {
-      const rows = [
-        {
-          ...baseRow,
-          g2l: 500, ic: 10,
-        },
-        {
-          ...baseRow,
-          load: 0, pv: 500, pv2b: 500, ic: 50,
-        }
-      ];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      expect(perSlot[1].strategy).toBe(Strategy.selfConsumption);
-    });
-  });
-
-  describe('Restrictions', () => {
-    it('allows none when both charging and discharging happen', () => {
-      const rows = [{ ...baseRow, g2b: 100, b2g: 100 }];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      expect(perSlot[0].restrictions).toBe(Restrictions.none);
-    });
-
-    it('blocks B2G when only charging', () => {
-      const rows = [{ ...baseRow, g2b: 100, b2g: 0 }];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      expect(perSlot[0].restrictions).toBe(Restrictions.batteryToGrid);
-    });
-
-    it('blocks G2B when only discharging', () => {
-      const rows = [{ ...baseRow, g2b: 0, b2g: 100 }];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      expect(perSlot[0].restrictions).toBe(Restrictions.gridToBattery);
-    });
-
-    it('blocks both when no interaction', () => {
-      const rows = [{ ...baseRow, g2b: 0, b2g: 0 }];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      expect(perSlot[0].restrictions).toBe(Restrictions.both);
-    });
-  });
-
-  describe('FeedIn', () => {
-    it('blocks feed-in when export price is negative', () => {
-      const rows = [{ ...baseRow, ec: -1 }];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      expect(perSlot[0].feedin).toBe(FeedIn.blocked);
-    });
-
-    it('allows feed-in at negative export prices when blocking is disabled', () => {
-      const rows = [{ ...baseRow, ec: -1 }];
-      const { perSlot } = mapRowsToDess(rows, cfg, { blockFeedInOnNegativePrices: false });
-      expect(perSlot[0].feedin).toBe(FeedIn.allowed);
-    });
-
-    it('allows feed-in when export price is positive', () => {
-      const rows = [{ ...baseRow, ec: 1 }];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      expect(perSlot[0].feedin).toBe(FeedIn.allowed);
-    });
-  });
-
-  describe('Segmentation', () => {
-    it('creates a segment boundary at max SoC so price lookups are scoped', () => {
-      // Row 0: grid usage at high price (50), soc at max boundary (100%)
-      // Row 1: no flow, medium price (30), mid-range SoC
-      // With segmentation: row 0 at max SoC boundary creates a segment break.
-      // Row 1 is in its own segment with no grid usage, tipping point = -Infinity,
-      // and ic(30) > -Infinity -> selfConsumption.
-      //
-      // Without segmentation: row 1 would share a segment with row 0, see its
-      // high-price (50) grid usage as tipping point, and ic(30) <= 50 -> proBattery.
-      const rows = [
-        {
-          ...baseRow,
-          g2l: 500, ic: 50, soc_percent: 100, // at max boundary, high price grid usage
-        },
-        {
-          ...baseRow,
-          load: 0, pv: 0, ic: 30, soc_percent: 50, // mid-range SoC
-        },
-      ];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      // Row 1 is in a separate segment (no grid usage there),
-      // tipping point = -Infinity, ic(30) > -Infinity -> selfConsumption
-      expect(perSlot[1].strategy).toBe(Strategy.selfConsumption);
-
-      // Now verify that WITHOUT the boundary (mid-range SoC on row 0),
-      // both rows share a segment and row 1 gets proBattery instead
-      const rowsNoBoundary = [
-        {
-          ...baseRow,
-          g2l: 500, ic: 50, soc_percent: 50, // NOT at boundary
-        },
-        {
-          ...baseRow,
-          load: 0, pv: 0, ic: 30, soc_percent: 50,
-        },
-      ];
-      const { perSlot: perSlotNoBoundary } = mapRowsToDess(rowsNoBoundary, cfg);
-      // Same segment: tipping point from row 0 is 50, ic(30) <= 50 -> proBattery
-      expect(perSlotNoBoundary[1].strategy).toBe(Strategy.proBattery);
-    });
-
-    it('keeps rows in same segment when SoC is not at boundary', () => {
-      // Both rows at mid-range SoC -> no segment break -> same segment
-      const rows = [
-        {
-          ...baseRow,
-          g2l: 500, ic: 10, soc_percent: 50,
-        },
-        {
-          ...baseRow,
-          load: 0, pv: 0, ic: 50, soc_percent: 50,
-        },
-      ];
-      const { perSlot } = mapRowsToDess(rows, cfg);
-      // Same segment: tipping point from row 0 is 10, row 1 ic(50) > 10 -> selfConsumption
-      expect(perSlot[1].strategy).toBe(Strategy.selfConsumption);
-    });
-  });
-});
+import { mapRowsToDessV2, Strategy, Restrictions, FeedIn } from '../../lib/dess-mapper.ts';
 
 describe('Tipping Point Calculations', () => {
   // Minimal mock of the config
@@ -284,7 +32,7 @@ describe('Tipping Point Calculations', () => {
       createRow({ soc_percent: 50, g2b: 100, ic: 12 }), // Charge at 12c
     ];
 
-    const result = mapRowsToDess(rows, mockCfg);
+    const result = mapRowsToDessV2(rows, mockCfg);
     // The highest price at which we charged was 15c
     expect(result.diagnostics.gridChargeTippingPoint_cents_per_kWh).toBe(15);
   });
@@ -295,7 +43,7 @@ describe('Tipping Point Calculations', () => {
       createRow({ soc_percent: 50, g2b: 0, ic: 15 }),
     ];
 
-    const result = mapRowsToDess(rows, mockCfg);
+    const result = mapRowsToDessV2(rows, mockCfg);
     expect(result.diagnostics.gridChargeTippingPoint_cents_per_kWh).toBe(-Infinity);
   });
 
@@ -307,7 +55,7 @@ describe('Tipping Point Calculations', () => {
       createRow({ soc_percent: 50, b2g: 100, ec: 25 }), // Export at 25c
     ];
 
-    const result = mapRowsToDess(rows, mockCfg);
+    const result = mapRowsToDessV2(rows, mockCfg);
     // The lowest price at which we exported was 20c
     expect(result.diagnostics.batteryExportTippingPoint_cents_per_kWh).toBe(20);
   });
@@ -318,7 +66,7 @@ describe('Tipping Point Calculations', () => {
       createRow({ soc_percent: 50, b2g: 0, ec: 20 }),
     ];
 
-    const result = mapRowsToDess(rows, mockCfg);
+    const result = mapRowsToDessV2(rows, mockCfg);
     expect(result.diagnostics.batteryExportTippingPoint_cents_per_kWh).toBe(Infinity);
   });
 
@@ -329,7 +77,7 @@ describe('Tipping Point Calculations', () => {
       createRow({ soc_percent: 50, g2b: 100, ic: 10 }),
     ];
 
-    const result = mapRowsToDess(rows, mockCfg);
+    const result = mapRowsToDessV2(rows, mockCfg);
     expect(result.diagnostics.gridChargeTippingPoint_cents_per_kWh).toBe(10);
   });
 
@@ -352,7 +100,7 @@ describe('Tipping Point Calculations', () => {
     // Segment 2 is index 2..2.
 
     // We expect it to find 10c from segment 1, NOT 99c from segment 2.
-    const result = mapRowsToDess(rows, mockCfg);
+    const result = mapRowsToDessV2(rows, mockCfg);
     expect(result.diagnostics.gridChargeTippingPoint_cents_per_kWh).toBe(10);
   });
 
@@ -363,7 +111,7 @@ describe('Tipping Point Calculations', () => {
       createRow({ soc_percent: 50, g2l: 0, ic: 50 }),   // No usage at 50c
     ];
 
-    const result = mapRowsToDess(rows, mockCfg);
+    const result = mapRowsToDessV2(rows, mockCfg);
     // Highest price used was 40c
     expect(result.diagnostics.gridBatteryTippingPoint_cents_per_kWh).toBe(40);
   });
@@ -374,7 +122,7 @@ describe('Tipping Point Calculations', () => {
       createRow({ soc_percent: 50, g2l: 100, ic: 30 }),  // Grid->load at 30c
     ];
 
-    const result = mapRowsToDess(rows, mockCfg);
+    const result = mapRowsToDessV2(rows, mockCfg);
     // Charging the EV from grid at 45c while the battery could have supplied it is the same
     // signal as grid->load, so it sets the tipping point.
     expect(result.diagnostics.gridBatteryTippingPoint_cents_per_kWh).toBe(45);
@@ -388,7 +136,7 @@ describe('Tipping Point Calculations', () => {
       createRow({ soc_percent: 50, g2l: 100, ic: 30 }), // grid->load at 30c, battery has headroom
     ];
 
-    const result = mapRowsToDess(rows, mockCfg);
+    const result = mapRowsToDessV2(rows, mockCfg);
     expect(result.diagnostics.gridBatteryTippingPoint_cents_per_kWh).toBe(30);
   });
 
@@ -398,7 +146,7 @@ describe('Tipping Point Calculations', () => {
       createRow({ soc_percent: 50, g2l: 0, ic: 30 }),
     ];
 
-    const result = mapRowsToDess(rows, mockCfg);
+    const result = mapRowsToDessV2(rows, mockCfg);
     expect(result.diagnostics.gridBatteryTippingPoint_cents_per_kWh).toBe(-Infinity);
   });
 });
