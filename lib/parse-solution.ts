@@ -1,4 +1,5 @@
 import type { PlanRow, SolverConfig, EvChargeMode } from './types.ts';
+import { lpVar } from './lp-vars.ts';
 
 const EV_CHARGE_VOLTAGE_V = 230; // single-phase AC voltage assumed for A conversion
 
@@ -41,7 +42,7 @@ export class SolverStatusError extends Error {
 function hasUsablePrimal(result: HighsSolution, T: number): boolean {
   const columns = result.Columns ?? {};
   for (let t = 0; t < T; t++) {
-    const primal = columns[`soc_${t}`]?.Primal;
+    const primal = columns[lpVar.soc.name(t)]?.Primal;
     if (primal == null || !Number.isFinite(primal)) return false;
   }
   return true;
@@ -85,25 +86,30 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
   const b2ev  = Array(T).fill(0);
   const evSoc = Array(T).fill(0);
 
-  const entries = Object.entries(result.Columns ?? {});
+  // Family parse() matches `<prefix>_<digits>` exactly, so overlapping
+  // prefixes (soc_3 vs soc_shortfall_3) cannot collide.
+  const familyTargets: Array<[{ parse(name: string): number | null }, number[]]> = [
+    [lpVar.gridToLoad, g2l],
+    [lpVar.gridToBattery, g2b],
+    [lpVar.pvToLoad, pv2l],
+    [lpVar.pvToBattery, pv2b],
+    [lpVar.pvToGrid, pv2g],
+    [lpVar.batteryToLoad, b2l],
+    [lpVar.batteryToGrid, b2g],
+    [lpVar.soc, soc],
+    [lpVar.gridToEv, g2ev],
+    [lpVar.pvToEv, pv2ev],
+    [lpVar.batteryToEv, b2ev],
+    [lpVar.evSoc, evSoc],
+  ];
 
-  for (const [name, col] of entries) {
-    const t = parseIndex(name);
-    if (t == null || t < 0 || t >= T) continue;
-    const v = valueOf(col);
-
-    if (name.startsWith("grid_to_load_")) g2l[t] = v;
-    else if (name.startsWith("grid_to_battery_")) g2b[t] = v;
-    else if (name.startsWith("pv_to_load_")) pv2l[t] = v;
-    else if (name.startsWith("pv_to_battery_")) pv2b[t] = v;
-    else if (name.startsWith("pv_to_grid_")) pv2g[t] = v;
-    else if (name.startsWith("battery_to_load_")) b2l[t] = v;
-    else if (name.startsWith("battery_to_grid_")) b2g[t] = v;
-    else if (/^soc_\d+$/.test(name)) soc[t] = v; // exact: must not match soc_shortfall_*
-    else if (name.startsWith("grid_to_ev_"))    g2ev[t]  = v;
-    else if (name.startsWith("pv_to_ev_"))       pv2ev[t] = v;
-    else if (name.startsWith("battery_to_ev_"))  b2ev[t]  = v;
-    else if (name.startsWith("ev_soc_"))         evSoc[t] = v;
+  for (const [name, col] of Object.entries(result.Columns ?? {})) {
+    for (const [family, target] of familyTargets) {
+      const t = family.parse(name);
+      if (t == null) continue;
+      if (t < T) target[t] = valueOf(col);
+      break;
+    }
   }
 
   // --- 2. Build rows (flows, soc, etc.) ---
@@ -177,11 +183,6 @@ function evChargeMode(g: number, pv: number, b: number, evMinPow_W: number, evMa
 }
 
 // --- helpers ---
-
-function parseIndex(varName: string): number | null {
-  const m = /_(\d+)$/.exec(varName);
-  return m ? Number(m[1]) : null;
-}
 
 function valueOf(col: HighsColumn): number {
   return col.Primal ?? 0;

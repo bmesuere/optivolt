@@ -1,4 +1,5 @@
 import type { SolverConfig, TerminalSocValuation } from './types.ts';
+import { lpVar } from './lp-vars.ts';
 
 export function buildLP({
   // time series data of length T
@@ -35,9 +36,7 @@ export function buildLP({
   initialSoc_percent = 20,
 
   // rebalancing (MILP)
-  rebalanceRemainingSlots,
-  rebalanceTargetSoc_percent,
-  rebalanceMaxStartSlot,
+  rebalance,
   ev,
 }: SolverConfig): string {
   const T = load_W.length;
@@ -80,27 +79,27 @@ export function buildLP({
   // Rebalancing MILP: number of slots remaining in the hold window.
   // Truncate to integer to guard against fractional values from future callers.
   // Clamp to [0, T] — D > T is unsatisfiable; D <= 0 means no rebalancing this solve.
-  const D = Math.min(T, Math.max(0, Math.trunc(rebalanceRemainingSlots ?? 0)));
+  const D = Math.min(T, Math.max(0, Math.trunc(rebalance?.remainingSlots ?? 0)));
   // Clamp target SoC to maxSoc_percent so the model is never forced above its own upper bound.
-  const safeTargetSoc_percent = Math.min(rebalanceTargetSoc_percent ?? maxSoc_percent, maxSoc_percent);
+  const safeTargetSoc_percent = Math.min(rebalance?.targetSoc_percent ?? maxSoc_percent, maxSoc_percent);
   const rebalanceTargetSoc_Wh = D > 0
     ? (safeTargetSoc_percent / 100) * batteryCapacity_Wh
     : 0;
   // Latest allowed start position for the window. Defaults to T - D (any start
-  // that still fits); rebalanceMaxStartSlot caps it so a multi-day horizon
+  // that still fits); rebalance.maxStartSlot caps it so a multi-day horizon
   // cannot defer the hold days out. Clamped to >= 0 so at least k=0 exists.
   const KMAX = Math.min(
     T - D,
-    rebalanceMaxStartSlot != null ? Math.max(0, Math.trunc(rebalanceMaxStartSlot)) : Infinity,
+    rebalance?.maxStartSlot != null ? Math.max(0, Math.trunc(rebalance.maxStartSlot)) : Infinity,
   );
-  const startBalance = (k: number) => `start_balance_${k}`;
+  const startBalance = lpVar.startBalance.name;
 
   // EV variable name helpers
-  const gridToEv    = (t: number) => `grid_to_ev_${t}`;
-  const pvToEv      = (t: number) => `pv_to_ev_${t}`;
-  const batteryToEv = (t: number) => `battery_to_ev_${t}`;
-  const evOn        = (t: number) => `ev_on_${t}`;
-  const evSocVar    = (t: number) => `ev_soc_${t}`;
+  const gridToEv    = lpVar.gridToEv.name;
+  const pvToEv      = lpVar.pvToEv.name;
+  const batteryToEv = lpVar.batteryToEv.name;
+  const evOn        = lpVar.evOn.name;
+  const evSocVar    = lpVar.evSoc.name;
 
   // EV derived constants (only used when ev is defined)
   const evActive        = ev != null;
@@ -138,15 +137,15 @@ export function buildLP({
     .map((tg) => ({ slot: tg.slot, soc_Wh: Math.min(tg.soc_Wh, evCapacityWh) }));
 
   // Variable name helpers
-  const gridToLoad = (t: number) => `grid_to_load_${t}`;
-  const gridToBattery = (t: number) => `grid_to_battery_${t}`;
-  const pvToLoad = (t: number) => `pv_to_load_${t}`;
-  const pvToBattery = (t: number) => `pv_to_battery_${t}`;
-  const pvToGrid = (t: number) => `pv_to_grid_${t}`;
-  const batteryToLoad = (t: number) => `battery_to_load_${t}`;
-  const batteryToGrid = (t: number) => `battery_to_grid_${t}`;
-  const soc = (t: number) => `soc_${t}`;
-  const socShortfall = (t: number) => `soc_shortfall_${t}`;
+  const gridToLoad = lpVar.gridToLoad.name;
+  const gridToBattery = lpVar.gridToBattery.name;
+  const pvToLoad = lpVar.pvToLoad.name;
+  const pvToBattery = lpVar.pvToBattery.name;
+  const pvToGrid = lpVar.pvToGrid.name;
+  const batteryToLoad = lpVar.batteryToLoad.name;
+  const batteryToGrid = lpVar.batteryToGrid.name;
+  const soc = lpVar.soc.name;
+  const socShortfall = lpVar.socShortfall.name;
 
   const lines: string[] = [];
 

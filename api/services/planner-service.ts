@@ -4,6 +4,7 @@ import { mapRowsToDessV2 } from '../../lib/dess-mapper.ts';
 import { buildLP } from '../../lib/build-lp.ts';
 import { parseSolution, type HighsSolution } from '../../lib/parse-solution.ts';
 import { buildPlanSummary } from '../../lib/plan-summary.ts';
+import { extractRebalanceWindow, type RebalanceWindow } from '../../lib/lp-vars.ts';
 import type { SolverConfig, PlanSummary, PlanRow, TimeSeries } from '../../lib/types.ts';
 import { getSolverInputs, buildSolverConfigFromSettings } from './config-builder.ts';
 import { saveSettings } from './settings-store.ts';
@@ -45,10 +46,7 @@ async function getHighsInstance(): Promise<HighsInstance> {
   return highsPromise;
 }
 
-export interface RebalanceWindow {
-  startIdx: number;
-  endIdx: number;
-}
+export type { RebalanceWindow };
 
 export interface ComputePlanResult {
   cfg: SolverConfig;
@@ -57,32 +55,14 @@ export interface ComputePlanResult {
   computedAtMs: number;
   /** Solver-inputs version this plan was built from; see solver-inputs-version.ts. */
   inputsVersion: number;
+  /** Extended horizon: prices past this instant are forecast, not actuals. */
+  pricesKnownUntilMs: number | null;
   timing: { startMs: number; stepMin: number };
   result: HighsSolution;
   rows: PlanRowWithDess[];
   summary: PlanSummary;
   rebalanceWindow?: RebalanceWindow;
   rebalanceNudge: RebalanceNudge;
-}
-
-/**
- * Find which contiguous slot range the MILP solver selected for rebalancing.
- * Scans solution columns for the `start_balance_k` binary that equals 1.
- */
-function extractRebalanceWindow(
-  columns: Record<string, { Primal?: number }>,
-  remainingSlots: number,
-): RebalanceWindow | undefined {
-  if (remainingSlots <= 0) return undefined;
-  for (const [name, col] of Object.entries(columns)) {
-    if (name.startsWith('start_balance_') && Math.round(col.Primal ?? 0) === 1) {
-      const m = /_(\d+)$/.exec(name);
-      if (!m) continue;
-      const k = Number(m[1]);
-      return { startIdx: k, endIdx: k + remainingSlots - 1 };
-    }
-  }
-  return undefined;
 }
 
 function roundPower(value: number): number {
@@ -126,7 +106,7 @@ function attachOriginalPredictionValues(rows: PlanRow[], data: Data): PlanRow[] 
  */
 export function selectSolveOptions(cfg: SolverConfig): { mip_rel_gap?: number; mip_abs_gap?: number; time_limit: number } {
   const hasEv = cfg.ev != null;
-  const hasRebalance = (cfg.rebalanceRemainingSlots ?? 0) > 0;
+  const hasRebalance = (cfg.rebalance?.remainingSlots ?? 0) > 0;
   if (!hasEv && !hasRebalance) return { time_limit: SOLVE_TIME_LIMIT_S };
   const largeMilpCombo = hasEv && hasRebalance && cfg.load_W.length > LARGE_MILP_SLOTS;
   return {
@@ -167,15 +147,15 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const solverInputs = await getSolverInputs();
   const { timing } = solverInputs;
-  let { cfg, data, settings } = solverInputs;
+  let { cfg, pricesKnownUntilMs, data, settings } = solverInputs;
 
   // Pre-solve bookkeeping: if a rebalance cycle just completed, auto-disable
-  if (settings.rebalanceEnabled && (cfg.rebalanceRemainingSlots ?? Infinity) === 0) {
+  if (settings.rebalanceEnabled && cfg.rebalance?.remainingSlots === 0) {
     data = { ...data, rebalanceState: { startMs: null } };
     settings = { ...settings, rebalanceEnabled: false };
     await Promise.all([saveSettings(settings), saveData(data)]);
     // Rebuild cfg without rebalance constraints
-    cfg = buildSolverConfigFromSettings(settings, applyPredictionAdjustmentsToData(data), timing.startMs);
+    ({ cfg, pricesKnownUntilMs } = buildSolverConfigFromSettings(settings, applyPredictionAdjustmentsToData(data), timing.startMs));
   }
 
   // Captured after all pre-solve persistence so a plan built from inputs that
@@ -184,7 +164,7 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const lpText = buildLP(cfg);
   const highs = await getHighsInstance();
-  const hasRebalance = (cfg.rebalanceRemainingSlots ?? 0) > 0;
+  const hasRebalance = (cfg.rebalance?.remainingSlots ?? 0) > 0;
   const solveOptions = selectSolveOptions(cfg);
   let result: ReturnType<typeof highs.solve>;
   const t0 = performance.now();
@@ -215,7 +195,7 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const rebalanceWindow = extractRebalanceWindow(
     result.Columns ?? {},
-    cfg.rebalanceRemainingSlots ?? 0,
+    cfg.rebalance?.remainingSlots ?? 0,
   );
 
   const { perSlot, diagnostics } = mapRowsToDessV2(rows, cfg, {
@@ -236,14 +216,14 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   const rebalanceCtx = settings.rebalanceEnabled ? {
     enabled: true,
     startMs: data.rebalanceState?.startMs ?? null,
-    remainingSlots: cfg.rebalanceRemainingSlots ?? 0,
+    remainingSlots: cfg.rebalance?.remainingSlots ?? 0,
   } : undefined;
 
   const summary = buildPlanSummary(rowsWithDess, cfg, diagnostics, rebalanceCtx);
 
   const rebalanceNudge = getRebalanceNudge(data);
 
-  lastPlan = { cfg, data, computedAtMs: Date.now(), inputsVersion, timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
+  lastPlan = { cfg, data, computedAtMs: Date.now(), inputsVersion, pricesKnownUntilMs: pricesKnownUntilMs ?? null, timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
   return lastPlan;
 }
 
