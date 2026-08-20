@@ -261,6 +261,84 @@ describe('optimizer controller', () => {
     expect(els.status.textContent).toBe('');
   });
 
+  it('discards a solve response that a newer run superseded', async () => {
+    const { controller, els, services } = setupController();
+    const releases = [];
+    services.requestRemoteSolve.mockImplementation(
+      () => new Promise(resolve => { releases.push(resolve); }),
+    );
+
+    const stale = controller.onRun();
+    const fresh = controller.onRun();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    releases[1]({
+      rows: [{ tIdx: 0, timestampMs: 1714586400000, soc_percent: 55 }],
+      solverStatus: 'optimal',
+      summary: { netGridCost_cents: 1 },
+    });
+    await fresh;
+    expect(els.status.textContent).toBe('Plan updated');
+    services.updateSummaryUI.mockClear();
+    services.renderTable.mockClear();
+
+    // The older solve lands last; nothing it carries may reach the UI.
+    releases[0]({
+      rows: [{ tIdx: 0, timestampMs: 1714586400000, soc_percent: 99 }],
+      solverStatus: 'infeasible',
+      summary: { netGridCost_cents: 999 },
+    });
+    await stale;
+
+    expect(services.updateSummaryUI).not.toHaveBeenCalled();
+    expect(services.renderTable).not.toHaveBeenCalled();
+    expect(els.status.textContent).toBe('Plan updated');
+    expect(els.run.disabled).toBe(false);
+    expect(els.run.classList.contains('loading')).toBe(false);
+  });
+
+  it('discards a stale solve failure instead of clearing a newer plan', async () => {
+    const { controller, els, services } = setupController();
+    let failStale;
+    services.requestRemoteSolve.mockImplementationOnce(
+      () => new Promise((_resolve, reject) => { failStale = reject; }),
+    );
+
+    const stale = controller.onRun();
+    await controller.onRun();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(els.status.textContent).toBe('Plan updated');
+
+    failStale(new Error('solver unavailable'));
+    await stale;
+
+    expect(services.updateSummaryUI).not.toHaveBeenCalledWith(els, null);
+    expect(els.status.textContent).toBe('Plan updated');
+  });
+
+  it('drops a cached plan that arrives after a newer solve', async () => {
+    const { controller, els, services } = setupController();
+    let releaseCached;
+    services.fetchLastPlan.mockImplementation(
+      () => new Promise(resolve => { releaseCached = resolve; }),
+    );
+
+    const cached = controller.loadLastPlan();
+    await controller.onRun();
+    expect(els.status.textContent).toBe('Plan updated');
+    services.updateSummaryUI.mockClear();
+
+    releaseCached({
+      inputsCurrent: true,
+      rows: [{ tIdx: 0, timestampMs: 1714586400000, soc_percent: 12 }],
+      summary: { netGridCost_cents: 999 },
+    });
+    await expect(cached).resolves.toBeNull();
+
+    expect(services.updateSummaryUI).not.toHaveBeenCalled();
+    expect(els.status.textContent).toBe('Plan updated');
+  });
+
   it('re-reads the cached forecasts when the server regenerated them', async () => {
     const onForecastsRefreshed = vi.fn();
     const { controller, services } = setupController({ onForecastsRefreshed });
