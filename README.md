@@ -191,7 +191,7 @@ Use `sensor.optivolt_ev_charge_mode` and `sensor.optivolt_ev_charge_current_a` i
 ```text
 app/                 # Static web UI (index.html, main.js, app/src/**)
 api/                 # Express TypeScript server (routes + services)
-lib/                 # TypeScript core logic: LP builder, parser, DESS mapper, VRM + MQTT clients
+lib/                 # TypeScript core logic: LP builder, parser, DESS mapper, VRM/Victron payload helpers
 addon/               # Home Assistant add-on wrapper (s6, run scripts)
 translations/        # i18n strings for the HA add-on settings
 Dockerfile           # Image for HA add-on / container use
@@ -201,7 +201,7 @@ config.yaml          # Home Assistant add-on manifest
 The **UI** is static and calls the **Express API** on the same origin. Server-owned state lives in `DATA_DIR`:
 
 - `settings.json` stores system, algorithm, Home Assistant, data-source, and EV settings.
-- `data.json` stores time-series data, current SoC, and manual prediction adjustments.
+- `data.json` stores time-series data, current SoC, manual prediction adjustments, and EV schedule entries.
 - `prediction-config.json` stores load/PV prediction model configuration.
 
 Data-source behavior is explicit: when a data source is set to `vrm`, VRM refreshes own that series in `data.json`; when set to `api`, pushed data or prediction endpoints may write that series. The solver always reads persisted settings and data server-side.
@@ -222,6 +222,7 @@ The **API** exposes:
   }
   ```
 - `POST /calculate` — Builds and solves the LP with **HiGHS** from persisted settings/data. Optional boolean body flags: `updateData` refreshes VRM series before solving, and `writeToVictron` attempts an MQTT DESS schedule write. All input series are resampled onto the configured solver step before solving.
+- `GET /calculate/last` — Returns the cached plan when it solved optimally and still covers the current slot, with `inputsCurrent` telling the client whether settings/data changed since. Otherwise 404.
 - `POST /vrm/refresh-settings` — Fetches latest Dynamic ESS limits/settings from VRM and persists.
 - `GET /predictions/config` — Reads prediction configuration plus `isAddon`.
 - `POST /predictions/config` — Saves prediction configuration. Home Assistant URL/token are intentionally stored in `/settings`, not this file.
@@ -236,4 +237,9 @@ The **API** exposes:
 - `GET /predictions/forecast/now` — Same combined forecast path with recent comparison disabled.
 - `GET /ev/current` — Current time slot's EV charging decision (`ev_charge_mode`, `ev_charge_A`, source flows, EV SoC). Outside the current plan horizon it returns a fail-safe `off` decision with `plan_valid: false`.
 - `GET /ev/schedule` — Full per-slot EV charging schedule from the last computed plan.
+- `GET /ev/schedule-entries` — Lists active EV schedule entries (arrival, departure, target) and prunes expired ones.
+- `POST /ev/schedule-entries` — Creates an EV schedule entry.
+- `PATCH /ev/schedule-entries/:id` — Updates an EV schedule entry.
+- `DELETE /ev/schedule-entries/:id` — Deletes an EV schedule entry.
 - `GET /ha/entity/:entityId` — Fetch live entity state from Home Assistant (used to validate EV sensor configuration).
+- `GET /health` — Liveness probe used by the container health check.

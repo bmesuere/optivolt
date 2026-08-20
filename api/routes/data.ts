@@ -66,17 +66,17 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       validateData(nextData);
     } catch (validationError) {
       const msg = validationError instanceof Error ? validationError.message : String(validationError);
-      return next(toHttpError(validationError, 400, msg));
+      throw toHttpError(validationError, 400, msg);
     }
 
     try {
       await saveData(nextData);
-      logDataUpdateCall(keysToUpdate);
-      res.json({ message: 'Data updated successfully', keysUpdated: keysToUpdate });
     } catch (saveError) {
-      next(toHttpError(saveError, 500, 'Failed to persist data'));
+      throw toHttpError(saveError, 500, 'Failed to persist data');
     }
 
+    logDataUpdateCall(keysToUpdate);
+    res.json({ message: 'Data updated successfully', keysUpdated: keysToUpdate });
   } catch (error) {
     next(toHttpError(error, 500));
   }

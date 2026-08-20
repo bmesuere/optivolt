@@ -1,6 +1,6 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
-import { HttpError, assertCondition, toHttpError } from '../http-errors.ts';
+import { assertCondition, toHttpError } from '../http-errors.ts';
 import { loadPredictionConfig, savePredictionConfig } from '../services/prediction-config-store.ts';
 import type { PredictionAdjustmentInput } from '../services/prediction-adjustments.ts';
 import {
@@ -77,7 +77,7 @@ router.post('/adjustments', async (req: Request, res: Response, next: NextFuncti
     const result = await createStoredPredictionAdjustment(req.body as PredictionAdjustmentInput);
     res.status(201).json(result);
   } catch (error) {
-    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Failed to create prediction adjustment'));
+    next(toHttpError(error, 500, 'Failed to create prediction adjustment'));
   }
 });
 
@@ -92,7 +92,7 @@ router.patch('/adjustments/:id', async (req: Request, res: Response, next: NextF
     const result = await updateStoredPredictionAdjustment(String(req.params.id), req.body as PredictionAdjustmentInput);
     res.json(result);
   } catch (error) {
-    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Failed to update prediction adjustment'));
+    next(toHttpError(error, 500, 'Failed to update prediction adjustment'));
   }
 });
 
@@ -100,7 +100,7 @@ router.delete('/adjustments/:id', async (req: Request, res: Response, next: Next
   try {
     res.json(await deleteStoredPredictionAdjustment(String(req.params.id)));
   } catch (error) {
-    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Failed to delete prediction adjustment'));
+    next(toHttpError(error, 500, 'Failed to delete prediction adjustment'));
   }
 });
 
@@ -109,7 +109,7 @@ router.post('/validate', async (_req: Request, res: Response, next: NextFunction
     const config = await buildPredictionRunConfig();
     res.json(await executePredictionValidation(config));
   } catch (error) {
-    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Validation failed'));
+    next(toHttpError(error, 500, 'Validation failed'));
   }
 });
 
@@ -127,7 +127,7 @@ router.post('/load/forecast', async (req: Request, res: Response, next: NextFunc
     await persistForecastData({ load: result.forecast });
     res.json(await withAdjustedForecast(result, 'load'));
   } catch (error) {
-    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Load forecast failed'));
+    next(toHttpError(error, 500, 'Load forecast failed'));
   }
 });
 
@@ -141,7 +141,7 @@ router.post('/pv/forecast', async (_req: Request, res: Response, next: NextFunct
     await persistForecastData({ pv: result?.forecast });
     res.json(await withAdjustedForecast(result, 'pv'));
   } catch (error) {
-    next(error instanceof HttpError ? error : toHttpError(error, 500, 'PV forecast failed'));
+    next(toHttpError(error, 500, 'PV forecast failed'));
   }
 });
 
@@ -153,7 +153,7 @@ router.post('/forecast', async (req: Request, res: Response, next: NextFunction)
     if (req.query.recent === 'false') config.includeRecent = false;
     res.json(await runCombinedPredictionForecast(config, 'forecast'));
   } catch (error) {
-    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Forecast failed'));
+    next(toHttpError(error, 500, 'Forecast failed'));
   }
 });
 
@@ -163,7 +163,7 @@ router.get('/forecast/now', async (_req: Request, res: Response, next: NextFunct
     config.includeRecent = false;
     res.json(await runCombinedPredictionForecast(config, 'forecast/now'));
   } catch (error) {
-    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Forecast failed'));
+    next(toHttpError(error, 500, 'Forecast failed'));
   }
 });
 

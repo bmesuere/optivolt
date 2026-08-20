@@ -43,11 +43,14 @@ All routes are implemented in `api/`. Important ones:
 - `GET /settings` — returns persisted settings or defaults when missing.
 - `POST /settings` — merges the incoming object onto existing settings and writes to `DATA_DIR/settings.json`.
 - `POST /calculate` — builds the LP from persisted settings + data, runs HiGHS, and returns rows/summary/diagnostics. Optional body flags: `updateData` (refresh VRM series before solving) and `writeToVictron` (attempt MQTT schedule write).
+- `GET /calculate/last` — the cached plan, when it solved optimally and still covers the current slot; 404 otherwise.
 - `GET /data`, `POST /data` — read or merge persisted time-series data.
 - `POST /vrm/refresh-settings` — refresh relatively static system limits/settings from VRM and persist.
 - `GET/POST /predictions/config`, `/predictions/validate`, `/predictions/*/forecast`, `/predictions/adjustments` — prediction config, validation, forecast generation, and manual adjustment CRUD.
 - `GET /ev/current`, `GET /ev/schedule` — current and full EV charging schedule from the last computed plan.
+- `/ev/schedule-entries` — CRUD for the typed arrival/departure/target entries persisted in `data.json`.
 - `GET /ha/entity/:entityId` — live Home Assistant entity lookup for settings validation.
+- `GET /health` — liveness probe.
 
 Prediction routing lives in `api/routes/predictions.ts`; orchestration and persistence helpers live in `api/services/prediction-forecast-runner.ts` and `api/services/prediction-adjustment-store.ts`.
 

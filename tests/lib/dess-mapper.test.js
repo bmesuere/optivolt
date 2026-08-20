@@ -19,7 +19,7 @@ describe('Tipping Point Calculations', () => {
       soc_percent: 50,
       g2b: 0, b2g: 0, ic: 0, ec: 0,
       g2l: 0, pv2l: 0, pv2b: 0, pv2g: 0, b2l: 0,
-      load: 0, pv: 0, soc: 0,
+      load: 0, pv: 0, soc_Wh: 0,
       ...overrides,
     };
   }
@@ -173,7 +173,7 @@ describe('mapRowsToDessV2', () => {
   function makeRow(overrides = {}) {
     return {
       g2l: 0, g2b: 0, pv2l: 0, pv2b: 0, pv2g: 0, b2l: 0, b2g: 0,
-      soc: 500, soc_percent: 50,
+      soc_Wh: 500, soc_percent: 50,
       load: 0, pv: 0, ev_charge: 0,
       ic: 20, ec: 5,
       ...overrides,

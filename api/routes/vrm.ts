@@ -15,18 +15,13 @@ function validateEnvOrThrow(): void {
   }
 }
 
-function asHttp(error: unknown, message: string, defaultStatus = 502): HttpError {
-  const status = error instanceof HttpError ? error.statusCode : defaultStatus;
-  return toHttpError(error, status, message);
-}
-
 router.post('/refresh-settings', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     validateEnvOrThrow();
     const saved = await refreshSettingsFromVrmAndPersist();
     res.json({ message: 'System settings updated from VRM and saved.', settings: redactSettingsForClient(saved) });
   } catch (error) {
-    next(asHttp(error, 'Failed to refresh VRM system settings'));
+    next(toHttpError(error, 502, 'Failed to refresh VRM system settings'));
   }
 });
 

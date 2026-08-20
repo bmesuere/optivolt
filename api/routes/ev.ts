@@ -1,6 +1,6 @@
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
-import { HttpError, assertCondition, toHttpError } from '../http-errors.ts';
+import { assertCondition, toHttpError } from '../http-errors.ts';
 import { getLastPlan } from '../services/planner-service.ts';
 import type { EvScheduleEntryInput } from '../services/ev-schedule-entries.ts';
 import {
@@ -13,12 +13,10 @@ import {
 const router = express.Router();
 
 // GET /ev/schedule — full per-slot EV schedule from last computed plan
-router.get('/schedule', (req: Request, res: Response, next: NextFunction) => {
+router.get('/schedule', (_req: Request, res: Response, next: NextFunction) => {
   try {
     const plan = getLastPlan();
-    if (!plan) {
-      throw new HttpError(404, 'No plan computed yet');
-    }
+    assertCondition(!!plan, 404, 'No plan computed yet');
 
     const slots = plan.rows.map(row => ({
       timestampMs: row.timestampMs,
@@ -41,24 +39,20 @@ router.get('/schedule', (req: Request, res: Response, next: NextFunction) => {
         evChargeFromBattery_kWh: plan.summary.evChargeFromBattery_kWh,
       },
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to read the EV schedule'));
   }
 });
 
 // GET /ev/current — current time slot's EV charging decision
-router.get('/current', (req: Request, res: Response, next: NextFunction) => {
+router.get('/current', (_req: Request, res: Response, next: NextFunction) => {
   try {
     const plan = getLastPlan();
-    if (!plan) {
-      throw new HttpError(404, 'No plan computed yet');
-    }
+    assertCondition(!!plan, 404, 'No plan computed yet');
 
     const nowMs = Date.now();
     const rows = plan.rows;
-    if (rows.length === 0) {
-      throw new HttpError(404, 'Computed plan has no slots');
-    }
+    assertCondition(rows.length > 0, 404, 'Computed plan has no slots');
 
     const firstSlotMs = rows[0].timestampMs;
     const planEndMs = rows[rows.length - 1].timestampMs + plan.timing.stepMin * 60_000;
@@ -100,8 +94,8 @@ router.get('/current', (req: Request, res: Response, next: NextFunction) => {
       is_charging: row.ev_charge > 0,
       plan_valid: true,
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to read the current EV decision'));
   }
 });
 
@@ -127,7 +121,7 @@ router.post('/schedule-entries', async (req: Request, res: Response, next: NextF
     const result = await createStoredEvScheduleEntry(req.body as EvScheduleEntryInput);
     res.status(201).json(result);
   } catch (error) {
-    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Failed to create EV schedule entry'));
+    next(toHttpError(error, 500, 'Failed to create EV schedule entry'));
   }
 });
 
@@ -141,7 +135,7 @@ router.patch('/schedule-entries/:id', async (req: Request, res: Response, next: 
     const result = await updateStoredEvScheduleEntry(String(req.params.id), req.body as EvScheduleEntryInput);
     res.json(result);
   } catch (error) {
-    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Failed to update EV schedule entry'));
+    next(toHttpError(error, 500, 'Failed to update EV schedule entry'));
   }
 });
 
@@ -149,7 +143,7 @@ router.delete('/schedule-entries/:id', async (req: Request, res: Response, next:
   try {
     res.json(await deleteStoredEvScheduleEntry(String(req.params.id)));
   } catch (error) {
-    next(error instanceof HttpError ? error : toHttpError(error, 500, 'Failed to delete EV schedule entry'));
+    next(toHttpError(error, 500, 'Failed to delete EV schedule entry'));
   }
 });
 

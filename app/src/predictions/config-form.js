@@ -53,20 +53,6 @@ export function wirePredictionForm({ onForecastAll, onPvForecast }) {
     ?.addEventListener('click', onForecastAll);
   document.getElementById('pred-pv-forecast')
     ?.addEventListener('click', onPvForecast);
-
-  const settingsToggle = document.getElementById('pred-settings-toggle');
-  const settingsBody = document.getElementById('pred-settings-body');
-  const settingsIcon = document.getElementById('pred-settings-toggle-icon');
-
-  if (settingsToggle && settingsBody) {
-    settingsToggle.addEventListener('click', () => {
-      const isHidden = settingsBody.classList.contains('hidden');
-      settingsBody.classList.toggle('hidden', !isHidden);
-      if (settingsIcon) {
-        settingsIcon.style.transform = isHidden ? 'rotate(180deg)' : '';
-      }
-    });
-  }
 }
 
 export async function savePredictionFormToServer() {
