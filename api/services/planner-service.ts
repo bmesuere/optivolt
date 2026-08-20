@@ -1,5 +1,3 @@
-// @ts-expect-error — no .d.ts alongside the vendor build artifact; type is asserted via HighsInstance below
-import highsFactory from '../../vendor/highs-build/highs.js';
 import { mapRowsToDessV2 } from '../../lib/dess-mapper.ts';
 import { buildLP } from '../../lib/build-lp.ts';
 import { parseSolution, type HighsSolution } from '../../lib/parse-solution.ts';
@@ -18,6 +16,7 @@ import { refreshPriceForecastAndPersist } from './price-forecast-service.ts';
 import { setDynamicEssSchedule } from './mqtt-service.ts';
 import { getRebalanceNudge, recordFullSocObservation, type RebalanceNudge } from './rebalance-nudge.ts';
 import { getSolverInputsVersion } from './solver-inputs-version.ts';
+import { solveLp } from './solve-runner.ts';
 import type { PlanRowWithDess, Data, Settings } from '../types.ts';
 
 // How many slots we push into Dynamic ESS
@@ -35,20 +34,6 @@ const MIP_REL_GAP = 0.005;
 const MIP_REL_GAP_LARGE = 0.02;
 const LARGE_MILP_SLOTS = 200;
 
-// Lazy, shared HiGHS instance
-type HighsInstance = Awaited<ReturnType<typeof highsFactory>>;
-let highsPromise: Promise<HighsInstance> | undefined;
-
-async function getHighsInstance(): Promise<HighsInstance> {
-  if (!highsPromise) {
-    highsPromise = highsFactory({}).catch((error: unknown) => {
-      highsPromise = undefined;
-      throw error;
-    });
-  }
-  return highsPromise;
-}
-
 export type { RebalanceWindow };
 
 export interface ComputePlanResult {
@@ -58,6 +43,13 @@ export interface ComputePlanResult {
   computedAtMs: number;
   /** Solver-inputs version this plan was built from; see solver-inputs-version.ts. */
   inputsVersion: number;
+  /**
+   * True when settings/data changed while the solve was running on the worker
+   * (the await opens a window the old synchronous solve never had). Such a
+   * plan is display-only: post-solve bookkeeping was skipped and hardware
+   * writes are refused — the caller should recompute.
+   */
+  inputsChangedDuringSolve: boolean;
   /** Extended horizon: prices past this instant are forecast, not actuals. */
   pricesKnownUntilMs: number | null;
   timing: { startMs: number; stepMin: number };
@@ -101,11 +93,12 @@ function attachOriginalPredictionValues(rows: PlanRow[], data: Data): PlanRow[] 
 }
 
 /**
- * Solver options for a config. The solve runs synchronously on the event
- * loop, so a runaway MIP would block every HTTP request; the time limit
- * bounds that (a limited solve comes back non-Optimal and is refused for
- * hardware writes). The EV × rebalance combination on a multi-day horizon
- * gets the loosened MIP gap; everything else keeps the tight default.
+ * Solver options for a config. The solve runs on a worker thread, so a
+ * runaway MIP no longer blocks HTTP requests; the time limit still bounds
+ * how long a schedule write can be delayed (a limited solve comes back
+ * non-Optimal and is refused for hardware writes). The EV × rebalance
+ * combination on a multi-day horizon gets the loosened MIP gap; everything
+ * else keeps the tight default.
  */
 export function selectSolveOptions(cfg: SolverConfig): { mip_rel_gap?: number; mip_abs_gap?: number; time_limit: number } {
   const hasEv = cfg.ev != null;
@@ -247,18 +240,20 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   const inputsVersion = getSolverInputsVersion();
 
   const lpText = buildLP(cfg);
-  const highs = await getHighsInstance();
   const hasRebalance = (cfg.rebalance?.remainingSlots ?? 0) > 0;
   const solveOptions = selectSolveOptions(cfg);
-  let result: ReturnType<typeof highs.solve>;
   const t0 = performance.now();
-  try {
-    result = highs.solve(lpText, solveOptions);
-  } catch (err) {
-    highsPromise = undefined; // force re-initialisation on next call
-    throw err;
-  }
+  const result = await solveLp(lpText, solveOptions);
   const solveMs = performance.now() - t0;
+  // The await above yields the event loop, so settings/data routes can run
+  // mid-solve. When they did, this plan's snapshots are stale: persisting
+  // them would clobber the newer state, so all post-solve bookkeeping below
+  // is skipped (the recompute the stale plan triggers redoes it), and
+  // planAndMaybeWrite refuses to push the schedule to hardware.
+  const inputsChangedDuringSolve = getSolverInputsVersion() !== inputsVersion;
+  if (inputsChangedDuringSolve) {
+    console.warn('[calculate] solver inputs changed during solve; plan is display-only');
+  }
   const evCfg = cfg.ev;
   const evInfo = evCfg ? {
     windows: evCfg.availabilityWindows.map((w) => [w.startSlot, w.endSlot]),
@@ -289,13 +284,16 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const rowsWithDess: PlanRowWithDess[] = rows.map((row, i) => ({ ...row, dess: perSlot[i] }));
 
-  // Post-solve bookkeeping — reached only when solve + parse succeeded, so a
-  // failed solve never flips settings or persisted rebalance state.
-  if (rebalanceCycleComplete) {
-    ({ settings, data } = await finishCompletedRebalanceCycle(settings, data));
-  }
-  if (settings.rebalanceEnabled) {
-    data = await recordRebalanceStartIfAtTarget(settings, data, timing.startMs);
+  // Post-solve bookkeeping — reached only when solve + parse succeeded (so a
+  // failed solve never flips settings or persisted rebalance state), and only
+  // when the snapshots it would persist are still the current state.
+  if (!inputsChangedDuringSolve) {
+    if (rebalanceCycleComplete) {
+      ({ settings, data } = await finishCompletedRebalanceCycle(settings, data));
+    }
+    if (settings.rebalanceEnabled) {
+      data = await recordRebalanceStartIfAtTarget(settings, data, timing.startMs);
+    }
   }
 
   const rebalanceCtx = settings.rebalanceEnabled ? {
@@ -308,7 +306,7 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const rebalanceNudge = getRebalanceNudge(data);
 
-  lastPlan = { cfg, data, computedAtMs: Date.now(), inputsVersion, pricesKnownUntilMs: pricesKnownUntilMs ?? null, timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
+  lastPlan = { cfg, data, computedAtMs: Date.now(), inputsVersion, inputsChangedDuringSolve, pricesKnownUntilMs: pricesKnownUntilMs ?? null, timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
   return lastPlan;
 }
 
@@ -326,6 +324,11 @@ export async function planAndMaybeWrite({
     // incumbent (e.g. "Time limit reached") is fine to display but not to write.
     if (plan.result.Status !== 'Optimal') {
       throw new Error(`Refusing to write schedule to Victron: solver status is "${plan.result.Status ?? 'unknown'}" (expected "Optimal")`);
+    }
+    // Nor a plan whose inputs changed mid-solve: the schedule no longer
+    // reflects the current settings/data. The caller should recompute.
+    if (plan.inputsChangedDuringSolve) {
+      throw new Error('Refusing to write schedule to Victron: solver inputs changed during the solve; recompute first');
     }
     await writePlanToVictron(plan.rows, plan.timing.stepMin);
   }
