@@ -9,3 +9,13 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: 'monthly'
+
+  - package-ecosystem: "github-actions" # Keep workflow actions (checkout, setup-node, addon linter, ...) up to date
+    directory: "/"
+    schedule:
+      interval: 'monthly'
+
+  - package-ecosystem: "docker" # Keep the pinned BUILD_FROM base image in the Dockerfile up to date
+    directory: "/"
+    schedule:
+      interval: 'monthly'

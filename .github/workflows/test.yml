@@ -30,3 +30,55 @@ jobs:
 
     - name: Run tests with coverage
       run: npm run test:coverage
+
+  docker-smoke:
+    name: Docker build & health smoke test
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # ubuntu-latest runners are amd64, matching the Dockerfile's default
+    # BUILD_ARCH; passed explicitly so a future runner-arch change can't
+    # silently flip this to the aarch64 base without anyone noticing.
+    - name: Build image
+      run: docker build --build-arg BUILD_ARCH=amd64 -t optivolt-smoke:ci .
+
+    - name: Start container
+      run: docker run -d --name optivolt-smoke -p 3000:3000 optivolt-smoke:ci
+
+    - name: Wait for /health
+      run: |
+        for i in $(seq 1 30); do
+          if curl -fs http://127.0.0.1:3000/health; then
+            echo
+            echo "Server is up and healthy."
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "::error::Container never became healthy within 60s"
+        exit 1
+
+    - name: Dump container logs on failure
+      if: failure()
+      run: docker logs optivolt-smoke
+
+    - name: Stop container
+      if: always()
+      run: docker rm -f optivolt-smoke
+
+  addon-lint:
+    name: Home Assistant add-on lint
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # frenck/action-addon-linter was renamed upstream to
+    # frenck/action-app-linter (Home Assistant "add-ons" -> "apps"); it
+    # still lints the legacy config.yaml/build.yaml format we use.
+    - name: Run Home Assistant add-on linter
+      uses: frenck/action-app-linter@v2
+      with:
+        path: "./"

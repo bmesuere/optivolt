@@ -6,7 +6,6 @@ url: https://github.com/bmesuere/optivolt
 arch:
   - aarch64
   - amd64
-startup: application
 init: false
 
 # Ingress lets the UI appear inside Home Assistant without opening a port.
@@ -21,9 +20,9 @@ ports:
 ports_description:
   "3000/tcp": Direct API access (use ingress for UI)
 
-# Persist add-on state in /data
-map:
-  - data:rw
+# /data is always mapped and writable for every add-on automatically;
+# no explicit `map` entry is needed (and the add-on linter rejects "data"
+# as a `map` value in its string form).
 
 options:
   site_id: ""
