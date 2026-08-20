@@ -146,19 +146,34 @@ function validateSettings(s: Settings): Settings {
   return s;
 }
 
+export const SETTINGS_SCHEMA_VERSION = 1;
+
 /**
- * Load stored settings or fall back to defaults.
+ * Bring persisted settings of any prior shape up to the current schema.
+ * Version 0 = files written before versioning existed. Missing keys are
+ * covered by the defaults merge in loadSettings, so v0 → v1 has no steps.
+ */
+function migrateSettings(raw: Partial<Settings>): Partial<Settings> {
+  const version = typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 0;
+  if (version > SETTINGS_SCHEMA_VERSION) {
+    console.warn(`settings.json schemaVersion ${version} is newer than supported ${SETTINGS_SCHEMA_VERSION}; loading best-effort`);
+  }
+  return raw;
+}
+
+/**
+ * Load stored settings (migrated to the current schema) or fall back to defaults.
  * This is the canonical way to read settings everywhere.
  */
 export async function loadSettings(): Promise<Settings> {
   const defaults = await readJson<Settings>(DEFAULT_PATH);
   try {
-    const settings = await readJson<Partial<Settings>>(SETTINGS_PATH);
+    const settings = migrateSettings(await readJson<Partial<Settings>>(SETTINGS_PATH));
     const mergedDataSources = { ...defaults.dataSources, ...settings.dataSources };
-    return validateSettings({ ...defaults, ...settings, dataSources: mergedDataSources });
+    return validateSettings({ ...defaults, ...settings, dataSources: mergedDataSources, schemaVersion: SETTINGS_SCHEMA_VERSION });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    return validateSettings(defaults);
+    return validateSettings({ ...defaults, schemaVersion: SETTINGS_SCHEMA_VERSION });
   }
 }
 
@@ -170,7 +185,7 @@ let lastSavedJson: string | undefined;
  * Validates and clamps before writing, so a bad payload can never poison the stored file.
  */
 export async function saveSettings(settings: Settings): Promise<void> {
-  const validated = validateSettings({ ...settings });
+  const validated = validateSettings({ ...settings, schemaVersion: SETTINGS_SCHEMA_VERSION });
   const json = JSON.stringify(validated);
   if (json !== lastSavedJson) {
     lastSavedJson = json;

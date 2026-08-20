@@ -22,6 +22,8 @@ export interface DataSources {
 // ----------------------------- Settings ---------------------------------
 
 export interface Settings {
+  /** Persisted-file schema version; stamped by the store on save. */
+  schemaVersion?: number;
   stepSize_m: number;
   batteryCapacity_Wh: number;
   minSoc_percent: number;
@@ -113,6 +115,8 @@ export interface EvLastState {
 }
 
 export interface Data {
+  /** Persisted-file schema version; stamped by the store on save. */
+  schemaVersion?: number;
   load: TimeSeries;
   pv: TimeSeries;
   importPrice: TimeSeries;
@@ -157,6 +161,8 @@ export interface PvPredictionConfig {
 }
 
 export interface PredictionConfig {
+  /** Persisted-file schema version; stamped by the store on save. */
+  schemaVersion?: number;
   sensors: HaSensor[];
   derived: HaDerivedSensor[];
   activeType?: 'historical' | 'fixed';

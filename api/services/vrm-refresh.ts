@@ -143,18 +143,15 @@ export async function refreshSeriesFromVrmAndPersist(): Promise<void> {
     ? { timestamp: new Date().toISOString(), value: socPercent }
     : baseData.soc;
 
+  // Spread baseData so every persisted field survives the refresh — an
+  // explicit key list here once silently dropped evLastState when it was added.
   const nextData: Data = {
+    ...baseData,
     load,
     pv,
     importPrice,
     exportPrice,
-    importPriceForecast: baseData.importPriceForecast,
-    exportPriceForecast: baseData.exportPriceForecast,
     soc,
-    lastFullSocAt: baseData.lastFullSocAt,
-    rebalanceState: baseData.rebalanceState,
-    predictionAdjustments: baseData.predictionAdjustments,
-    evScheduleEntries: baseData.evScheduleEntries,
   };
 
   await saveData(nextData);
