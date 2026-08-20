@@ -124,6 +124,22 @@ describe('prediction-config-store', () => {
       expect(reloaded.schemaVersion).toBe(PREDICTION_CONFIG_SCHEMA_VERSION);
     });
 
+    it('preserves a newer on-disk schemaVersion through load and save (downgrade safety)', async () => {
+      const { loadPredictionConfig, savePredictionConfig, PREDICTION_CONFIG_SCHEMA_VERSION } = await importStore();
+      await writeFile(
+        path.join(tmpDir, 'prediction-config.json'),
+        JSON.stringify({ sensors: [], derived: [], schemaVersion: PREDICTION_CONFIG_SCHEMA_VERSION + 1 }),
+        'utf8',
+      );
+
+      const config = await loadPredictionConfig();
+      expect(config.schemaVersion).toBe(PREDICTION_CONFIG_SCHEMA_VERSION + 1);
+
+      await savePredictionConfig(config);
+      const reloaded = await loadPredictionConfig();
+      expect(reloaded.schemaVersion).toBe(PREDICTION_CONFIG_SCHEMA_VERSION + 1);
+    });
+
     it('still migrates a pre-versioning activeConfig file', async () => {
       await writeFile(
         path.join(tmpDir, 'prediction-config.json'),

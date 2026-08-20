@@ -13,6 +13,8 @@ export const PREDICTION_CONFIG_SCHEMA_VERSION = 1;
  * Bring a persisted config of any prior shape up to the current schema.
  * Version 0 = files written before versioning existed, including the pre-2026
  * `activeConfig` shape (replaced by historicalPredictor + activeType).
+ * A newer on-disk marker is preserved through load/save (never downgraded),
+ * so an upgrade after a downgrade cannot re-run migrations on migrated state.
  */
 function migratePredictionConfig(raw: Record<string, unknown>): Record<string, unknown> {
   const version = typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 0;
@@ -74,11 +76,12 @@ export async function loadPredictionConfig(): Promise<PredictionConfig> {
 
   return {
     ...rest,
-    schemaVersion: PREDICTION_CONFIG_SCHEMA_VERSION,
+    // Math.max: never downgrade a newer on-disk marker (see migratePredictionConfig).
+    schemaVersion: Math.max(cleanConfig.schemaVersion ?? 0, PREDICTION_CONFIG_SCHEMA_VERSION),
     validationWindow: { start: start.toISOString(), end: end.toISOString() },
   };
 }
 
 export async function savePredictionConfig(config: PredictionConfig): Promise<void> {
-  await writeJson(PREDICTION_CONFIG_PATH, { ...config, schemaVersion: PREDICTION_CONFIG_SCHEMA_VERSION });
+  await writeJson(PREDICTION_CONFIG_PATH, { ...config, schemaVersion: Math.max(config.schemaVersion ?? 0, PREDICTION_CONFIG_SCHEMA_VERSION) });
 }

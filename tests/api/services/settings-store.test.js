@@ -68,3 +68,30 @@ describe('settings-store validate-on-save', () => {
     expect(input.minSoc_percent).toBe(150);
   });
 });
+
+describe('settings-store schema versioning', () => {
+  it('stamps schemaVersion on save', async () => {
+    const { loadSettings, saveSettings, SETTINGS_SCHEMA_VERSION } = await importStore();
+    await saveSettings(await loadSettings());
+
+    const written = JSON.parse(await readFile(path.join(tmpDir, 'settings.json'), 'utf8'));
+    expect(written.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);
+  });
+
+  it('preserves a newer on-disk schemaVersion through load and save (downgrade safety)', async () => {
+    const { loadSettings, saveSettings, SETTINGS_SCHEMA_VERSION } = await importStore();
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(
+      path.join(tmpDir, 'settings.json'),
+      JSON.stringify({ ...defaultSettings, schemaVersion: SETTINGS_SCHEMA_VERSION + 1 }),
+      'utf8',
+    );
+
+    const settings = await loadSettings();
+    expect(settings.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION + 1);
+
+    await saveSettings(settings);
+    const written = JSON.parse(await readFile(path.join(tmpDir, 'settings.json'), 'utf8'));
+    expect(written.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION + 1);
+  });
+});

@@ -89,7 +89,10 @@ function migrateData(raw: Partial<Data>, defaults: Data): Data {
     console.warn(`data.json schemaVersion ${version} is newer than supported ${DATA_SCHEMA_VERSION}; loading best-effort`);
   }
   // v0 → v1: no shape change — versioning introduced.
-  return { ...defaults, ...raw, schemaVersion: DATA_SCHEMA_VERSION };
+  // A newer on-disk marker is preserved (not downgraded): relabelling a
+  // v(N+1) file as vN would make the next upgrade re-run its migration on
+  // already-migrated state.
+  return { ...defaults, ...raw, schemaVersion: Math.max(version, DATA_SCHEMA_VERSION) };
 }
 
 /**
@@ -130,7 +133,7 @@ let lastSavedJson: string | undefined;
  * up-to-date lastFullSocAt even when the caller's in-memory copy does not.
  */
 export async function saveData(data: Data): Promise<void> {
-  const next = recordFullSocObservation(validateData({ ...data, schemaVersion: DATA_SCHEMA_VERSION }));
+  const next = recordFullSocObservation(validateData({ ...data, schemaVersion: Math.max(data.schemaVersion ?? 0, DATA_SCHEMA_VERSION) }));
   const json = JSON.stringify(next);
   if (json !== lastSavedJson) {
     lastSavedJson = json;

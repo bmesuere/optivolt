@@ -103,4 +103,18 @@ describe('data.json schema versioning', () => {
 
     expect(data.schemaVersion).toBe(DATA_SCHEMA_VERSION);
   });
+
+  it('preserves a newer on-disk schemaVersion through load and save (downgrade safety)', async () => {
+    // A file written by a newer build must keep its marker, or upgrading back
+    // would re-run that version's migration on already-migrated state.
+    serveFiles({ ...baseData, schemaVersion: DATA_SCHEMA_VERSION + 1 });
+
+    const data = await loadData();
+    expect(data.schemaVersion).toBe(DATA_SCHEMA_VERSION + 1);
+
+    await saveData(data);
+    expect(writeJson).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      schemaVersion: DATA_SCHEMA_VERSION + 1,
+    }));
+  });
 });

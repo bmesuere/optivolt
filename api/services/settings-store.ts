@@ -152,6 +152,8 @@ export const SETTINGS_SCHEMA_VERSION = 1;
  * Bring persisted settings of any prior shape up to the current schema.
  * Version 0 = files written before versioning existed. Missing keys are
  * covered by the defaults merge in loadSettings, so v0 → v1 has no steps.
+ * A newer on-disk marker is preserved through load/save (never downgraded),
+ * so an upgrade after a downgrade cannot re-run migrations on migrated state.
  */
 function migrateSettings(raw: Partial<Settings>): Partial<Settings> {
   const version = typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 0;
@@ -170,7 +172,8 @@ export async function loadSettings(): Promise<Settings> {
   try {
     const settings = migrateSettings(await readJson<Partial<Settings>>(SETTINGS_PATH));
     const mergedDataSources = { ...defaults.dataSources, ...settings.dataSources };
-    return validateSettings({ ...defaults, ...settings, dataSources: mergedDataSources, schemaVersion: SETTINGS_SCHEMA_VERSION });
+    // Math.max: never downgrade a newer on-disk marker (see migrateSettings).
+    return validateSettings({ ...defaults, ...settings, dataSources: mergedDataSources, schemaVersion: Math.max(settings.schemaVersion ?? 0, SETTINGS_SCHEMA_VERSION) });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
     return validateSettings({ ...defaults, schemaVersion: SETTINGS_SCHEMA_VERSION });
@@ -185,7 +188,7 @@ let lastSavedJson: string | undefined;
  * Validates and clamps before writing, so a bad payload can never poison the stored file.
  */
 export async function saveSettings(settings: Settings): Promise<void> {
-  const validated = validateSettings({ ...settings, schemaVersion: SETTINGS_SCHEMA_VERSION });
+  const validated = validateSettings({ ...settings, schemaVersion: Math.max(settings.schemaVersion ?? 0, SETTINGS_SCHEMA_VERSION) });
   const json = JSON.stringify(validated);
   if (json !== lastSavedJson) {
     lastSavedJson = json;
