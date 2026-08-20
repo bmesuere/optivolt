@@ -14,6 +14,22 @@ These files are third-party or generated output: they are excluded from ESLint
 | `patternomaly.min.js` | patternomaly 1.3.2 | `https://cdn.jsdelivr.net/npm/patternomaly@1.3.2/dist/patternomaly.min.js` |
 | `fonts/` | Outfit v15, JetBrains Mono v24 | `https://fonts.googleapis.com/css2?family=Outfit…` |
 
+## Licenses
+
+Redistributing these files requires shipping their upstream license texts,
+which live in `licenses/`:
+
+| Vendored file | License | Notice file |
+| --- | --- | --- |
+| `tailwind.css` | MIT | `licenses/tailwindcss.LICENSE.txt` |
+| `chart.umd.js` | MIT | `licenses/chartjs.LICENSE.md` |
+| `patternomaly.min.js` | MIT | `licenses/patternomaly.LICENSE.txt` |
+| `fonts/outfit-*.woff2` | OFL-1.1 | `licenses/outfit.OFL.txt` |
+| `fonts/jetbrains-mono-*.woff2` | OFL-1.1 | `licenses/jetbrains-mono.OFL.txt` |
+
+When bumping a vendored version, refresh its notice file from the matching
+upstream tag alongside it.
+
 ## Regenerating
 
 ### Tailwind
