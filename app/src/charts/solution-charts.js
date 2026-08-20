@@ -185,7 +185,7 @@ export function drawSocChart(canvas, rows, _stepSize_m = 15, evSettings = null) 
     makeEvAwayBandPlugin(rows, evSettings?.trips),
     makeEvArrivalPlugin(rows, evSettings?.arrivals),
     makeEvDeparturePlugin(rows, evSettings?.departures),
-    evSettings ? makeEvTargetPlugin(rows, evSettings.targets) : null,
+    makeEvTargetPlugin(rows),
   ].filter(Boolean);
 
   renderChart(canvas, {

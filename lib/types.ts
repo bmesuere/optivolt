@@ -158,6 +158,8 @@ export interface PlanRow {
   ev_charge_A: number;  // charge current A (ev_charge / 230, single-phase)
   ev_charge_mode: EvChargeMode;
   ev_soc_percent: number;  // EV SoC %
+  /** Resolved EV SoC deadline pinned at this slot, in % of the EV battery. Absent when no target lands here. */
+  ev_target_soc_percent?: number;
 }
 
 /**
@@ -215,4 +217,8 @@ export interface PlanSummary {
   evChargeFromGrid_kWh: number;
   evChargeFromPv_kWh: number;
   evChargeFromBattery_kWh: number;
+  /** Cost of the grid share of EV charging, in c€. */
+  evChargeGridCost_cents: number;
+  /** Grid cost spread over all EV energy (PV/battery share included), c€/kWh; null when nothing charged. */
+  evChargeEffectiveRate_cents_per_kWh: number | null;
 }

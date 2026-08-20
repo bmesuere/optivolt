@@ -66,6 +66,30 @@ describe('buildPlanSummary — EV energy totals', () => {
     expect(s.evChargeTotal_kWh).toBeCloseTo(2.25);
   });
 
+  it('costs the grid share of EV charging at each slot price', () => {
+    const rows = [
+      makeRow({ g2ev: 1000, ic: 20 }),  // 1 kWh × 20 c€
+      makeRow({ g2ev: 2000, ic: 5 }),   // 2 kWh × 5 c€
+    ];
+    const s = buildPlanSummary(rows, cfg);
+    expect(s.evChargeGridCost_cents).toBeCloseTo(30);
+    expect(s.evChargeEffectiveRate_cents_per_kWh).toBeCloseTo(10);
+  });
+
+  // Free PV/battery kWh dilute the rate below the grid price actually paid.
+  it('spreads the grid cost over PV and battery energy too', () => {
+    const rows = [makeRow({ g2ev: 1000, pv2ev: 1000, ic: 20 })];
+    const s = buildPlanSummary(rows, cfg);
+    expect(s.evChargeGridCost_cents).toBeCloseTo(20);
+    expect(s.evChargeEffectiveRate_cents_per_kWh).toBeCloseTo(10);
+  });
+
+  it('reports a null effective rate when nothing charged', () => {
+    expect(buildPlanSummary([], cfg).evChargeEffectiveRate_cents_per_kWh).toBeNull();
+    expect(buildPlanSummary([makeRow()], cfg).evChargeEffectiveRate_cents_per_kWh).toBeNull();
+    expect(buildPlanSummary([makeRow()], cfg).evChargeGridCost_cents).toBe(0);
+  });
+
   it('handles rows where g2ev/pv2ev/b2ev are absent (undefined)', () => {
     // PlanRow without EV fields — summary should not throw and EV totals = 0
     const row = makeRow();
