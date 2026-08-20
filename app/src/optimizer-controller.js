@@ -85,6 +85,11 @@ export function createOptimizerController({
     initialSoc_percent: lastInitialSoc_percent,
   }));
 
+  // Plan requests overlap (boot's cached fetch, debounced reruns, the Run
+  // button), and a slow older response must never overwrite a newer one, so
+  // each request takes a ticket and only the latest one is allowed to paint.
+  let planSeq = 0;
+
   const debounceRun = deps.debounce(onRun, 250);
   const persistConfigDebounced = deps.debounce((cfg) => {
     void persistConfig(cfg);
@@ -125,12 +130,14 @@ export function createOptimizerController({
   // a fresh solve is still warranted, or null — cheaply, without touching the
   // UI — when there is nothing usable to show.
   async function loadLastPlan() {
+    const seq = ++planSeq;
     let result;
     try {
       result = await deps.fetchLastPlan();
     } catch {
       return null;
     }
+    if (seq !== planSeq) return null;
     if (!Array.isArray(result?.rows) || result.rows.length === 0) return null;
 
     applyPlanResult(result);
@@ -145,6 +152,8 @@ export function createOptimizerController({
     if (typeof persistConfigDebounced.cancel === "function") {
       persistConfigDebounced.cancel();
     }
+
+    const seq = ++planSeq;
 
     if (els.status) {
       els.status.textContent = "Calculating…";
@@ -167,6 +176,7 @@ export function createOptimizerController({
       const updateData = !!els.updateDataBeforeRun?.checked;
       const writeToVictron = !!els.pushToVictron?.checked;
       const result = await deps.requestRemoteSolve({ updateData, writeToVictron });
+      if (seq !== planSeq) return;
 
       const solverStatus =
         typeof result?.solverStatus === "string" ? result.solverStatus : "OK";
@@ -186,6 +196,7 @@ export function createOptimizerController({
       }
     } catch (err) {
       console.error(err);
+      if (seq !== planSeq) return;
       if (els.status) {
         els.status.textContent = `Error: ${err.message}`;
         els.status.className = "text-sm font-medium text-red-600 dark:text-red-400";
@@ -193,7 +204,9 @@ export function createOptimizerController({
       setChartPlaceholders(CHART_PLACEHOLDER_IDLE);
       deps.updateSummaryUI(els, null);
     } finally {
-      if (runBtn) {
+      // A superseded run leaves the button alone: the run that replaced it is
+      // still in flight and owns the spinner.
+      if (runBtn && seq === planSeq) {
         runBtn.classList.remove('loading');
         runBtn.disabled = false;
       }

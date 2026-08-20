@@ -43,6 +43,10 @@ const forecastChart = createForecastChartController({
   onAdjustmentsChanged: refreshAdjustedForecastsFromRaw,
 });
 
+// Read-only: the tab shows the stored series and never writes the config or
+// recomputes a forecast just because the page loaded. Both happen on an
+// explicit forecast run, which is also what keeps the cached plan's inputs
+// current across a reload.
 export async function initPredictionsTab() {
   await hydratePredictionForm();
   await forecastChart.loadAdjustments();
@@ -52,10 +56,6 @@ export async function initPredictionsTab() {
     onPvForecast,
   });
   forecastChart.wireAdjustmentPopover();
-  // Kicked off but not awaited: the forecast run must not block boot. The
-  // promise is handed back so boot can wait for it before judging whether the
-  // cached plan's inputs are still current — this run may rewrite them.
-  return { forecastRun: onForecastAll() };
 }
 
 function refreshAdjustedForecastsFromRaw() {
