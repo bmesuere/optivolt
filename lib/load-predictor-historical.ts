@@ -5,7 +5,7 @@
  */
 
 import type { StatRecord } from './ha-postprocess.ts';
-import { type ForecastSeries, computeErrorMetrics, type PredictionResult, type ValidationMetrics } from './time-series-utils.ts';
+import { computeErrorMetrics, type PredictionResult, type ValidationMetrics } from './time-series-utils.ts';
 
 export type DayFilter = 'same' | 'all' | 'weekday-weekend' | 'weekday-sat-sun';
 export type Aggregation = 'mean' | 'median';
@@ -120,7 +120,7 @@ export function validate(
   const inWindow = predictions.filter(p => p.time >= windowStart && p.time < windowEnd);
   const valid = inWindow.filter(p => p.predicted !== null) as Array<PredictionResult & { actual: number; predicted: number }>;
   const n = valid.length;
-  let nSkipped = inWindow.length - n;
+  const nSkipped = inWindow.length - n;
 
   if (n === 0) return { mae: NaN, rmse: NaN, mape: NaN, n: 0, nSkipped };
 

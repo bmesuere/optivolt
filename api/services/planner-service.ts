@@ -1,4 +1,4 @@
-// @ts-ignore — no .d.ts alongside the vendor build artifact; type is asserted via HighsInstance below
+// @ts-expect-error — no .d.ts alongside the vendor build artifact; type is asserted via HighsInstance below
 import highsFactory from '../../vendor/highs-build/highs.js';
 import { mapRowsToDessV2 } from '../../lib/dess-mapper.ts';
 import { buildLP } from '../../lib/build-lp.ts';
@@ -165,7 +165,9 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
     }
   }
 
-  let { cfg, timing, data, settings } = await getSolverInputs();
+  const solverInputs = await getSolverInputs();
+  const { timing } = solverInputs;
+  let { cfg, data, settings } = solverInputs;
 
   // Pre-solve bookkeeping: if a rebalance cycle just completed, auto-disable
   if (settings.rebalanceEnabled && (cfg.rebalanceRemainingSlots ?? Infinity) === 0) {
