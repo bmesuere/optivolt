@@ -55,6 +55,9 @@ describe('parseSolution', () => {
 
     expect(rows[0].soc_Wh).toBe(200);
     expect(rows[1].soc_Wh).toBe(150);
+    // Deprecated wire-compat alias for external /calculate consumers.
+    expect(rows[0].soc).toBe(rows[0].soc_Wh);
+    expect(rows[1].soc).toBe(rows[1].soc_Wh);
   });
 
   it('computes per-slot import and export costs', () => {

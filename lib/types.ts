@@ -150,6 +150,8 @@ export interface PlanRow {
   importCost_cents: number;  // import energy cost for this slot, in c€
   exportCost_cents: number;  // export energy value for this slot, in c€
   soc_Wh: number;   // battery SoC Wh
+  /** @deprecated Wire-compat alias of soc_Wh for external /calculate consumers; will be removed in a future version. */
+  soc: number;
   soc_percent: number;  // battery SoC %
   g2ev: number;         // grid → EV W
   pv2ev: number;        // PV → EV W

@@ -154,6 +154,7 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
       importCost_cents: round(importCost),
       exportCost_cents: round(exportCost),
       soc_Wh: round(soc[t]),
+      soc: round(soc[t]),
       soc_percent: (soc[t] / cap) * 100,
       g2ev:          round(g2ev[t]),
       pv2ev:         round(pv2ev[t]),

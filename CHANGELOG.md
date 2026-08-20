@@ -10,6 +10,11 @@ groups work rather than listing every change.
 
 Still the current version; everything below has shipped under it.
 
+- **Deprecated:** `rows[*].soc` in the `/calculate` responses is renamed to
+  `soc_Wh` (it always held watt-hours). `soc` is still emitted with the same
+  value as a compatibility alias and will be removed in a future version —
+  migrate external automations to `soc_Wh`.
+
 - Load forecasting from Home Assistant sensor history, with pluggable
   predictors and a fixed-load fallback.
 - PV forecasting from Open-Meteo weather data, including a linear irradiance
