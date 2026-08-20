@@ -1,6 +1,6 @@
 {
   "name": "optivolt",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Optivolt is a linear and mixed-integer optimizer for home energy systems.",
   "homepage": "https://github.com/bmesuere/optivolt#readme",
   "bugs": {
