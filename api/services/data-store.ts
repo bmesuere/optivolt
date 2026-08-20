@@ -5,6 +5,7 @@ import { bumpSolverInputsVersion } from './solver-inputs-version.ts';
 import type { Data, TimeSeries } from '../types.ts';
 import { validatePredictionAdjustment } from './prediction-adjustments.ts';
 import { validateEvScheduleEntry } from './ev-schedule-entries.ts';
+import { recordFullSocObservation } from './rebalance-nudge.ts';
 
 const DATA_DIR = resolveDataDir();
 const DATA_PATH = path.join(DATA_DIR, 'data.json');
@@ -106,15 +107,19 @@ let lastSavedJson: string | undefined;
 
 /**
  * Persist data to DATA_DIR/data.json (pretty-printed).
+ *
+ * Every save records a full-SoC observation (for the rebalance nudge) so no
+ * write path can forget it; persisted data therefore always carries an
+ * up-to-date lastFullSocAt even when the caller's in-memory copy does not.
  */
 export async function saveData(data: Data): Promise<void> {
-  validateData(data);
-  const json = JSON.stringify(data);
+  const next = recordFullSocObservation(validateData(data));
+  const json = JSON.stringify(next);
   if (json !== lastSavedJson) {
     lastSavedJson = json;
     bumpSolverInputsVersion();
   }
-  await writeJson(DATA_PATH, data);
+  await writeJson(DATA_PATH, next);
 }
 
 /**

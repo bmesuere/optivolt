@@ -3,7 +3,6 @@ import type { VRMForecasts, VRMPrices } from '../../lib/vrm-api.ts';
 import { loadSettings, saveSettings } from './settings-store.ts';
 import { loadData, saveData } from './data-store.ts';
 import { readVictronSocPercent, readVictronSocLimits } from './mqtt-service.ts';
-import { recordFullSocObservation } from './rebalance-nudge.ts';
 import type { Data } from '../types.ts';
 
 function createClientFromEnv(): VRMClient {
@@ -143,7 +142,7 @@ export async function refreshSeriesFromVrmAndPersist(): Promise<void> {
     ? { timestamp: new Date().toISOString(), value: socPercent }
     : baseData.soc;
 
-  let nextData: Data = {
+  const nextData: Data = {
     load,
     pv,
     importPrice,
@@ -156,10 +155,6 @@ export async function refreshSeriesFromVrmAndPersist(): Promise<void> {
     predictionAdjustments: baseData.predictionAdjustments,
     evScheduleEntries: baseData.evScheduleEntries,
   };
-
-  if (shouldFetchSoc && socPercent !== null) {
-    nextData = recordFullSocObservation(nextData);
-  }
 
   await saveData(nextData);
 

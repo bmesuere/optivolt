@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSolverInputs } from '../../../api/services/config-builder.ts';
+import { getSolverInputs } from '../../../api/services/planner-service.ts';
 import { loadData, saveData } from '../../../api/services/data-store.ts';
 import { loadSettings } from '../../../api/services/settings-store.ts';
 
 vi.mock('../../../api/services/data-store.ts');
 vi.mock('../../../api/services/settings-store.ts');
 vi.mock('../../../api/services/ha-client.ts');
+vi.mock('../../../api/services/vrm-refresh.ts');
+vi.mock('../../../api/services/mqtt-service.ts');
 
 const NOW = '2099-01-01T00:05:00.000Z';
 

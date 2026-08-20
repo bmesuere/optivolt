@@ -1,12 +1,6 @@
 import { HttpError } from '../http-errors.ts';
-import { loadSettings } from './settings-store.ts';
-import { loadData, saveData } from './data-store.ts';
-import { applyPredictionAdjustmentsToData, pruneExpiredPredictionAdjustments } from './prediction-adjustments.ts';
-import { recordFullSocObservation } from './rebalance-nudge.ts';
 import { extractWindow, extendSeriesWithForecast, getForecastTimeRange, getQuarterStart } from '../../lib/time-series-utils.ts';
-import { fetchHaEntityState } from './ha-client.ts';
 import { buildEvConfig } from './ev-config-builder.ts';
-import { normalizeEvScheduleEntries, recordEvLastState } from './ev-schedule-entries.ts';
 import type { SolverConfig, TimeSeries } from '../../lib/types.ts';
 import type { Settings, Data } from '../types.ts';
 
@@ -160,52 +154,4 @@ export function buildSolverConfigFromSettings(
     cfg: base,
     ...(pricesKnownUntilMs != null && pricesKnownUntilMs < alignedEndMs ? { pricesKnownUntilMs } : {}),
   };
-}
-
-export async function getSolverInputs(): Promise<{ cfg: SolverConfig; pricesKnownUntilMs?: number; timing: { startMs: number; stepMin: number }; data: Data; settings: Settings }> {
-  const [settings, loadedData] = await Promise.all([loadSettings(), loadData()]);
-  const startMs = getQuarterStart(new Date(), settings.stepSize_m);
-
-  // Read the live EV state before normalizing schedule entries: pruning overdue departures and
-  // converting departed trips both depend on an up-to-date plug state (persisted as evLastState).
-  let evState: { pluggedIn: boolean; soc_percent: number } | undefined;
-  if (settings.evEnabled && settings.evSocSensor && settings.evPlugSensor) {
-    try {
-      const [socEntity, plugEntity] = await Promise.all([
-        fetchHaEntityState({ haUrl: settings.haUrl, haToken: settings.haToken, entityId: settings.evSocSensor }),
-        fetchHaEntityState({ haUrl: settings.haUrl, haToken: settings.haToken, entityId: settings.evPlugSensor }),
-      ]);
-      // Clamp so a misreporting sensor (e.g. 255 for "unknown") cannot distort the plan; NaN passes through.
-      const soc_percent = Math.min(100, Math.max(0, parseFloat(socEntity.state)));
-      const pluggedIn = plugEntity.state !== 'disconnected'
-        && plugEntity.state !== 'unavailable'
-        && plugEntity.state !== 'unknown'
-        && plugEntity.state !== 'off';
-      // soc_percent may be NaN (e.g. the car is away and the sensor is unavailable);
-      // an away-charging plan can still proceed using the manual arrival-SoC override.
-      evState = { pluggedIn, soc_percent };
-    } catch (err) {
-      console.warn('Could not read EV state from HA:', err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  const withEvState = recordEvLastState(loadedData, evState, startMs);
-  const pruned = pruneExpiredPredictionAdjustments(withEvState, startMs);
-  // Pass the just-fetched EV state: the persisted evLastState's observedAt only moves on state
-  // changes, so normalization would otherwise treat a long-unchanged plug state as stale.
-  const prunedEv = normalizeEvScheduleEntries(pruned.data, startMs, evState);
-  let data = prunedEv.data;
-  let shouldSaveData = withEvState !== loadedData || pruned.changed || prunedEv.changed;
-
-  const observedData = recordFullSocObservation(data);
-  if (observedData !== data) {
-    data = observedData;
-    shouldSaveData = true;
-  }
-
-  if (shouldSaveData) await saveData(data);
-
-  const adjustedData = applyPredictionAdjustmentsToData(data);
-  const { cfg, pricesKnownUntilMs } = buildSolverConfigFromSettings(settings, adjustedData, startMs, evState);
-  return { cfg, pricesKnownUntilMs, timing: { startMs, stepMin: settings.stepSize_m }, data, settings };
 }
