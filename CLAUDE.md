@@ -23,7 +23,8 @@ The system has three layers. Server/core code is TypeScript ESM executed directl
 - **`build-lp.ts`** — Generates an LP problem string from time-series data and settings. The LP has per-slot flow variables (`grid_to_load`, `pv_to_battery`, `battery_to_grid`, EV flows, etc.) and tracks `soc` evolution with charge/discharge efficiency.
 - **`parse-solution.ts`** — Parses HiGHS solver output back into per-slot row objects with flows, SoC percentages, import/export, EV decisions, and timestamps.
 - **`dess-mapper.ts`** — Maps solved rows to Victron Dynamic ESS schedule parameters (strategy, restrictions, feed-in, target SoC). Produces per-slot DESS decisions and diagnostics.
-- **`vrm-api.ts`** / **`victron-mqtt.ts`** — VRM REST client and MQTT client for writing schedules to Victron.
+- **`vrm-payloads.ts`** / **`victron-topics.ts`** — pure VRM response parsing + window math, and Victron MQTT topic/payload encoding. The I/O clients that use them live in `api/services/`.
+- **`time-series-utils.ts`** — resampling helpers and `dayAheadWindowEndMs`, the single source of truth for the 13:00/midnight day-ahead window rule.
 
 ### `api/` — Express server
 - **`app.ts`** — Express app setup. Mounts routes at `/calculate`, `/settings`, `/data`, `/vrm`, `/predictions`, `/ev`, `/ha`, and serves the static UI from `app/`.
@@ -35,6 +36,7 @@ The system has three layers. Server/core code is TypeScript ESM executed directl
   - `config-builder.ts` — Merges persisted settings + data into solver inputs.
   - `vrm-refresh.ts` — Fetches time-series from VRM and persists to `data.json`.
   - `prediction-forecast-runner.ts` / `prediction-adjustment-store.ts` — Prediction orchestration, forecast persistence policy, and manual adjustment CRUD.
+  - `vrm-client.ts` / `victron-mqtt-client.ts` — VRM REST client and Victron MQTT client (the I/O side of the `lib/` modules above).
   - `mqtt-service.ts` — Writes Dynamic ESS schedule via MQTT.
 - **Defaults** (`api/defaults/`): `default-settings.json` and `default-data.json` used when no persisted files exist.
 

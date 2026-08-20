@@ -81,34 +81,36 @@ export function extractWindow(
 }
 
 /**
- * Calculates the standard forecast time window.
- * Forecast duration:
- * < 13:00 -> until midnight tonight
- * >= 13:00 -> until midnight tomorrow
+ * End of the day-ahead planning window, as local midnight:
+ * < 13:00 -> midnight tonight
+ * >= 13:00 -> midnight tomorrow (day-ahead prices have been published by then)
+ *
+ * The single source of truth for this rule on the server; every window that
+ * has to line up with it (forecasts, VRM fetches, the plan horizon) derives
+ * from this function.
+ *
+ * @param nowMs The current time in milliseconds (defaults to Date.now())
+ * @param extraDays Additional whole days beyond the standard window (extended horizon)
+ */
+export function dayAheadWindowEndMs(nowMs = Date.now(), extraDays = 0): number {
+  const now = new Date(nowMs);
+  const dayOffset = (now.getHours() < 13 ? 1 : 2) + extraDays;
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset, 0, 0, 0, 0).getTime();
+}
+
+/**
+ * Calculates the standard forecast time window: from the current 15-min slot
+ * to the end of the day-ahead window.
  *
  * @param nowMs The current time in milliseconds (defaults to Date.now())
  * @param extraDays Additional whole days beyond the standard window (extended horizon)
  * @returns An object containing the startIso (aligned to 15m) and endIso (midnight)
  */
 export function getForecastTimeRange(nowMs = Date.now(), extraDays = 0): { startIso: string; endIso: string } {
-  const now = new Date(nowMs);
-  const currentHour = now.getHours();
-
-  const end = new Date(now);
-  end.setMinutes(0, 0, 0);
-  if (currentHour < 13) {
-    end.setDate(end.getDate() + 1 + extraDays);
-    end.setHours(0, 0, 0, 0);
-  } else {
-    end.setDate(end.getDate() + 2 + extraDays);
-    end.setHours(0, 0, 0, 0);
-  }
-
-  const startMs = Math.floor(now.getTime() / (15 * 60 * 1000)) * (15 * 60 * 1000);
-  const startIso = new Date(startMs).toISOString();
-  const endIso = end.toISOString();
-
-  return { startIso, endIso };
+  return {
+    startIso: new Date(getQuarterStart(nowMs)).toISOString(),
+    endIso: new Date(dayAheadWindowEndMs(nowMs, extraDays)).toISOString(),
+  };
 }
 
 /**

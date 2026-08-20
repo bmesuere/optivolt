@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractWindow, getQuarterStart, buildForecastSeries, getForecastTimeRange, extendSeriesWithForecast } from '../../lib/time-series-utils.ts';
+import { extractWindow, getQuarterStart, buildForecastSeries, getForecastTimeRange, dayAheadWindowEndMs, extendSeriesWithForecast } from '../../lib/time-series-utils.ts';
 
 describe('Time Series Utils', () => {
   describe('getQuarterStart', () => {
@@ -141,6 +141,29 @@ describe('buildForecastSeries', () => {
     const series = buildForecastSeries([], start, end, 15);
     expect(series.values).toHaveLength(4);
     expect(series.values.every(v => v === 0)).toBe(true);
+  });
+});
+
+describe('dayAheadWindowEndMs', () => {
+  // Times are interpreted in local time; use explicit local Date values.
+  it('ends at midnight tonight before 13:00', () => {
+    const now = new Date(2024, 0, 1, 12, 59, 59, 999);
+    expect(dayAheadWindowEndMs(now.getTime())).toBe(new Date(2024, 0, 2, 0, 0, 0).getTime());
+  });
+
+  it('ends at midnight tomorrow from 13:00 onwards', () => {
+    const now = new Date(2024, 0, 1, 13, 0, 0);
+    expect(dayAheadWindowEndMs(now.getTime())).toBe(new Date(2024, 0, 3, 0, 0, 0).getTime());
+  });
+
+  it('rolls over the month and year at the boundary', () => {
+    const now = new Date(2024, 11, 31, 13, 0, 0);
+    expect(dayAheadWindowEndMs(now.getTime())).toBe(new Date(2025, 0, 2, 0, 0, 0).getTime());
+  });
+
+  it('adds whole extra days for the extended horizon', () => {
+    const now = new Date(2024, 0, 1, 10, 0, 0);
+    expect(dayAheadWindowEndMs(now.getTime(), 3)).toBe(new Date(2024, 0, 5, 0, 0, 0).getTime());
   });
 });
 
