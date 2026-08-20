@@ -255,3 +255,51 @@ describe('parseSolution — ev_charge_mode derivation', () => {
     expect(row.ev_charge_mode).toBe('solar_only');
   });
 });
+
+describe('parseSolution — resolved EV targets on rows', () => {
+  const opts = { startMs: 1700000000000, stepMin: 15 };
+
+  function cfgWithTargets(targets) {
+    return {
+      load_W: [500, 500, 500],
+      pv_W: [0, 0, 0],
+      importPrice: [10, 10, 10],
+      exportPrice: [5, 5, 5],
+      batteryCapacity_Wh: 1000,
+      ev: {
+        evMinChargePower_W: 1380,
+        evMaxChargePower_W: 3680,
+        evBatteryCapacity_Wh: 60000,
+        evInitialSoc_percent: 50,
+        evChargeEfficiency_percent: 100,
+        availabilityWindows: [{ startSlot: 0, endSlot: 3, resetSoc_Wh: 30000 }],
+        targets,
+      },
+    };
+  }
+
+  const result = { Status: 'Optimal', Columns: { 'soc_0': { Primal: 0 }, 'soc_1': { Primal: 0 }, 'soc_2': { Primal: 0 } } };
+
+  it('pins the target as a percentage on the slot that carries it', () => {
+    const rows = parseSolution(result, cfgWithTargets([{ slot: 1, soc_Wh: 48000 }]), opts);
+    expect(rows[0].ev_target_soc_percent).toBeUndefined();
+    expect(rows[1].ev_target_soc_percent).toBeCloseTo(80);
+    expect(rows[2].ev_target_soc_percent).toBeUndefined();
+  });
+
+  it('keeps the higher requirement when two targets share a slot', () => {
+    const rows = parseSolution(
+      result,
+      cfgWithTargets([{ slot: 2, soc_Wh: 30000 }, { slot: 2, soc_Wh: 54000 }]),
+      opts,
+    );
+    expect(rows[2].ev_target_soc_percent).toBeCloseTo(90);
+  });
+
+  it('leaves the field off every row when there is no EV config', () => {
+    const cfg = cfgWithTargets([]);
+    delete cfg.ev;
+    const rows = parseSolution(result, cfg, opts);
+    expect(rows.every(r => r.ev_target_soc_percent === undefined)).toBe(true);
+  });
+});

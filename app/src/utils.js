@@ -12,6 +12,18 @@ export function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
+/**
+ * Index of the first plan row starting at or after the given time (an ISO string
+ * or anything `Date` parses), or -1 when the time is absent, unparseable, or
+ * beyond the last row. The one place schedule times are lined up with plan rows.
+ */
+export function rowIndexAtOrAfter(rows, time) {
+  if (!time) return -1;
+  const ms = new Date(time).getTime();
+  if (!Number.isFinite(ms)) return -1;
+  return rows.findIndex(r => r.timestampMs >= ms);
+}
+
 export function debounce(fn, wait = 250) {
   let timer = null;
 

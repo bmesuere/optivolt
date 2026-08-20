@@ -116,6 +116,14 @@ describe('aggregateRowsHourly', () => {
     expect(hour.ev_charge_A).toBe(20);
   });
 
+  it('keeps a mid-hour EV target instead of only the last slot of the hour', () => {
+    const rows = makeRows(new Date(2026, 4, 1, 10, 0), 8);
+    rows[1].ev_target_soc_percent = 80;
+    const hourly = aggregateRowsHourly(rows, 15);
+    expect(hourly[0].ev_target_soc_percent).toBe(80);
+    expect(hourly[1].ev_target_soc_percent).toBeUndefined();
+  });
+
   it('only carries original predictions when a slot had one', () => {
     const rows = makeRows(new Date(2026, 4, 1, 10, 0), 4);
     expect(aggregateRowsHourly(rows, 15)[0].originalLoad).toBeUndefined();

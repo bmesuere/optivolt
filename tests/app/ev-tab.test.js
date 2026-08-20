@@ -12,24 +12,23 @@ describe('collectEvSettings — trips', () => {
     usage_percent: 25,
   };
 
-  it('contributes a departure, an arrival, an away span, and a derived target', () => {
-    const result = collectEvSettings([trip], 20);
+  it('contributes a departure, an arrival, and an away span', () => {
+    const result = collectEvSettings([trip]);
     expect(result.departures).toEqual([trip.time]);
     expect(result.arrivals).toEqual([trip.endTime]);
     expect(result.trips).toEqual([{ from: trip.time, to: trip.endTime }]);
-    expect(result.targets).toEqual([{ time: trip.time, soc_percent: 45 }]); // 25 + 20% buffer
   });
 
-  it('caps the derived target at 100%', () => {
-    const result = collectEvSettings([{ ...trip, usage_percent: 95 }], 20);
-    expect(result.targets).toEqual([{ time: trip.time, soc_percent: 100 }]);
-  });
-
-  it('derives no target for a trip without a usage estimate', () => {
-    const { usage_percent: _unused, ...noUsage } = trip;
-    const result = collectEvSettings([noUsage], 20);
-    expect(result.targets).toEqual([]);
-    expect(result.trips).toEqual([{ from: trip.time, to: trip.endTime }]);
+  // SoC deadlines are resolved by the solver and arrive on the plan rows, so the
+  // client no longer re-derives them (trip usage + buffer, departure SoC, …).
+  it('derives no SoC targets', () => {
+    const result = collectEvSettings([
+      trip,
+      { id: 'd1', type: 'departure', time: '2026-05-02T08:00:00.000Z', soc_percent: 80 },
+      { id: 'g1', type: 'target', time: '2026-05-02T09:00:00.000Z', soc_percent: 90 },
+    ]);
+    expect(result.targets).toBeUndefined();
+    expect(result.departures).toEqual([trip.time, '2026-05-02T08:00:00.000Z']);
   });
 });
 
@@ -62,19 +61,46 @@ describe('updateEvPanel', () => {
     expect(evScheduleTable.innerHTML).not.toContain('arrives');
   });
 
-  it('annotates arrival, departure, and target rows when evSettings is present', () => {
+  it('annotates arrival and departure rows when evSettings is present', () => {
     const evScheduleTable = document.createElement('table');
 
     updateEvPanel({ evScheduleTable }, rows, { evChargeTotal_kWh: 1.8 }, 15, {
       arrivals: ['2026-05-01T17:00:00.000Z'],
       departures: ['2026-05-01T17:15:00.000Z'],
-      targets: [{ time: '2026-05-01T17:15:00.000Z', soc_percent: 80 }],
       trips: [],
     });
 
     expect(evScheduleTable.innerHTML).toContain('arrives');
     expect(evScheduleTable.innerHTML).toContain('leaves');
+  });
+
+  // The deadline comes from the solver's resolved target on the row, not from the
+  // schedule entries — so the column follows what the LP actually enforced.
+  it('shows the target column from the row-carried solver target', () => {
+    const evScheduleTable = document.createElement('table');
+    const withTarget = [rows[0], { ...rows[1], ev_target_soc_percent: 79.6 }];
+
+    updateEvPanel({ evScheduleTable }, withTarget, { evChargeTotal_kWh: 1.8 }, 15, null);
+
+    expect(evScheduleTable.innerHTML).toContain('Target');
     expect(evScheduleTable.innerHTML).toContain('target 80%');
+  });
+
+  it('reads EV grid cost and effective rate from the summary', () => {
+    const els = {
+      evScheduleTable: document.createElement('table'),
+      evTabTotalCost: document.createElement('span'),
+      evTabEffectiveRate: document.createElement('span'),
+    };
+
+    updateEvPanel(els, rows, {
+      evChargeTotal_kWh: 1.8,
+      evChargeGridCost_cents: 42.75,
+      evChargeEffectiveRate_cents_per_kWh: 23.75,
+    }, 15, null);
+
+    expect(els.evTabTotalCost.textContent).toBe('42.8¢');
+    expect(els.evTabEffectiveRate.textContent).toBe('23.8¢/kWh');
   });
 
   // The tab keeps no plan of its own: a view-toggle replay re-reads the store,

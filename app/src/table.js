@@ -1,5 +1,5 @@
 import { SOLUTION_COLORS } from "./charts.js";
-import { escapeHtml } from "./utils.js";
+import { escapeHtml, rowIndexAtOrAfter } from "./utils.js";
 
 /**
  * Render the results table and unit label.
@@ -29,9 +29,7 @@ export function renderTable({ rows, cfg, targets, showKwh, showDess = false, reb
   // First row at/after each departure (plain departures and trip departures alike).
   const departureIdxs = new Set();
   for (const time of (evSettings?.departures ?? [])) {
-    const ms = new Date(time).getTime();
-    if (!Number.isFinite(ms)) continue;
-    const idx = rows.findIndex(r => r.timestampMs >= ms);
+    const idx = rowIndexAtOrAfter(rows, time);
     if (idx >= 0) departureIdxs.add(idx);
   }
 

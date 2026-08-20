@@ -113,6 +113,15 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
   }
 
   // --- 2. Build rows (flows, soc, etc.) ---
+  // Resolved EV SoC deadlines, by the slot they are pinned at, so consumers read
+  // the target the LP actually enforced instead of re-deriving it from settings.
+  // ev-config-builder already de-dupes per slot; keeping the higher requirement
+  // here makes that independent of the caller.
+  const evTargetWhBySlot = new Map<number, number>();
+  for (const target of cfg.ev?.targets ?? []) {
+    evTargetWhBySlot.set(target.slot, Math.max(evTargetWhBySlot.get(target.slot) ?? 0, target.soc_Wh));
+  }
+
   const slotHours = opts.stepMin / 60;
   const rows: PlanRow[] = [];
   for (let t = 0; t < T; t++) {
@@ -121,6 +130,7 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
     const evW = g2ev[t] + pv2ev[t] + b2ev[t];
     const importCost = imp * slotHours / 1000 * cfg.importPrice[t];
     const exportCost = exp * slotHours / 1000 * cfg.exportPrice[t];
+    const evTargetWh = evTargetWhBySlot.get(t);
 
     rows.push({
       tIdx: t,
@@ -159,6 +169,7 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
         pv2b[t],
       ),
       ev_soc_percent: (evSoc[t] / evCap) * 100,
+      ...(evTargetWh != null ? { ev_target_soc_percent: (evTargetWh / evCap) * 100 } : {}),
     });
   }
 

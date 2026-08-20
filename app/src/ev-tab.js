@@ -3,6 +3,7 @@ import { formatKWh, updateStackedBarContainer } from "./state.js";
 import { resolvePlanView } from "./plan-view.js";
 import { getPlan } from "./plan-store.js";
 import { mountViewToggles, subscribeViewToggles } from "./view-toggles.js";
+import { rowIndexAtOrAfter } from "./utils.js";
 
 // The non-plan inputs of the last render (elements, step size, EV settings);
 // the plan itself is re-read from the store on replay.
@@ -24,42 +25,34 @@ export function initEvPanelToggles(els) {
 
 /**
  * Derive the chart/table annotation inputs from the EV schedule entries: arrival and departure
- * times (multiple possible), the list of SoC deadlines, and the away spans of trips. A departure
- * carrying a SoC also contributes a target at its time; a trip contributes a departure, an
- * arrival, an away span, and — when it has a usage estimate — a derived target at departure of
- * usage + the global trip buffer.
+ * times (multiple possible) and the away spans of trips. SoC deadlines are not derived here —
+ * the solver resolves them (clamped to what is reachable, de-duped per slot) and the plan rows
+ * carry the result as `ev_target_soc_percent`.
  */
-export function collectEvSettings(entries = [], tripBuffer_percent = 20) {
+export function collectEvSettings(entries = []) {
   const arrivals = [];
   const departures = [];
-  const targets = [];
   const trips = [];
   for (const e of entries) {
     if (e.type === 'arrival') {
       arrivals.push(e.time);
     } else if (e.type === 'departure') {
       departures.push(e.time);
-      if (e.soc_percent > 0) targets.push({ time: e.time, soc_percent: e.soc_percent });
-    } else if (e.type === 'target' && e.soc_percent > 0) {
-      targets.push({ time: e.time, soc_percent: e.soc_percent });
     } else if (e.type === 'trip') {
       departures.push(e.time);
       if (e.endTime) {
         arrivals.push(e.endTime);
         trips.push({ from: e.time, to: e.endTime });
       }
-      if (Number.isFinite(e.usage_percent)) {
-        targets.push({ time: e.time, soc_percent: Math.min(100, Math.round(e.usage_percent + tripBuffer_percent)) });
-      }
     }
   }
-  return { arrivals, departures, targets, trips };
+  return { arrivals, departures, trips };
 }
 
 export function updateEvPanel(els, rows, summary, stepSize_m = 15, evSettings = null) {
   // Callers pass null explicitly when EV support is off, and a default parameter only covers
   // undefined — so normalise here rather than relying on one.
-  const ev = evSettings ?? { arrivals: [], departures: [], targets: [], trips: [] };
+  const ev = evSettings ?? { arrivals: [], departures: [], trips: [] };
   lastRenderInputs = { els, stepSize_m, ev };
   renderEvPanel({ els, rows, summary, stepSize_m, ev });
 }
@@ -83,7 +76,6 @@ function renderEvPanel({ els, rows, summary, stepSize_m, ev }) {
     els.evTabPlugStatus.className = `stat-value ${isPlugged ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`;
   }
 
-  const h = Math.max(0.000001, stepSize_m / 60);
   const evRows = rows.filter(r => (r.ev_soc_percent ?? 0) > 0);
 
   if (hasEv) {
@@ -101,8 +93,8 @@ function renderEvPanel({ els, rows, summary, stepSize_m, ev }) {
       { value: pv,   color: SOLUTION_COLORS.pv2ev },
     ]);
 
-    const totalCost_cents = evRows.reduce((s, r) => s + (r.g2ev || 0) * h / 1000 * (r.ic || 0), 0);
-    const effectiveRate = evTotal > 0 ? totalCost_cents / evTotal : 0;
+    const totalCost_cents = summary.evChargeGridCost_cents ?? 0;
+    const effectiveRate = summary.evChargeEffectiveRate_cents_per_kWh ?? 0;
 
     if (els.evTabTotalCost) els.evTabTotalCost.textContent = `${totalCost_cents.toFixed(1)}¢`;
     if (els.evTabEffectiveRate) els.evTabEffectiveRate.textContent = `${effectiveRate.toFixed(1)}¢/kWh`;
@@ -209,16 +201,10 @@ function renderEvTable(evRows, tableEl, stepSize_m = 15, evSettings = {}) {
 
   const baseTh = "px-2 py-1.5 border-b border-slate-200/80 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900";
 
-  const rowIdxAtOrAfter = (time) => {
-    if (!time) return -1;
-    const ms = new Date(time).getTime();
-    if (!Number.isFinite(ms)) return -1;
-    return evRows.findIndex(r => r.timestampMs >= ms);
-  };
   const rowIdxSet = (times) => {
     const set = new Set();
     for (const t of (times ?? [])) {
-      const idx = rowIdxAtOrAfter(t);
+      const idx = rowIndexAtOrAfter(evRows, t);
       if (idx >= 0) set.add(idx);
     }
     return set;
@@ -227,14 +213,7 @@ function renderEvTable(evRows, tableEl, stepSize_m = 15, evSettings = {}) {
   const arrivalIdxs = rowIdxSet(evSettings?.arrivals);
   const departureIdxs = rowIdxSet(evSettings?.departures);
 
-  // Map each target deadline to the first row at/after it, so the target % shows on that row.
-  // When several targets land on the same row, show the highest — matching the solver's dedupe.
-  const targetByRowIdx = new Map();
-  for (const t of (evSettings?.targets ?? [])) {
-    const idx = rowIdxAtOrAfter(t.time);
-    if (idx >= 0) targetByRowIdx.set(idx, Math.max(targetByRowIdx.get(idx) ?? 0, t.soc_percent));
-  }
-  const hasTarget = targetByRowIdx.size > 0;
+  const hasTarget = evRows.some(r => r.ev_target_soc_percent != null);
 
   const totalsRow = `<tr>
     <th class="${baseTh} text-left" scope="row"><span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-200/80 dark:bg-slate-700/60 text-[9px] font-bold text-slate-400 dark:text-slate-500" title="Column totals (kWh)">Σ</span></th>
@@ -275,8 +254,8 @@ function renderEvTable(evRows, tableEl, stepSize_m = 15, evSettings = {}) {
     const isMidnight = /^\d{2}\/\d{2}$/.test(timeLabel);
     const isArrival = arrivalIdxs.has(i);
     const isDeparture = departureIdxs.has(i);
-    const rowTargetSoc = targetByRowIdx.get(i);
-    const hasRowTarget = rowTargetSoc != null;
+    const hasRowTarget = r.ev_target_soc_percent != null;
+    const rowTargetSoc = hasRowTarget ? Math.round(r.ev_target_soc_percent) : null;
     const isCharging = (r.ev_charge ?? 0) > 0;
     const ampStr = isCharging ? (r.ev_charge_A ?? 0).toFixed(1) : '–';
     const modeHtml = isCharging ? (MODE_BADGE[r.ev_charge_mode] ?? '') : '';

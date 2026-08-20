@@ -1,18 +1,10 @@
 import { fmtHHMM } from './core.js';
-
-export function findDepartureSlotIdx(rows, departureTime) {
-  if (!departureTime) return -1;
-  const depMs = new Date(departureTime).getTime();
-  for (let i = 0; i < rows.length; i++) {
-    if (rows[i].timestampMs >= depMs) return i;
-  }
-  return -1;
-}
+import { rowIndexAtOrAfter } from '../utils.js';
 
 // Draw a dashed vertical line + time label at each of the given event times.
 function makeEvEventPlugin(id, color, labelY, rows, times) {
   const marks = (times ?? [])
-    .map(time => ({ idx: findDepartureSlotIdx(rows, time), time }))
+    .map(time => ({ idx: rowIndexAtOrAfter(rows, time), time }))
     .filter(m => m.idx >= 0);
   if (marks.length === 0) return null;
 
@@ -59,7 +51,7 @@ export function makeEvAwayBandPlugin(rows, trips) {
       const toMs = new Date(to).getTime();
       if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null;
       if (rows.length === 0 || fromMs > rows[rows.length - 1].timestampMs) return null;
-      return { fromIdx: Math.max(0, findDepartureSlotIdx(rows, from)), toIdx: findDepartureSlotIdx(rows, to) };
+      return { fromIdx: Math.max(0, rowIndexAtOrAfter(rows, from)), toIdx: rowIndexAtOrAfter(rows, to) };
     })
     .filter(Boolean);
   if (spans.length === 0) return null;
@@ -87,13 +79,16 @@ export function makeEvArrivalPlugin(rows, arrivalTimes) {
 }
 
 /**
- * Draw one or more SoC deadlines. Each target is { time, soc_percent }, independent of the
- * departure time. To keep multiple targets legible, each is drawn as an L-corner that stops at
- * its crossing point — a horizontal segment from the left axis and a vertical segment from the
- * bottom axis, meeting at a dot at (deadline slot, target SoC) — rather than full-width lines.
+ * Draw the SoC deadlines the solver enforced, read from the rows themselves
+ * (`ev_target_soc_percent`) — a target beyond the horizon simply never lands on a row. To keep
+ * multiple targets legible, each is drawn as an L-corner that stops at its crossing point — a
+ * horizontal segment from the left axis and a vertical segment from the bottom axis, meeting at
+ * a dot at (deadline slot, target SoC) — rather than full-width lines.
  */
-export function makeEvTargetPlugin(rows, targets) {
-  const active = (targets ?? []).filter(t => t && t.time && t.soc_percent > 0);
+export function makeEvTargetPlugin(rows) {
+  const active = (rows ?? [])
+    .map((row, idx) => ({ idx, soc_percent: row.ev_target_soc_percent }))
+    .filter(t => t.soc_percent > 0);
   if (active.length === 0) return null;
 
   const color = 'rgba(16, 185, 129, 0.85)';
@@ -111,11 +106,7 @@ export function makeEvTargetPlugin(rows, targets) {
       ctx.lineWidth = 1.5;
       ctx.font = '600 10px system-ui, sans-serif';
 
-      for (const { time, soc_percent } of active) {
-        const idx = findDepartureSlotIdx(rows, time);
-        // Deadline beyond the horizon: the entry has no effect on this plan, so draw nothing
-        // (consistent with arrival/departure markers, which skip out-of-range times).
-        if (idx < 0) continue;
+      for (const { idx, soc_percent } of active) {
         const xPx = xScale.getPixelForValue(idx);
         const yPx = yScale.getPixelForValue(soc_percent);
 
@@ -137,7 +128,7 @@ export function makeEvTargetPlugin(rows, targets) {
         ctx.textAlign = 'right';
         ctx.textBaseline = 'bottom';
         const labelX = Math.max(chartArea.left + 24, xPx - 5);
-        ctx.fillText(`${soc_percent}%`, labelX, yPx - 4);
+        ctx.fillText(`${Math.round(soc_percent)}%`, labelX, yPx - 4);
       }
 
       ctx.restore();

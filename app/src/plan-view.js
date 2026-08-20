@@ -132,6 +132,11 @@ export function aggregateRowsHourly(rows, stepSize_m = 15) {
       for (const key of SLOT_MEAN_KEYS) {
         out[key] = slotRows.reduce((sum, r) => sum + (Number(r[key]) || 0), 0) / slotRows.length;
       }
+      // A SoC deadline pinned mid-hour would otherwise be lost to the {...last}
+      // spread; the strictest one in the bucket represents the hour.
+      const bucketTarget = slotRows.reduce((max, r) => Math.max(max, r.ev_target_soc_percent ?? 0), 0);
+      if (bucketTarget > 0) out.ev_target_soc_percent = bucketTarget;
+      else delete out.ev_target_soc_percent;
       // Original (pre-adjustment) predictions, only when some slot carried one.
       for (const [key, base] of [["originalLoad", "load"], ["originalPv", "pv"]]) {
         if (slotRows.some((r) => r[key] != null)) {

@@ -45,6 +45,8 @@ export function buildPlanSummary(
       evChargeFromGrid_kWh:    0,
       evChargeFromPv_kWh:      0,
       evChargeFromBattery_kWh: 0,
+      evChargeGridCost_cents:  0,
+      evChargeEffectiveRate_cents_per_kWh: null,
     };
   }
 
@@ -67,6 +69,7 @@ export function buildPlanSummary(
   let evFromGrid = 0;
   let evFromPv   = 0;
   let evFromBat  = 0;
+  let evGridCost = 0;
 
   for (const row of rows) {
     const loadK = W2kWh(row.load);
@@ -93,13 +96,16 @@ export function buildPlanSummary(
     }
     importCost += finiteOr(row.importCost_cents, impK * row.ic);
     exportCost += finiteOr(row.exportCost_cents, expK * row.ec);
-    evFromGrid += W2kWh(row.g2ev ?? 0);
+    const g2evK = W2kWh(row.g2ev ?? 0);
+    evFromGrid += g2evK;
     evFromPv   += W2kWh(row.pv2ev ?? 0);
     evFromBat  += W2kWh(row.b2ev ?? 0);
+    evGridCost += g2evK * row.ic;
   }
 
   const avgImportPrice =
     importEnergy > 0 ? priceTimesEnergy / importEnergy : null;
+  const evTotal = evFromGrid + evFromPv + evFromBat;
 
   return {
     loadTotal_kWh: loadTotal,
@@ -131,10 +137,13 @@ export function buildPlanSummary(
         ? dessDiagnostics.pvExportTippingPoint_cents_per_kWh!
         : null,
     rebalanceStatus,
-    evChargeTotal_kWh:       evFromGrid + evFromPv + evFromBat,
+    evChargeTotal_kWh:       evTotal,
     evChargeFromGrid_kWh:    evFromGrid,
     evChargeFromPv_kWh:      evFromPv,
     evChargeFromBattery_kWh: evFromBat,
+    evChargeGridCost_cents:  evGridCost,
+    // Grid cost per kWh of *all* EV energy — PV and battery kWh dilute the rate.
+    evChargeEffectiveRate_cents_per_kWh: evTotal > 0 ? evGridCost / evTotal : null,
   };
 }
 

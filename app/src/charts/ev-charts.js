@@ -108,7 +108,7 @@ export function drawEvSocChartTab(canvas, rows, evSettings = {}) {
     makeEvAwayBandPlugin(rows, evSettings?.trips),
     makeEvArrivalPlugin(rows, evSettings?.arrivals),
     makeEvDeparturePlugin(rows, evSettings?.departures),
-    makeEvTargetPlugin(rows, evSettings?.targets),
+    makeEvTargetPlugin(rows),
   ].filter(Boolean);
 
   renderChart(canvas, {
