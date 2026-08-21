@@ -811,14 +811,21 @@
             <h2 class="sidebar-label">Sensors</h2>
           </div>
           <div class="space-y-3">
-            <label class="block text-sm">Sensors (JSON)
-              <textarea id="pred-sensors" rows="5" class="form-input font-mono text-xs" data-predictions-only="true"
-                placeholder='[{"id":"sensor.xxx","name":"Grid Import","unit":"kWh"}]'></textarea>
-            </label>
-            <label class="block text-sm">Derived (JSON)
-              <textarea id="pred-derived" rows="5" class="form-input font-mono text-xs" data-predictions-only="true"
-                placeholder='[{"name":"Total Load","formula":["+Grid Import","-Grid Export"]}]'></textarea>
-            </label>
+            <p class="text-xs text-slate-400 dark:text-slate-500">Home Assistant sensors fetched for predictions.
+              Sensors sharing a display name are summed.</p>
+            <div id="pred-sensor-list" class="space-y-2"></div>
+            <button id="pred-add-sensor" type="button"
+              class="w-full rounded-lg border border-dashed border-slate-300 dark:border-white/15 px-4 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:border-sky-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors">
+              + Add Sensor
+            </button>
+
+            <p class="text-xs text-slate-400 dark:text-slate-500 pt-2">Derived sensors add and subtract the sensors
+              above; each may also use derived sensors defined before it.</p>
+            <div id="pred-derived-list" class="space-y-2"></div>
+            <button id="pred-add-derived" type="button"
+              class="w-full rounded-lg border border-dashed border-slate-300 dark:border-white/15 px-4 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:border-sky-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors">
+              + Add Derived Sensor
+            </button>
           </div>
         </section>
 
