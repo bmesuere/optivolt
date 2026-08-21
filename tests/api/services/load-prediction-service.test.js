@@ -5,7 +5,12 @@ vi.mock('../../../api/services/ha-client.ts', () => ({
   fetchHaStats: vi.fn(),
 }));
 
+vi.mock('../../../api/services/open-meteo-client.ts', () => ({
+  fetchTemperatureSeries: vi.fn(),
+}));
+
 import { fetchHaStats } from '../../../api/services/ha-client.ts';
+import { fetchTemperatureSeries } from '../../../api/services/open-meteo-client.ts';
 
 const NOW = new Date('2026-04-01T22:00:00.000Z');
 const HOUR_MS = 3600 * 1000;
@@ -163,5 +168,83 @@ describe('runForecast (summed predictors)', () => {
     expect(result.recent).toHaveLength(0);
     expect(Number.isNaN(result.metrics.mae)).toBe(true);
     expect(result.forecast.values.every(v => v === 100)).toBe(true);
+  });
+});
+
+describe('runForecast (temperature predictor)', () => {
+  const sensors = [{ id: 'sensor.heatpump', name: 'Heat Pump', unit: 'Wh' }];
+  const haConfig = {
+    haUrl: 'http://ha.local',
+    haToken: 'tok',
+    sensors,
+    derived: [],
+    pvConfig: { latitude: 51.05, longitude: 3.71, historyDays: 14, pvSensor: 'Solar' },
+  };
+  const tempPredictor = { type: 'temperature', sensor: 'Heat Pump', lookbackWeeks: 1, dayFilter: 'all', bins: 4 };
+
+  /** Constant hourly temps covering 10 days back through 3 days ahead. */
+  function makeTemps(temp_C) {
+    const nowHour = Math.floor(NOW.getTime() / HOUR_MS) * HOUR_MS;
+    const records = [];
+    for (let k = -10 * 24; k <= 3 * 24; k++) {
+      records.push({ time: nowHour + k * HOUR_MS, temp_C });
+    }
+    return records;
+  }
+
+  beforeAll(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  beforeEach(() => {
+    fetchHaStats.mockReset();
+    fetchTemperatureSeries.mockReset();
+  });
+
+  it('forecasts from temperature anchors and sums with fixed predictors', async () => {
+    fetchHaStats.mockResolvedValue({ 'sensor.heatpump': makeHourlyHistory(100) });
+    fetchTemperatureSeries.mockResolvedValue(makeTemps(10));
+
+    const config = {
+      predictors: [tempPredictor, { type: 'fixed', load_W: 25 }],
+      ...haConfig,
+    };
+
+    const result = await runForecast(config);
+
+    // Constant history at constant temperature → flat profile of 100 W
+    expect(result.forecast.values.every(v => v === 125)).toBe(true);
+
+    const withPrediction = result.recent.filter(r => r.predicted !== null);
+    expect(withPrediction.length).toBeGreaterThan(0);
+    expect(withPrediction.every(r => r.actual === 100 && r.predicted === 100)).toBe(true);
+    expect(result.metrics.mae).toBe(0);
+
+    // lookback 1 week + 1 recent week + 2 inertia days = 16 past days
+    expect(fetchTemperatureSeries).toHaveBeenCalledTimes(1);
+    const [lat, lon, pastDays, forecastDays] = fetchTemperatureSeries.mock.calls[0];
+    expect(lat).toBe(51.05);
+    expect(lon).toBe(3.71);
+    expect(pastDays).toBe(16);
+    expect(forecastDays).toBeGreaterThanOrEqual(2);
+  });
+
+  it('rejects when no coordinates are configured', async () => {
+    fetchHaStats.mockResolvedValue({ 'sensor.heatpump': makeHourlyHistory(100) });
+
+    const config = {
+      predictors: [tempPredictor],
+      ...haConfig,
+      pvConfig: undefined,
+    };
+
+    await expect(runForecast(config)).rejects.toThrow(/latitude\/longitude/);
+    expect(fetchTemperatureSeries).not.toHaveBeenCalled();
   });
 });

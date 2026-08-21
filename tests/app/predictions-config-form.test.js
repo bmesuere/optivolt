@@ -326,6 +326,35 @@ describe('prediction config form', () => {
     expect(secondOptions).not.toContain('Residual Load');
   });
 
+  it('renders a temperature card with bins and sanitizes its values', async () => {
+    applyPredictionConfigToForm({
+      ...baseConfig,
+      predictors: [{ type: 'temperature', sensor: 'Total Load', lookbackWeeks: 8, dayFilter: 'weekday-weekend', bins: 4 }],
+    });
+
+    const card = document.querySelector('[data-predictor-index="0"]');
+    expect(card.querySelector('[data-field="type"]').value).toBe('temperature');
+    expect(card.querySelector('[data-field="sensor"]').value).toBe('Total Load');
+    expect(card.querySelector('[data-field="bins"]').value).toBe('4');
+    expect(card.querySelector('[data-field="aggregation"]')).toBeNull();
+
+    const values = readPredictionFormValues();
+    expect(values.predictors).toEqual([
+      { type: 'temperature', sensor: 'Total Load', lookbackWeeks: 8, dayFilter: 'weekday-weekend', bins: 4 },
+    ]);
+  });
+
+  it('clamps out-of-range temperature parameters to defaults on read', () => {
+    applyPredictionConfigToForm({
+      ...baseConfig,
+      predictors: [{ type: 'temperature', sensor: 'Total Load', lookbackWeeks: 99, dayFilter: 'weekday-weekend', bins: 0 }],
+    });
+
+    const values = readPredictionFormValues();
+    expect(values.predictors[0].lookbackWeeks).toBe(8);
+    expect(values.predictors[0].bins).toBe(4);
+  });
+
   it('edits a card field and saves the updated predictor', async () => {
     applyPredictionConfigToForm(baseConfig);
     savePredictionConfig.mockResolvedValue({});

@@ -6,6 +6,7 @@
  */
 
 import type { IrradianceRecord } from './predict-pv.ts';
+import type { TemperatureRecord } from './load-predictor-temperature.ts';
 
 // ----------------------------- URL Builders --------------------------------
 
@@ -68,6 +69,29 @@ export function buildForecastUrl({
   );
 }
 
+interface TemperatureUrlParams {
+  latitude: number;
+  longitude: number;
+  pastDays: number;
+  forecastDays: number;
+}
+
+/**
+ * Build URL for hourly outside temperature from the Open-Meteo Forecast API.
+ * Uses the default best_match model (up to 16 forecast days, 92 past days) —
+ * the ICON D2 model used for radiation only covers ~2 days.
+ */
+export function buildTemperatureUrl({ latitude, longitude, pastDays, forecastDays }: TemperatureUrlParams): string {
+  return (
+    `https://api.open-meteo.com/v1/forecast`
+    + `?latitude=${latitude}&longitude=${longitude}`
+    + `&hourly=temperature_2m`
+    + `&timezone=GMT`
+    + `&past_days=${pastDays}`
+    + `&forecast_days=${forecastDays}`
+  );
+}
+
 // ----------------------------- Response Parsers ----------------------------
 
 interface OpenMeteoHourlyResponse {
@@ -117,6 +141,30 @@ export function parseIrradianceResponse(data: OpenMeteoHourlyResponse): Irradian
     });
   }
 
+  return records;
+}
+
+interface OpenMeteoTemperatureResponse {
+  hourly: {
+    time: string[];
+    temperature_2m: (number | null)[];
+  };
+}
+
+/**
+ * Parse an Open-Meteo hourly temperature response into TemperatureRecords.
+ * temperature_2m is instantaneous at the labeled time (unlike radiation,
+ * which is backward-averaged), so no alignment shift is needed.
+ * Null values (missing data) are skipped.
+ */
+export function parseTemperatureResponse(data: OpenMeteoTemperatureResponse): TemperatureRecord[] {
+  const records: TemperatureRecord[] = [];
+  const { time, temperature_2m } = data.hourly;
+  for (let i = 0; i < time.length; i++) {
+    const temp_C = temperature_2m[i];
+    if (temp_C === null || temp_C === undefined) continue;
+    records.push({ time: new Date(time[i] + 'Z').getTime(), temp_C });
+  }
   return records;
 }
 

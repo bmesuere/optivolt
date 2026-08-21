@@ -294,6 +294,50 @@ describe('POST /predictions/load/forecast', () => {
     expect(res.body.error).toMatch(/aggregation/);
   });
 
+  it('returns 400 for a temperature predictor without coordinates', async () => {
+    loadPredictionConfig.mockResolvedValue({
+      ...mockConfig,
+      predictors: [{ type: 'temperature', sensor: 'Heat Pump', lookbackWeeks: 8, dayFilter: 'weekday-weekend', bins: 4 }],
+    });
+    const res = await request(app).post('/predictions/load/forecast').send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for a temperature predictor with out-of-range parameters', async () => {
+    const pvConfig = { latitude: 51.05, longitude: 3.71 };
+    for (const bad of [
+      { type: 'temperature', sensor: 'Heat Pump', lookbackWeeks: 13, dayFilter: 'weekday-weekend', bins: 4 },
+      { type: 'temperature', sensor: 'Heat Pump', lookbackWeeks: 8, dayFilter: 'weekday-weekend', bins: 1 },
+      { type: 'temperature', sensor: '', lookbackWeeks: 8, dayFilter: 'weekday-weekend', bins: 4 },
+    ]) {
+      loadPredictionConfig.mockResolvedValue({ ...mockConfig, pvConfig, predictors: [bad] });
+      const res = await request(app).post('/predictions/load/forecast').send({});
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it('accepts a valid temperature predictor', async () => {
+    loadPredictionConfig.mockResolvedValue({
+      ...mockConfig,
+      pvConfig: { latitude: 51.05, longitude: 3.71 },
+      predictors: [{ type: 'temperature', sensor: 'Heat Pump', lookbackWeeks: 8, dayFilter: 'weekday-weekend', bins: 4 }],
+    });
+    const res = await request(app).post('/predictions/load/forecast').send({});
+    expect(res.status).toBe(200);
+    expect(runForecast).toHaveBeenCalled();
+  });
+
+  it('returns 502 on Open-Meteo error', async () => {
+    loadPredictionConfig.mockResolvedValue({
+      ...mockConfig,
+      pvConfig: { latitude: 51.05, longitude: 3.71 },
+      predictors: [{ type: 'temperature', sensor: 'Heat Pump', lookbackWeeks: 8, dayFilter: 'weekday-weekend', bins: 4 }],
+    });
+    runForecast.mockRejectedValue(new Error('Open-Meteo Forecast API returned status 500'));
+    const res = await request(app).post('/predictions/load/forecast').send({});
+    expect(res.status).toBe(502);
+  });
+
   it('returns 502 on HA connection error', async () => {
     runForecast.mockRejectedValue(new Error('HA WebSocket timed out after 30000ms'));
     const res = await request(app).post('/predictions/load/forecast').send({});
