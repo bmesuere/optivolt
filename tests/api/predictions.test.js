@@ -295,12 +295,16 @@ describe('POST /predictions/load/forecast', () => {
   });
 
   it('returns 400 for a temperature predictor without coordinates', async () => {
-    loadPredictionConfig.mockResolvedValue({
-      ...mockConfig,
-      predictors: [{ type: 'temperature', sensor: 'Heat Pump', lookbackWeeks: 8, dayFilter: 'weekday-weekend', bins: 4 }],
-    });
-    const res = await request(app).post('/predictions/load/forecast').send({});
-    expect(res.status).toBe(400);
+    // undefined = never configured; (0, 0) = the legacy cleared-fields sentinel
+    for (const pvConfig of [undefined, { latitude: 0, longitude: 0 }]) {
+      loadPredictionConfig.mockResolvedValue({
+        ...mockConfig,
+        pvConfig,
+        predictors: [{ type: 'temperature', sensor: 'Heat Pump', lookbackWeeks: 8, dayFilter: 'weekday-weekend', bins: 4 }],
+      });
+      const res = await request(app).post('/predictions/load/forecast').send({});
+      expect(res.status).toBe(400);
+    }
   });
 
   it('returns 400 for a temperature predictor with out-of-range parameters', async () => {

@@ -53,6 +53,18 @@ export interface ForecastRunResult {
 }
 
 /**
+ * True when pvConfig carries usable coordinates. (0, 0) is rejected as the
+ * "cleared fields" sentinel older versions of the config form saved.
+ */
+function hasCoordinates(
+  pvConfig: { latitude?: number | null; longitude?: number | null } | undefined,
+): boolean {
+  const { latitude, longitude } = pvConfig ?? {};
+  if (latitude == null || longitude == null || Number.isNaN(latitude) || Number.isNaN(longitude)) return false;
+  return latitude !== 0 || longitude !== 0;
+}
+
+/**
  * Run full validation across all config combinations.
  */
 export async function runValidation(config: PredictionRunConfig): Promise<ValidationRunResult> {
@@ -119,10 +131,8 @@ async function runTemperatureValidation(
   sensorNames: string[],
   maxLookbackWeeks: number,
 ): Promise<ValidationEntry[]> {
-  const { latitude, longitude } = config.pvConfig ?? {};
-  if (latitude == null || longitude == null || Number.isNaN(latitude) || Number.isNaN(longitude)) {
-    return [];
-  }
+  if (!hasCoordinates(config.pvConfig)) return [];
+  const { latitude, longitude } = config.pvConfig!;
 
   const validationWindow = config.validationWindow!;
   const windowStartMs = new Date(validationWindow.start).getTime();
@@ -218,16 +228,18 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
 
   // Temperature anchors are rebuilt from raw history on every run (stateless,
   // like the PV models).
-  const temperatureModels = new Map(
-    temperature.map(p => [p, buildTemperatureAnchors(data, effTemps, p, nowMs)]),
+  const buildModels = (cutoffMs: number) => new Map(
+    temperature.map(p => [p, buildTemperatureAnchors(data, effTemps, p, cutoffMs)]),
   );
+  const temperatureModels = buildModels(nowMs);
 
   const predictFor = (
     p: HistoricalLoadPredictor | TemperatureLoadPredictor,
     targets: PredictTarget[],
+    models = temperatureModels,
   ) => p.type === 'historical'
     ? predict(data, p, targets)
-    : predictTemperatureLoad(temperatureModels.get(p)!, p.dayFilter, targets, effTemps);
+    : predictTemperatureLoad(models.get(p)!, p.dayFilter, targets, effTemps);
 
   const futureTargets: PredictTarget[] = [];
   for (let t = futureStart; t < futureEnd; t += 3600000) {
@@ -254,9 +266,12 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
   // has an entry; a null component makes the slot's sum null.
   let recent: PredictionResult[] = [];
   if (includeRecent) {
+    // Temperature models for the backtest are cut off at the start of the
+    // scored week so the scored days never feed their own anchors.
+    const recentModels = buildModels(recentStart);
     const recentMaps = sensorPredictors.map(p => {
       const recentTargets = data.filter(d => d.sensor === p.sensor && d.time >= recentStart && d.time <= nowMs);
-      return new Map(predictFor(p, recentTargets).map(r => [r.time, r]));
+      return new Map(predictFor(p, recentTargets, recentModels).map(r => [r.time, r]));
     });
     const times = [...recentMaps[0].keys()]
       .filter(time => recentMaps.every(m => m.has(time)))
@@ -296,10 +311,10 @@ async function fetchEffectiveDayTemps(
 ): Promise<Map<string, number>> {
   if (temperature.length === 0) return new Map();
 
-  const { latitude, longitude } = config.pvConfig ?? {};
-  if (latitude == null || longitude == null || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+  if (!hasCoordinates(config.pvConfig)) {
     throw new Error('temperature predictor requires latitude/longitude in the PV forecast settings');
   }
+  const { latitude, longitude } = config.pvConfig!;
 
   const DAY_MS = 24 * 60 * 60 * 1000;
   const maxLookbackWeeks = Math.max(...temperature.map(p => p.lookbackWeeks));

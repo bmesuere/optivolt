@@ -149,10 +149,17 @@ async function savePredictionFormSilently() {
 }
 
 export function readPredictionFormValues() {
+  // Blank coordinate fields stay null so clearing them disables the
+  // location-based forecasts instead of pointing them at (0, 0).
+  const coordOrNull = (id) => {
+    const value = parseFloat(getVal(id));
+    return Number.isFinite(value) ? value : null;
+  };
+
   const pvConfig = {
     pvSensor: getVal('pred-pv-sensor') || 'Solar Generation',
-    latitude: parseFloat(getVal('pred-pv-lat')) || 0,
-    longitude: parseFloat(getVal('pred-pv-lon')) || 0,
+    latitude: coordOrNull('pred-pv-lat'),
+    longitude: coordOrNull('pred-pv-lon'),
     historyDays: parseInt(getVal('pred-pv-history'), 10) || 14,
     pvMode: getVal('pred-pv-mode') || 'hourly',
     pvModel: getVal('pred-pv-model') || 'clearSkyRatio',

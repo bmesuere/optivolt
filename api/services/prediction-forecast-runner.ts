@@ -60,9 +60,7 @@ export async function executeLoadForecast(config: PredictionRunConfig, logLabel:
   }
   if (predictors!.some(p => p.type === 'temperature')) {
     assertCondition(
-      config.pvConfig != null
-        && config.pvConfig.latitude != null && !Number.isNaN(config.pvConfig.latitude)
-        && config.pvConfig.longitude != null && !Number.isNaN(config.pvConfig.longitude),
+      hasCoordinates(config.pvConfig),
       400,
       'temperature predictor requires latitude/longitude in the PV forecast settings'
     );
@@ -190,6 +188,16 @@ function assertValidLoadPredictor(p: unknown): void {
   } else {
     throw new HttpError(400, `unsupported load predictor type: ${String(pred.type)}`);
   }
+}
+
+/**
+ * True when pvConfig carries usable coordinates. (0, 0) is rejected as the
+ * "cleared fields" sentinel older versions of the config form saved.
+ */
+function hasCoordinates(pvConfig: { latitude?: number | null; longitude?: number | null } | undefined): boolean {
+  const { latitude, longitude } = pvConfig ?? {};
+  if (latitude == null || longitude == null || Number.isNaN(latitude) || Number.isNaN(longitude)) return false;
+  return latitude !== 0 || longitude !== 0;
 }
 
 function assertHaConnection(config: PredictionRunConfig): void {

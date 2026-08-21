@@ -182,11 +182,11 @@ describe('runForecast (temperature predictor)', () => {
   };
   const tempPredictor = { type: 'temperature', sensor: 'Heat Pump', lookbackWeeks: 1, dayFilter: 'all', bins: 4 };
 
-  /** Constant hourly temps covering 10 days back through 3 days ahead. */
+  /** Constant hourly temps covering 16 days back through 3 days ahead. */
   function makeTemps(temp_C) {
     const nowHour = Math.floor(NOW.getTime() / HOUR_MS) * HOUR_MS;
     const records = [];
-    for (let k = -10 * 24; k <= 3 * 24; k++) {
+    for (let k = -16 * 24; k <= 3 * 24; k++) {
       records.push({ time: nowHour + k * HOUR_MS, temp_C });
     }
     return records;
@@ -208,7 +208,9 @@ describe('runForecast (temperature predictor)', () => {
   });
 
   it('forecasts from temperature anchors and sums with fixed predictors', async () => {
-    fetchHaStats.mockResolvedValue({ 'sensor.heatpump': makeHourlyHistory(100) });
+    // 14 days of history: the recent-accuracy models are cut off a week ago,
+    // so they need enough full days before that cutoff to form a bin.
+    fetchHaStats.mockResolvedValue({ 'sensor.heatpump': makeHourlyHistory(100, 14) });
     fetchTemperatureSeries.mockResolvedValue(makeTemps(10));
 
     const config = {
@@ -235,6 +237,27 @@ describe('runForecast (temperature predictor)', () => {
     expect(forecastDays).toBeGreaterThanOrEqual(2);
   });
 
+  it('scores recent accuracy out of sample', async () => {
+    // 100 W before the scored week, 200 W during it: the backtest models are
+    // cut off at the start of the week, so they must still predict 100 W.
+    const recentStartMs = NOW.getTime() - 7 * 24 * HOUR_MS;
+    const nowHour = Math.floor(NOW.getTime() / HOUR_MS) * HOUR_MS;
+    const readings = [];
+    for (let k = 0; k <= 14 * 24; k++) {
+      const start = nowHour - k * HOUR_MS;
+      readings.push({ start, change: start >= recentStartMs ? 200 : 100 });
+    }
+    fetchHaStats.mockResolvedValue({ 'sensor.heatpump': readings });
+    fetchTemperatureSeries.mockResolvedValue(makeTemps(10));
+
+    const result = await runForecast({ predictors: [tempPredictor], ...haConfig });
+
+    const scored = result.recent.filter(r => r.predicted !== null && r.actual !== null);
+    expect(scored.length).toBeGreaterThan(0);
+    expect(scored.every(r => r.predicted === 100 && r.actual === 200)).toBe(true);
+    expect(result.metrics.mae).toBe(100);
+  });
+
   it('rejects when no coordinates are configured', async () => {
     fetchHaStats.mockResolvedValue({ 'sensor.heatpump': makeHourlyHistory(100) });
 
@@ -242,6 +265,19 @@ describe('runForecast (temperature predictor)', () => {
       predictors: [tempPredictor],
       ...haConfig,
       pvConfig: undefined,
+    };
+
+    await expect(runForecast(config)).rejects.toThrow(/latitude\/longitude/);
+    expect(fetchTemperatureSeries).not.toHaveBeenCalled();
+  });
+
+  it('rejects the (0, 0) cleared-coordinates sentinel', async () => {
+    fetchHaStats.mockResolvedValue({ 'sensor.heatpump': makeHourlyHistory(100) });
+
+    const config = {
+      predictors: [tempPredictor],
+      ...haConfig,
+      pvConfig: { ...haConfig.pvConfig, latitude: 0, longitude: 0 },
     };
 
     await expect(runForecast(config)).rejects.toThrow(/latitude\/longitude/);
@@ -320,6 +356,18 @@ describe('runValidation (temperature grid)', () => {
 
     expect(results.filter(r => r.type === 'temperature')).toHaveLength(0);
     expect(results.filter(r => r.type === 'historical')).toHaveLength(48);
+    expect(fetchTemperatureSeries).not.toHaveBeenCalled();
+  });
+
+  it('skips the temperature grid for the (0, 0) cleared-coordinates sentinel', async () => {
+    fetchHaStats.mockResolvedValue({ 'sensor.heatpump': makeHourlyHistory(100, 40) });
+
+    const { results } = await runValidation({
+      ...baseConfig,
+      pvConfig: { ...baseConfig.pvConfig, latitude: 0, longitude: 0 },
+    });
+
+    expect(results.filter(r => r.type === 'temperature')).toHaveLength(0);
     expect(fetchTemperatureSeries).not.toHaveBeenCalled();
   });
 

@@ -326,6 +326,17 @@ describe('prediction config form', () => {
     expect(secondOptions).not.toContain('Residual Load');
   });
 
+  it('keeps cleared coordinate fields null instead of saving 0', () => {
+    applyPredictionConfigToForm(baseConfig);
+    document.getElementById('pred-pv-lat').value = '';
+    document.getElementById('pred-pv-lon').value = '';
+
+    const values = readPredictionFormValues();
+
+    expect(values.pvConfig.latitude).toBeNull();
+    expect(values.pvConfig.longitude).toBeNull();
+  });
+
   it('renders a temperature card with bins and sanitizes its values', async () => {
     applyPredictionConfigToForm({
       ...baseConfig,
