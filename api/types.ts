@@ -160,14 +160,28 @@ export interface PvPredictionConfig {
   forecastResolution?: 15 | 60;
 }
 
+export interface HistoricalLoadPredictor {
+  type: 'historical';
+  sensor: string;
+  lookbackWeeks: number;
+  dayFilter: DayFilter;
+  aggregation: Aggregation;
+}
+
+export interface FixedLoadPredictor {
+  type: 'fixed';
+  load_W: number;
+}
+
+/** One term of the load forecast; the total forecast is the per-slot sum over all predictors. */
+export type LoadPredictor = HistoricalLoadPredictor | FixedLoadPredictor;
+
 export interface PredictionConfig {
   /** Persisted-file schema version; stamped by the store on save. */
   schemaVersion?: number;
   sensors: HaSensor[];
   derived: HaDerivedSensor[];
-  activeType?: 'historical' | 'fixed';
-  historicalPredictor?: { sensor: string; lookbackWeeks: number; dayFilter: DayFilter; aggregation: Aggregation };
-  fixedPredictor?: { load_W: number };
+  predictors?: LoadPredictor[];
   validationWindow?: PredictionValidationWindow;
   includeRecent?: boolean;
   pvConfig?: PvPredictionConfig;

@@ -7,14 +7,14 @@ let _activeSensor = null;
 let accuracyChart = null;
 let diffChart = null;
 
-export function initValidation({ readFormValues, renderHistoricalConfig, setComparisonStatus }) {
+export function initValidation({ readFormValues, applyValidatedPredictor, setComparisonStatus }) {
   const runBtn = document.getElementById('pred-run-validation');
   if (runBtn) {
-    runBtn.addEventListener('click', () => onRunValidation({ readFormValues, renderHistoricalConfig, setComparisonStatus }));
+    runBtn.addEventListener('click', () => onRunValidation({ readFormValues, applyValidatedPredictor, setComparisonStatus }));
   }
 }
 
-async function onRunValidation({ readFormValues, renderHistoricalConfig, setComparisonStatus }) {
+async function onRunValidation({ readFormValues, applyValidatedPredictor, setComparisonStatus }) {
   const runBtn = document.getElementById('pred-run-validation');
   const originalText = runBtn ? runBtn.textContent : '';
   if (runBtn) {
@@ -42,7 +42,7 @@ async function onRunValidation({ readFormValues, renderHistoricalConfig, setComp
     try {
       const result = await runValidation();
       validationResults = result;
-      renderResults(result, { readFormValues, renderHistoricalConfig, setComparisonStatus });
+      renderResults(result, { applyValidatedPredictor, setComparisonStatus });
       setComparisonStatus(`Validation complete — ${result.results.length} combinations evaluated`);
     } catch (err) {
       setComparisonStatus(`Error: ${err.message}`, true);
@@ -146,23 +146,17 @@ function renderMetricsTable(results, sensorName, deps) {
   }
 }
 
-async function onUseConfig(row, { readFormValues, renderHistoricalConfig, setComparisonStatus }) {
-  const historicalPredictor = {
-    sensor: row.sensor,
-    lookbackWeeks: row.lookbackWeeks,
-    dayFilter: row.dayFilter,
-    aggregation: row.aggregation,
-  };
-
+async function onUseConfig(row, { applyValidatedPredictor, setComparisonStatus }) {
   try {
-    renderHistoricalConfig(historicalPredictor);
-    const activeTypeEl = document.getElementById('pred-active-type');
-    if (activeTypeEl) activeTypeEl.value = 'historical';
-    const partial = readFormValues();
-    await savePredictionConfig(partial);
-    setComparisonStatus(`Active config updated: ${row.sensor} / ${row.lookbackWeeks}w / ${row.dayFilter} / ${row.aggregation}`);
+    await applyValidatedPredictor({
+      sensor: row.sensor,
+      lookbackWeeks: row.lookbackWeeks,
+      dayFilter: row.dayFilter,
+      aggregation: row.aggregation,
+    });
+    setComparisonStatus(`Predictor updated: ${row.sensor} / ${row.lookbackWeeks}w / ${row.dayFilter} / ${row.aggregation}`);
   } catch (err) {
-    setComparisonStatus(`Failed to save active config: ${err.message}`, true);
+    setComparisonStatus(`Failed to save predictor: ${err.message}`, true);
   }
 }
 

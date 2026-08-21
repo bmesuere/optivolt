@@ -1,4 +1,4 @@
-import { assertCondition, toHttpError } from '../http-errors.ts';
+import { assertCondition, HttpError, toHttpError } from '../http-errors.ts';
 import type { PredictionAdjustmentSeries, PredictionRunConfig, TimeSeries } from '../types.ts';
 import { loadPredictionConfig } from './prediction-config-store.ts';
 import { runValidation, runForecast as runLoadForecast } from './load-prediction-service.ts';
@@ -51,22 +51,15 @@ export async function runCombinedPredictionForecast(config: PredictionRunConfig,
 }
 
 export async function executeLoadForecast(config: PredictionRunConfig, logLabel: string): Promise<ForecastRunResult> {
-  assertCondition(config.activeType != null, 400, 'activeType is required');
-  if (config.activeType === 'historical') {
+  const predictors = config.predictors;
+  assertCondition(Array.isArray(predictors) && predictors.length > 0, 400, 'At least one load predictor is required');
+  for (const p of predictors!) assertValidLoadPredictor(p);
+  if (predictors!.some(p => p.type === 'historical')) {
     assertHaConnection(config);
     assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
-    assertCondition(config.historicalPredictor != null, 400, 'historicalPredictor is required for historical activeType');
-  }
-  if (config.activeType === 'fixed') {
-    assertCondition(config.fixedPredictor != null, 400, 'fixedPredictor is required for fixed activeType');
-    assertCondition(
-      Number.isFinite(config.fixedPredictor!.load_W) && config.fixedPredictor!.load_W >= 0,
-      400,
-      'fixedPredictor.load_W must be a non-negative finite number'
-    );
   }
 
-  logPredictionCall(logLabel + ' (load)', { activeType: config.activeType });
+  logPredictionCall(logLabel + ' (load)', { predictors: predictors!.map(p => p.type) });
 
   try {
     return await runLoadForecast(config);
@@ -131,6 +124,44 @@ function logPredictionCall(type: string, meta: Record<string, unknown>): void {
     timestamp: new Date().toISOString(),
     ...meta,
   });
+}
+
+const DAY_FILTERS: ReadonlySet<string> = new Set(['same', 'all', 'weekday-weekend', 'weekday-sat-sun']);
+const AGGREGATIONS: ReadonlySet<string> = new Set(['mean', 'median']);
+
+/**
+ * Reject a malformed predictor entry with a 400. The config endpoint accepts
+ * and persists arbitrary JSON, so despite the types each entry may be anything.
+ */
+function assertValidLoadPredictor(p: unknown): void {
+  assertCondition(typeof p === 'object' && p !== null && !Array.isArray(p), 400, 'each load predictor must be an object');
+  const pred = p as Record<string, unknown>;
+  if (pred.type === 'historical') {
+    assertCondition(typeof pred.sensor === 'string' && pred.sensor.length > 0, 400, 'historical predictor requires a sensor');
+    assertCondition(
+      typeof pred.lookbackWeeks === 'number' && Number.isFinite(pred.lookbackWeeks) && pred.lookbackWeeks >= 1,
+      400,
+      'historical predictor lookbackWeeks must be >= 1'
+    );
+    assertCondition(
+      typeof pred.dayFilter === 'string' && DAY_FILTERS.has(pred.dayFilter),
+      400,
+      `historical predictor dayFilter must be one of: ${[...DAY_FILTERS].join(', ')}`
+    );
+    assertCondition(
+      typeof pred.aggregation === 'string' && AGGREGATIONS.has(pred.aggregation),
+      400,
+      `historical predictor aggregation must be one of: ${[...AGGREGATIONS].join(', ')}`
+    );
+  } else if (pred.type === 'fixed') {
+    assertCondition(
+      typeof pred.load_W === 'number' && Number.isFinite(pred.load_W) && pred.load_W >= 0,
+      400,
+      'fixed predictor load_W must be a non-negative finite number'
+    );
+  } else {
+    throw new HttpError(400, `unsupported load predictor type: ${String(pred.type)}`);
+  }
 }
 
 function assertHaConnection(config: PredictionRunConfig): void {
