@@ -138,12 +138,13 @@ export function buildSolverConfigFromSettings(
       remainingSlots,
       targetSoc_percent: settings.maxSoc_percent,
     };
-    // On an extended horizon, keep "hold once" a day-1 decision: the window
-    // must start within the first 24 h instead of drifting days out. This also
-    // caps the start_balance binary count at one day's worth of slots.
-    if (settings.extendedHorizonDays > 0) {
-      base.rebalance.maxStartSlot = Math.max(0, Math.floor((24 * 60) / settings.stepSize_m) - 1);
-    }
+    // The window may start anywhere in the horizon: on an extended horizon the
+    // solver deliberately defers the hold to a cheaper later day when that
+    // lowers total cost (the escalating start tiebreak in build-lp.ts still
+    // prefers the earliest start among cost-equivalent days). Uncapped
+    // multi-day solves are seconds cold, but warm starts (#187) make every
+    // recompute cheap; the maxStartSlot mechanism remains in the solver for
+    // callers that want to cap the start range.
   }
 
   const ev = buildEvConfig(settings, data.evScheduleEntries ?? [], evState, nowMs, base.load_W.length);
