@@ -9,14 +9,16 @@ interface SolveRequest {
   id: number;
   lpText: string;
   options: Record<string, unknown>;
+  /** Optional partial starting solution ({column name: value}); see lib/warm-start.ts. */
+  warmColumns?: Record<string, number>;
 }
 
 const highsPromise = highsFactory({});
 
-parentPort!.on('message', async ({ id, lpText, options }: SolveRequest) => {
+parentPort!.on('message', async ({ id, lpText, options, warmColumns }: SolveRequest) => {
   try {
     const highs = await highsPromise;
-    const result = highs.solve(lpText, options);
+    const result = highs.solve(lpText, options, warmColumns);
     parentPort!.postMessage({ id, result });
   } catch (err) {
     parentPort!.postMessage({ id, error: err instanceof Error ? err.message : String(err) });

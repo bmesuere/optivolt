@@ -7,12 +7,14 @@ vi.mock('../../../api/services/vrm-refresh.ts');
 vi.mock('../../../api/services/mqtt-service.ts');
 
 // Pass-through wrapper around the real solver, with a hook to simulate work
-// (e.g. a settings edit) landing while the solve is running on the worker.
-const solveHook = vi.hoisted(() => ({ onSolve: null }));
+// (e.g. a settings edit) landing while the solve is running on the worker,
+// and a capture of the arguments each solve was called with.
+const solveHook = vi.hoisted(() => ({ onSolve: null, calls: [] }));
 vi.mock('../../../api/services/solve-runner.ts', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     solveLp: (...args) => {
+      solveHook.calls.push(args);
       solveHook.onSolve?.();
       return actual.solveLp(...args);
     },
@@ -261,6 +263,50 @@ describe('computePlan — inputs changed during the solve', () => {
     const plan = await planAndMaybeWrite({ writeToVictron: true });
     expect(plan.inputsChangedDuringSolve).toBe(false);
     expect(setDynamicEssSchedule).toHaveBeenCalled();
+  });
+});
+
+describe('computePlan — warm start', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(NOW_STRING));
+    vi.resetAllMocks();
+    solveHook.calls = [];
+    refreshSeriesFromVrmAndPersist.mockResolvedValue();
+    setDynamicEssSchedule.mockResolvedValue();
+    saveSettings.mockResolvedValue();
+    saveData.mockResolvedValue();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('passes the previous binary skeleton as a warm start on the next solve', async () => {
+    loadSettings.mockResolvedValue({
+      ...baseSettings,
+      rebalanceEnabled: true,
+      maxChargePower_W: 5000,
+      maxGridImport_W: 10000,
+    });
+    loadData.mockResolvedValue({ ...baseData, soc: { timestamp: NOW_STRING, value: 50 }, rebalanceState: { startMs: null } });
+
+    await computePlan();
+    await computePlan();
+
+    expect(solveHook.calls.length).toBe(2);
+    const warm = solveHook.calls[1][2];
+    expect(warm).toBeDefined();
+    const keys = Object.keys(warm);
+    expect(keys.length).toBeGreaterThan(0);
+    // Only the binary skeleton is hinted, with exact 0/1 values
+    for (const key of keys) {
+      expect(key).toMatch(/^(ev_on|start_balance)_\d+$/);
+      expect([0, 1]).toContain(warm[key]);
+    }
+    // Exactly one rebalance start is hinted at 1
+    const startsAtOne = keys.filter((k) => k.startsWith('start_balance_') && warm[k] === 1);
+    expect(startsAtOne.length).toBe(1);
   });
 });
 

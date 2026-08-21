@@ -54,13 +54,13 @@ function createWorker(): Worker {
   return w;
 }
 
-export function solveLp(lpText: string, options: Record<string, unknown>): Promise<HighsSolution> {
+export function solveLp(lpText: string, options: Record<string, unknown>, warmColumns?: Record<string, number>): Promise<HighsSolution> {
   const run = queue.then(() => new Promise<HighsSolution>((resolve, reject) => {
     const id = nextId++;
     pending.set(id, { resolve, reject });
     if (!worker) worker = createWorker();
     worker.ref();
-    worker.postMessage({ id, lpText, options });
+    worker.postMessage({ id, lpText, options, warmColumns });
   }));
   queue = run.catch(() => {});
   return run;

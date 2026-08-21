@@ -17,6 +17,7 @@ import { setDynamicEssSchedule } from './mqtt-service.ts';
 import { getRebalanceNudge, recordFullSocObservation, type RebalanceNudge } from './rebalance-nudge.ts';
 import { getSolverInputsVersion } from './solver-inputs-version.ts';
 import { solveLp } from './solve-runner.ts';
+import { buildWarmStartColumns } from '../../lib/warm-start.ts';
 import type { PlanRowWithDess, Data, Settings } from '../types.ts';
 
 // How many slots we push into Dynamic ESS
@@ -242,8 +243,20 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   const lpText = buildLP(cfg);
   const hasRebalance = (cfg.rebalance?.remainingSlots ?? 0) > 0;
   const solveOptions = selectSolveOptions(cfg);
+  // Warm-start hint from the previous plan (#187): consecutive solves differ
+  // only marginally, so the previous binary skeleton usually completes to a
+  // near-optimal incumbent instantly. Best-effort — a stale or mismatched
+  // hint is ignored or discarded by the solver, never producing a wrong plan.
+  const warmColumns = lastPlan?.result.Columns != null && lastPlan.timing.stepMin === timing.stepMin
+    ? buildWarmStartColumns({
+        columns: lastPlan.result.Columns,
+        prevStartMs: lastPlan.timing.startMs,
+        nextStartMs: timing.startMs,
+        stepMin: timing.stepMin,
+      })
+    : undefined;
   const t0 = performance.now();
-  const result = await solveLp(lpText, solveOptions);
+  const result = await solveLp(lpText, solveOptions, warmColumns);
   const solveMs = performance.now() - t0;
   // The await above yields the event loop, so settings/data routes can run
   // mid-solve. When they did, this plan's snapshots are stale: persisting
