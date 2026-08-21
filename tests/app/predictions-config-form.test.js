@@ -167,6 +167,102 @@ describe('prediction config form', () => {
     expect([...document.getElementById('pred-pv-sensor').options].map(o => o.value)).not.toContain('Bedroom AC');
   });
 
+  it('cascades a sensor rename to predictors, derived terms, and the PV select', async () => {
+    applyPredictionConfigToForm(baseConfig);
+    savePredictionConfig.mockResolvedValue({});
+    wirePredictionForm({ onForecastAll: vi.fn(), onPvForecast: vi.fn() });
+
+    const nameInput = document.querySelector('[data-sensor-index="0"] [data-field="name"]');
+    nameInput.value = 'Grid In';
+    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    vi.advanceTimersByTime(600);
+    await Promise.resolve();
+    const saved = savePredictionConfig.mock.calls.at(-1)[0];
+    expect(saved.predictors[0].sensor).toBe('Grid In');
+    expect(saved.derived[0].formula).toEqual(['+Grid In', '-Solar']);
+    expect(document.querySelector('[data-predictor-index="0"] [data-field="sensor"]').value).toBe('Grid In');
+  });
+
+  it('cascades a derived rename and keeps the PV selection following it', async () => {
+    applyPredictionConfigToForm(baseConfig); // pvSensor is 'Total Load'
+    savePredictionConfig.mockResolvedValue({});
+
+    const nameInput = document.querySelector('[data-derived-index="0"] [data-field="name"]');
+    nameInput.value = 'House Load';
+    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    vi.advanceTimersByTime(600);
+    await Promise.resolve();
+    expect(document.getElementById('pred-pv-sensor').value).toBe('House Load');
+    expect(savePredictionConfig.mock.calls.at(-1)[0].pvConfig.pvSensor).toBe('House Load');
+  });
+
+  it('does not cascade when another sensor still provides the old name', async () => {
+    applyPredictionConfigToForm({
+      ...baseConfig,
+      sensors: [
+        { id: 'sensor.dsmr_1', name: 'Grid Import', unit: 'kWh' },
+        { id: 'sensor.dsmr_2', name: 'Grid Import', unit: 'kWh' },
+      ],
+    });
+    savePredictionConfig.mockResolvedValue({});
+
+    const nameInput = document.querySelector('[data-sensor-index="0"] [data-field="name"]');
+    nameInput.value = 'Grid Import T1';
+    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    vi.advanceTimersByTime(600);
+    await Promise.resolve();
+    expect(savePredictionConfig.mock.calls.at(-1)[0].predictors[0].sensor).toBe('Grid Import');
+  });
+
+  it('keeps an unresolved sensor selectable after deletion instead of silently rewriting it', () => {
+    applyPredictionConfigToForm(baseConfig);
+    savePredictionConfig.mockResolvedValue({});
+    wirePredictionForm({ onForecastAll: vi.fn(), onPvForecast: vi.fn() });
+
+    // Delete both sensors; 'Total Load' derives from them but the predictor
+    // target 'Grid Import' no longer resolves.
+    document.querySelector('[data-sensor-index="1"] [data-remove]').click();
+    document.querySelector('[data-sensor-index="0"] [data-remove]').click();
+
+    const sensorSelect = document.querySelector('[data-predictor-index="0"] [data-field="sensor"]');
+    expect(sensorSelect.value).toBe('Grid Import');
+    expect(readPredictionFormValues().predictors[0].sensor).toBe('Grid Import');
+  });
+
+  it('ignores a stale entity check response after the id changed', async () => {
+    applyPredictionConfigToForm(baseConfig);
+    let resolveSlow;
+    fetchHaEntityState.mockReturnValue(new Promise(resolve => { resolveSlow = resolve; }));
+
+    const row = document.querySelector('[data-sensor-index="0"]');
+    const idInput = row.querySelector('[data-field="id"]');
+    const indicator = row.querySelector('[data-entity-state]');
+
+    idInput.dispatchEvent(new Event('blur', { bubbles: true }));
+    idInput.value = 'sensor.other';
+    idInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    resolveSlow({ state: '42', attributes: { unit_of_measurement: 'kWh' } });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(indicator.textContent).toBe('');
+  });
+
+  it('gives every row control an accessible name', () => {
+    applyPredictionConfigToForm(baseConfig);
+    const controls = document.querySelectorAll(
+      '#pred-sensor-list input, #pred-sensor-list select, #pred-sensor-list button, ' +
+      '#pred-derived-list input, #pred-derived-list select, #pred-derived-list button'
+    );
+    expect(controls.length).toBeGreaterThan(0);
+    for (const el of controls) {
+      expect(el.getAttribute('aria-label'), `${el.tagName} missing aria-label`).toBeTruthy();
+    }
+  });
+
   it('shows the entity state on id blur, and an error for a bad entity', async () => {
     fetchHaEntityState.mockRejectedValue(new Error('offline'));
     applyPredictionConfigToForm(baseConfig);

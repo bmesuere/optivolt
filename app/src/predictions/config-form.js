@@ -55,7 +55,10 @@ function refreshSensorOptions() {
   if (pvSelect) {
     const current = pvSelect.value;
     pvSelect.innerHTML = '<option value="" disabled selected>Select a sensor…</option>';
-    for (const name of sensorOptions) {
+    // An unresolved selection stays selectable so a deleted/renamed sensor
+    // is never silently swapped for the fallback on the next save.
+    const options = current && !sensorOptions.includes(current) ? [...sensorOptions, current] : sensorOptions;
+    for (const name of options) {
       const opt = document.createElement('option');
       opt.textContent = name;
       opt.value = name;
@@ -65,6 +68,36 @@ function refreshSensorOptions() {
   }
 
   renderPredictorList();
+}
+
+/**
+ * Follow a rename through everything that references sensor names: predictor
+ * targets, derived formulas, and the PV sensor select. No-op when another
+ * sensor or derived sensor still provides the old name (sensors sharing a
+ * name are summed, so that is not a rename of the name itself).
+ */
+function cascadeRename(oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return;
+  const stillProvided = sensorsState.some(s => (s.name || s.id) === oldName)
+    || derivedState.some(d => d.name === oldName);
+  if (stillProvided) return;
+
+  for (const p of predictors) {
+    if (p.sensor === oldName) p.sensor = newName;
+  }
+  for (const d of derivedState) {
+    d.formula = d.formula.map(term => term.slice(1) === oldName ? term[0] + newName : term);
+  }
+  const pvSelect = document.getElementById('pred-pv-sensor');
+  if (pvSelect && pvSelect.value === oldName) {
+    // refreshSensorOptions() rebuilds the options from the renamed state and
+    // re-applies this value.
+    const opt = document.createElement('option');
+    opt.textContent = newName;
+    opt.value = newName;
+    pvSelect.appendChild(opt);
+    pvSelect.value = newName;
+  }
 }
 
 export function wirePredictionForm({ onForecastAll, onPvForecast }) {
@@ -256,9 +289,14 @@ function buildPredictorCard(predictor, index) {
   `;
 
   // Sensor options are user data; populate via the DOM instead of markup.
+  // A stored sensor that no longer resolves stays selectable so it isn't
+  // silently replaced by the first option.
   const sensorSelect = card.querySelector('[data-field="sensor"]');
   if (sensorSelect) {
-    for (const name of sensorOptions) {
+    const options = predictor.sensor && !sensorOptions.includes(predictor.sensor)
+      ? [...sensorOptions, predictor.sensor]
+      : sensorOptions;
+    for (const name of options) {
       const opt = document.createElement('option');
       opt.textContent = name;
       opt.value = name;
@@ -355,17 +393,19 @@ function buildSensorRow(sensor, index) {
   const row = document.createElement('div');
   row.className = 'rounded-lg border border-slate-200 dark:border-white/10 p-2 space-y-2';
   row.dataset.sensorIndex = String(index);
+  const label = `Sensor ${index + 1}`;
   row.innerHTML = `
     <div>
       <div class="flex items-center gap-2">
-        <input data-field="id" class="form-input font-mono text-xs flex-1" placeholder="sensor.entity_id" spellcheck="false" />
-        <button type="button" data-remove title="Remove sensor" class="${REMOVE_BTN_CLASS}">✕</button>
+        <input data-field="id" class="form-input font-mono text-xs flex-1" placeholder="sensor.entity_id"
+          spellcheck="false" aria-label="${label} entity id" />
+        <button type="button" data-remove title="Remove sensor" aria-label="Remove ${label}" class="${REMOVE_BTN_CLASS}">✕</button>
       </div>
       <span data-entity-state class="${ENTITY_IND_NEUTRAL}"></span>
     </div>
     <div class="flex gap-2">
-      <input data-field="name" class="form-input text-sm flex-1" placeholder="Display name" />
-      <select data-field="unit" class="form-select w-24 shrink-0">
+      <input data-field="name" class="form-input text-sm flex-1" placeholder="Display name" aria-label="${label} display name" />
+      <select data-field="unit" class="form-select w-24 shrink-0" aria-label="${label} unit">
         <option value="kWh">kWh</option>
         <option value="Wh">Wh</option>
       </select>
@@ -377,9 +417,15 @@ function buildSensorRow(sensor, index) {
     if (sensor[field] != null) el.value = sensor[field];
 
     const handler = () => {
+      const prevName = sensor.name || sensor.id;
       sensor[field] = el.value;
-      // Renames change the names offered to predictors, PV, and derived terms.
-      if (field === 'name' || field === 'id') refreshSensorOptions();
+      // Renames change the names offered to predictors, PV, and derived terms;
+      // references to the old name follow it.
+      if (field === 'name' || field === 'id') {
+        cascadeRename(prevName, sensor.name || sensor.id);
+        refreshSensorOptions();
+        renderDerivedList();
+      }
       debouncedSave();
     };
     el.addEventListener('input', handler);
@@ -389,6 +435,9 @@ function buildSensorRow(sensor, index) {
   const idInput = row.querySelector('[data-field="id"]');
   const indicator = row.querySelector('[data-entity-state]');
   idInput.addEventListener('input', () => {
+    // Invalidate any in-flight entity check so a slow response for the old id
+    // cannot label the new one.
+    row.dataset.entitySeq = String(Number(row.dataset.entitySeq ?? 0) + 1);
     indicator.textContent = '';
     indicator.className = ENTITY_IND_NEUTRAL;
   });
@@ -424,25 +473,31 @@ function buildDerivedRow(derivedSensor, index) {
   const row = document.createElement('div');
   row.className = 'rounded-lg border border-slate-200 dark:border-white/10 p-2 space-y-2';
   row.dataset.derivedIndex = String(index);
+  const label = `Derived sensor ${index + 1}`;
   row.innerHTML = `
     <div class="flex items-center gap-2">
-      <input data-field="name" class="form-input text-sm flex-1" placeholder="Derived sensor name" />
-      <button type="button" data-remove title="Remove derived sensor" class="${REMOVE_BTN_CLASS}">✕</button>
+      <input data-field="name" class="form-input text-sm flex-1" placeholder="Derived sensor name" aria-label="${label} name" />
+      <button type="button" data-remove title="Remove derived sensor" aria-label="Remove ${label}" class="${REMOVE_BTN_CLASS}">✕</button>
     </div>
     <div data-terms class="space-y-1"></div>
-    <button type="button" data-add-term
+    <button type="button" data-add-term aria-label="Add term to ${label}"
       class="text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline">+ Add term</button>
   `;
 
   const nameInput = row.querySelector('[data-field="name"]');
   nameInput.value = derivedSensor.name ?? '';
   const nameHandler = () => {
+    const prevName = derivedSensor.name;
     derivedSensor.name = nameInput.value;
+    cascadeRename(prevName, derivedSensor.name);
     refreshSensorOptions();
     debouncedSave();
   };
   nameInput.addEventListener('input', nameHandler);
   nameInput.addEventListener('change', nameHandler);
+  // Refresh the other rows' term dropdowns once typing is done — doing it per
+  // keystroke would rebuild (and defocus) the input being typed in.
+  nameInput.addEventListener('blur', renderDerivedList);
 
   const termsContainer = row.querySelector('[data-terms]');
   derivedSensor.formula.forEach((_, j) => termsContainer.appendChild(buildTermRow(derivedSensor, index, j)));
@@ -468,15 +523,16 @@ function buildTermRow(derivedSensor, derivedIndex, termIndex) {
   const sign = term[0] === '-' ? '-' : '+';
   const ref = term.slice(1);
 
+  const label = `Derived sensor ${derivedIndex + 1} term ${termIndex + 1}`;
   const el = document.createElement('div');
   el.className = 'flex items-center gap-2';
   el.innerHTML = `
-    <select data-term-sign class="form-select w-16 shrink-0">
+    <select data-term-sign class="form-select w-16 shrink-0" aria-label="${label} sign">
       <option value="+">+</option>
       <option value="-">−</option>
     </select>
-    <select data-term-ref class="form-select flex-1"></select>
-    <button type="button" data-term-remove title="Remove term" class="${REMOVE_BTN_CLASS}">✕</button>
+    <select data-term-ref class="form-select flex-1" aria-label="${label} sensor"></select>
+    <button type="button" data-term-remove title="Remove term" aria-label="Remove ${label}" class="${REMOVE_BTN_CLASS}">✕</button>
   `;
 
   const signSelect = el.querySelector('[data-term-sign]');
