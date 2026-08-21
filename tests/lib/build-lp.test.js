@@ -88,23 +88,44 @@ describe('buildLP — MILP rebalancing', () => {
     const lp = buildLP({ ...mockData, rebalance: { holdSlots: 0, remainingSlots: 0, targetSoc_percent: 100 } });
     expect(lp).not.toContain('Binaries');
     expect(lp).not.toContain('start_balance_');
+    expect(lp).not.toContain('balance_on_');
   });
 
   it('does NOT include Binaries block when rebalance is undefined', () => {
     const lp = buildLP(mockData);
     expect(lp).not.toContain('Binaries');
     expect(lp).not.toContain('start_balance_');
+    expect(lp).not.toContain('balance_on_');
   });
 
-  it('includes a Binaries block with start_balance_k variables when D > 0', () => {
+  it('includes a Binaries block with balance_on_t variables when D > 0', () => {
     const lp = buildLP({ ...mockData, rebalance: { holdSlots: D, remainingSlots: D, targetSoc_percent: 100 } });
     expect(lp).toContain('Binaries');
-    // T=8, D=3 → start positions 0..5 (T-D = 5)
+    // T=8, D=3 → start positions 0..5 (T-D = 5), reachable window slots 0..7
     for (let k = 0; k <= T - D; k++) {
       expect(lp).toContain(`start_balance_${k}`);
     }
-    // No variable beyond T-D
+    // No start variable beyond T-D
     expect(lp).not.toContain(`start_balance_${T - D + 1}`);
+    // Every reachable window slot gets an in-window binary
+    for (let t = 0; t < T; t++) {
+      expect(lp).toContain(`balance_on_${t}`);
+    }
+    expect(lp).not.toContain(`balance_on_${T}`);
+    // The binaries are the in-window indicators; the start indicators are continuous [0,1]
+    const binariesSection = lp.slice(lp.indexOf('Binaries'));
+    expect(binariesSection).toContain('balance_on_0');
+    expect(binariesSection).not.toContain('start_balance_');
+    expect(lp).toContain('0 <= start_balance_0 <= 1');
+  });
+
+  it('links window length and steps to the start indicators', () => {
+    const lp = buildLP({ ...mockData, rebalance: { holdSlots: D, remainingSlots: D, targetSoc_percent: 100 } });
+    // The window covers exactly D slots
+    expect(lp).toContain(`c_balance_len: ${Array.from({ length: T }, (_, t) => `balance_on_${t}`).join(' + ')} = ${D}`);
+    // An up-step of balance_on requires a start indicator at that slot
+    expect(lp).toContain('c_balance_step_0: start_balance_0 - balance_on_0 >= 0');
+    expect(lp).toContain('c_balance_step_1: start_balance_1 - balance_on_1 + balance_on_0 >= 0');
   });
 
   it('includes exactly-one-start constraint', () => {
@@ -141,6 +162,10 @@ describe('buildLP — MILP rebalancing', () => {
     // Slots past the last reachable window slot (cap + D - 1 = 4) get no forcing constraint
     expect(lp).toContain('c_rebalance_4:');
     expect(lp).not.toContain('c_rebalance_5:');
+    // Past the cap, balance_on may only step down (no start indicator in the row)
+    expect(lp).toContain('c_balance_step_3: balance_on_2 - balance_on_3 >= 0');
+    expect(lp).toContain('c_balance_step_4: balance_on_3 - balance_on_4 >= 0');
+    expect(lp).not.toContain('balance_on_5');
   });
 
   it('ignores a maxStartSlot beyond T - D', () => {
@@ -169,9 +194,9 @@ describe('buildLP — MILP rebalancing', () => {
     const lp = buildLP({ ...mockData, rebalance: { holdSlots: D, remainingSlots: D, targetSoc_percent: targetAboveMax } });
     // The actual Wh coefficient in constraints must be based on maxSoc_percent (100%), not 120%
     const expectedTargetSoc_Wh = (100 / 100) * 10000; // = 10000
-    expect(lp).toContain(`${expectedTargetSoc_Wh} start_balance_`);
+    expect(lp).toContain(`${expectedTargetSoc_Wh} balance_on_`);
     // Should NOT contain the unclamped 12000 (120% of 10000)
-    expect(lp).not.toContain('12000 start_balance_');
+    expect(lp).not.toContain('12000 balance_on_');
   });
 });
 

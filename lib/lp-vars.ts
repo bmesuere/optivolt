@@ -43,6 +43,7 @@ export const lpVar = {
   evOn:          makeFamily('ev_on'),
   evSoc:         makeFamily('ev_soc'),
   startBalance:  makeFamily('start_balance'),
+  balanceOn:     makeFamily('balance_on'),
 } as const;
 
 export interface RebalanceWindow {
@@ -52,7 +53,9 @@ export interface RebalanceWindow {
 
 /**
  * Find which contiguous slot range the MILP solver selected for rebalancing.
- * Scans solution columns for the `start_balance_k` binary that equals 1.
+ * Scans solution columns for the `start_balance_k` start indicator that equals
+ * 1 (continuous, but forced to exactly 1 at the chosen start by the step
+ * constraints in build-lp.ts).
  */
 export function extractRebalanceWindow(
   columns: Record<string, { Primal?: number }>,
