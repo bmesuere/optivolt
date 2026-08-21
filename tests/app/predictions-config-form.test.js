@@ -4,13 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../app/src/api/api.js', () => ({
   fetchPredictionConfig: vi.fn(),
   savePredictionConfig: vi.fn(),
+  fetchHaEntityState: vi.fn(),
 }));
 
 vi.mock('../../app/src/predictions-validation.js', () => ({
   initValidation: vi.fn(),
 }));
 
-import { fetchPredictionConfig, savePredictionConfig } from '../../app/src/api/api.js';
+import { fetchHaEntityState, fetchPredictionConfig, savePredictionConfig } from '../../app/src/api/api.js';
 import { initValidation } from '../../app/src/predictions-validation.js';
 import {
   applyPredictionConfigToForm,
@@ -164,6 +165,29 @@ describe('prediction config form', () => {
     document.querySelector('[data-sensor-index="2"] [data-remove]').click();
     expect(document.querySelectorAll('[data-sensor-index]')).toHaveLength(2);
     expect([...document.getElementById('pred-pv-sensor').options].map(o => o.value)).not.toContain('Bedroom AC');
+  });
+
+  it('shows the entity state on id blur, and an error for a bad entity', async () => {
+    fetchHaEntityState.mockRejectedValue(new Error('offline'));
+    applyPredictionConfigToForm(baseConfig);
+    await Promise.resolve(); // silent on-render probes must not mark rows red
+
+    const row = document.querySelector('[data-sensor-index="0"]');
+    const indicator = row.querySelector('[data-entity-state]');
+    expect(indicator.textContent).toBe('');
+
+    fetchHaEntityState.mockResolvedValue({ state: '12345.6', attributes: { unit_of_measurement: 'kWh' } });
+    row.querySelector('[data-field="id"]').dispatchEvent(new Event('blur', { bubbles: true }));
+    await vi.waitFor(() => expect(indicator.textContent).toBe('Current value: 12345.6 kWh'));
+    expect(indicator.className).toContain('emerald');
+
+    fetchHaEntityState.mockRejectedValue(new Error('HA returned 404 for entity "sensor.grid"'));
+    const idInput = row.querySelector('[data-field="id"]');
+    idInput.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(indicator.textContent).toBe('');
+    idInput.dispatchEvent(new Event('blur', { bubbles: true }));
+    await vi.waitFor(() => expect(indicator.textContent).toContain('HA returned 404'));
+    expect(indicator.className).toContain('red');
   });
 
   it('edits derived formulas through sign and reference selects', async () => {

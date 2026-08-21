@@ -1,4 +1,4 @@
-import { fetchPredictionConfig, savePredictionConfig } from '../api/api.js';
+import { fetchPredictionConfig, savePredictionConfig, fetchHaEntityState } from '../api/api.js';
 import { debounce } from '../utils.js';
 import { initValidation } from '../predictions-validation.js';
 
@@ -13,6 +13,11 @@ let derivedState = [];
 const debouncedSave = debounce(savePredictionFormSilently, 600);
 
 const REMOVE_BTN_CLASS = 'shrink-0 rounded p-1.5 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+
+const ENTITY_IND_BASE = 'mt-1 block text-xs';
+const ENTITY_IND_NEUTRAL = `${ENTITY_IND_BASE} text-slate-500 dark:text-slate-400`;
+const ENTITY_IND_SUCCESS = `${ENTITY_IND_BASE} text-emerald-600 dark:text-emerald-400`;
+const ENTITY_IND_ERROR = `${ENTITY_IND_BASE} text-red-600 dark:text-red-400`;
 
 export async function hydratePredictionForm() {
   try {
@@ -313,6 +318,37 @@ function renderSensorList() {
   }
 
   sensorsState.forEach((s, i) => container.appendChild(buildSensorRow(s, i)));
+  refreshSensorEntityStates();
+}
+
+/** Silently probe HA for every sensor row's current value (errors leave the indicator neutral). */
+function refreshSensorEntityStates() {
+  for (const row of document.querySelectorAll('#pred-sensor-list [data-sensor-index]')) {
+    checkSensorRowEntity(row, { silent: true });
+  }
+}
+
+async function checkSensorRowEntity(row, { silent = false } = {}) {
+  const input = row.querySelector('[data-field="id"]');
+  const indicator = row.querySelector('[data-entity-state]');
+  const entityId = input?.value.trim();
+  if (!entityId || !indicator) return;
+
+  // Drop out-of-order responses (same pattern as the EV sensor inputs).
+  const seq = Number(row.dataset.entitySeq ?? 0) + 1;
+  row.dataset.entitySeq = String(seq);
+
+  try {
+    const state = await fetchHaEntityState(entityId);
+    if (Number(row.dataset.entitySeq) !== seq) return;
+    const unit = state.attributes?.unit_of_measurement;
+    indicator.textContent = `Current value: ${state.state}${unit ? ` ${unit}` : ''}`;
+    indicator.className = ENTITY_IND_SUCCESS;
+  } catch (err) {
+    if (Number(row.dataset.entitySeq) !== seq || silent) return;
+    indicator.textContent = `Error: ${err.message}`;
+    indicator.className = ENTITY_IND_ERROR;
+  }
 }
 
 function buildSensorRow(sensor, index) {
@@ -320,9 +356,12 @@ function buildSensorRow(sensor, index) {
   row.className = 'rounded-lg border border-slate-200 dark:border-white/10 p-2 space-y-2';
   row.dataset.sensorIndex = String(index);
   row.innerHTML = `
-    <div class="flex items-center gap-2">
-      <input data-field="id" class="form-input font-mono text-xs flex-1" placeholder="sensor.entity_id" spellcheck="false" />
-      <button type="button" data-remove title="Remove sensor" class="${REMOVE_BTN_CLASS}">✕</button>
+    <div>
+      <div class="flex items-center gap-2">
+        <input data-field="id" class="form-input font-mono text-xs flex-1" placeholder="sensor.entity_id" spellcheck="false" />
+        <button type="button" data-remove title="Remove sensor" class="${REMOVE_BTN_CLASS}">✕</button>
+      </div>
+      <span data-entity-state class="${ENTITY_IND_NEUTRAL}"></span>
     </div>
     <div class="flex gap-2">
       <input data-field="name" class="form-input text-sm flex-1" placeholder="Display name" />
@@ -346,6 +385,14 @@ function buildSensorRow(sensor, index) {
     el.addEventListener('input', handler);
     el.addEventListener('change', handler);
   }
+
+  const idInput = row.querySelector('[data-field="id"]');
+  const indicator = row.querySelector('[data-entity-state]');
+  idInput.addEventListener('input', () => {
+    indicator.textContent = '';
+    indicator.className = ENTITY_IND_NEUTRAL;
+  });
+  idInput.addEventListener('blur', () => checkSensorRowEntity(row));
 
   row.querySelector('[data-remove]').addEventListener('click', () => {
     sensorsState.splice(index, 1);
