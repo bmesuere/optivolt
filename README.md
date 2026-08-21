@@ -25,7 +25,7 @@ Plan and control a home energy system with forecasts, dynamic tariffs, and a day
 2. **Copy the Optivolt files:**
    Copy the contents of your local Optivolt repository into the mounted `addons` share. Using `rsync` (macOS/Linux) skips development artifacts:
    ```bash
-   rsync -av --delete --exclude 'node_modules' --exclude '.git' --exclude '.DS_Store' --exclude 'tests' --exclude 'vendor/highs-js' ~/Code/optivolt/ /Volumes/addons/optivolt/
+   rsync -av --delete --exclude 'node_modules' --exclude '.git' --exclude '.claude' --exclude '.DS_Store' --exclude 'tests' --exclude 'vendor/highs-js' ~/Code/optivolt/ /Volumes/addons/optivolt/
    ```
 3. **Install the App:**
    Go to **Settings → Apps → Install App**. Reload local Apps if necessary (click check for updates), find **Optivolt**, and click **Install**.
