@@ -183,16 +183,18 @@ function sanitizeDerived(d) {
 }
 
 /**
- * Update the historical predictor for the given sensor with validated
- * parameters, or add one if none targets that sensor yet. Used by the
- * validation table's "Use" button.
+ * Update the predictor of this type targeting this sensor with validated
+ * parameters, or add one if none exists yet. Used by the validation
+ * table's "Use" button. `predictor` is a full config-shape predictor
+ * ({ type: 'historical'|'temperature', sensor, ...params }).
  */
-export async function applyValidatedPredictor({ sensor, lookbackWeeks, dayFilter, aggregation }) {
-  const existing = predictors.find(p => p.type === 'historical' && p.sensor === sensor);
+export async function applyValidatedPredictor(predictor) {
+  const type = predictor.type ?? 'historical';
+  const existing = predictors.find(p => p.type === type && p.sensor === predictor.sensor);
   if (existing) {
-    Object.assign(existing, { lookbackWeeks, dayFilter, aggregation });
+    Object.assign(existing, predictor);
   } else {
-    predictors.push({ type: 'historical', sensor, lookbackWeeks, dayFilter, aggregation });
+    predictors.push({ ...predictor, type });
   }
   renderPredictorList();
   await savePredictionFormToServer();

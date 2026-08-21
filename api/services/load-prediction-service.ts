@@ -17,6 +17,7 @@ import {
   buildTemperatureAnchors,
   computeDayMeanTemps,
   computeEffectiveDayTemps,
+  generateTemperatureConfigs,
   predictTemperatureLoad,
 } from '../../lib/load-predictor-temperature.ts';
 import { fetchTemperatureSeries } from './open-meteo-client.ts';
@@ -26,10 +27,12 @@ import { getForecastTimeRange, buildForecastSeries, computeErrorMetrics, type Fo
 type PredictTarget = Pick<StatRecord, 'date' | 'time' | 'hour' | 'dayOfWeek'> & { value?: number | null };
 
 interface ValidationEntry {
+  type: 'historical' | 'temperature';
   sensor: string;
   lookbackWeeks: number;
   dayFilter: DayFilter;
-  aggregation: Aggregation;
+  aggregation?: Aggregation;
+  bins?: number;
   mae: number;
   rmse: number;
   mape: number;
@@ -85,6 +88,7 @@ export async function runValidation(config: PredictionRunConfig): Promise<Valida
     );
 
     results.push({
+      type: 'historical',
       sensor: cfg.sensor,
       lookbackWeeks: cfg.lookbackWeeks,
       dayFilter: cfg.dayFilter,
@@ -98,7 +102,66 @@ export async function runValidation(config: PredictionRunConfig): Promise<Valida
     });
   }
 
+  results.push(...await runTemperatureValidation(config, data, sensorNames, MAX_LOOKBACK_WEEKS));
+
   return { sensorNames, results };
+}
+
+/**
+ * Evaluate the temperature-predictor grid against the validation window.
+ * Anchors are built as of the window start, so the validated days never feed
+ * their own anchors. Skipped (with a warning) when no coordinates are
+ * configured or Open-Meteo is unavailable — historical results still stand.
+ */
+async function runTemperatureValidation(
+  config: PredictionRunConfig,
+  data: ReturnType<typeof postprocess>,
+  sensorNames: string[],
+  maxLookbackWeeks: number,
+): Promise<ValidationEntry[]> {
+  const { latitude, longitude } = config.pvConfig ?? {};
+  if (latitude == null || longitude == null || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+    return [];
+  }
+
+  const validationWindow = config.validationWindow!;
+  const windowStartMs = new Date(validationWindow.start).getTime();
+  const windowEndMs = new Date(validationWindow.end).getTime();
+
+  let effTemps: Map<string, number>;
+  try {
+    const pastDays = (maxLookbackWeeks + 1) * 7 + 2;
+    const temps = await fetchTemperatureSeries(latitude, longitude, pastDays, 2);
+    effTemps = computeEffectiveDayTemps(computeDayMeanTemps(temps));
+  } catch (err) {
+    console.warn('[predict] temperature validation skipped:', err instanceof Error ? err.message : err);
+    return [];
+  }
+
+  const results: ValidationEntry[] = [];
+  for (const cfg of generateTemperatureConfigs(sensorNames)) {
+    const model = buildTemperatureAnchors(data, effTemps, cfg, windowStartMs);
+    const targets = data.filter(
+      d => d.sensor === cfg.sensor && d.time >= windowStartMs && d.time < windowEndMs
+    );
+    const predictions = predictTemperatureLoad(model, cfg.dayFilter, targets, effTemps);
+    const metrics = validate(predictions, validationWindow);
+
+    results.push({
+      type: 'temperature',
+      sensor: cfg.sensor,
+      lookbackWeeks: cfg.lookbackWeeks,
+      dayFilter: cfg.dayFilter,
+      bins: cfg.bins,
+      mae: metrics.mae,
+      rmse: metrics.rmse,
+      mape: metrics.mape,
+      n: metrics.n,
+      nSkipped: metrics.nSkipped,
+      validationPredictions: predictions,
+    });
+  }
+  return results;
 }
 
 /**

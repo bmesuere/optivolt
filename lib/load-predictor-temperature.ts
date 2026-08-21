@@ -235,6 +235,30 @@ function clampNonNegative(value: number | null): number | null {
 }
 
 /**
+ * Generate all temperature-predictor configurations to evaluate in a
+ * validation run, mirroring generateAllConfigs() for historical predictors.
+ * The lookbacks stay within the 8-week validation data fetch.
+ */
+export function generateTemperatureConfigs(
+  sensorNames: string[],
+  lookbacks: number[] = [2, 4, 6, 8],
+  dayFilters: DayFilter[] = ['same', 'all', 'weekday-weekend', 'weekday-sat-sun'],
+  binCounts: number[] = [2, 3, 4, 6],
+): TemperaturePredictConfig[] {
+  const configs: TemperaturePredictConfig[] = [];
+  for (const sensor of sensorNames) {
+    for (const lookbackWeeks of lookbacks) {
+      for (const dayFilter of dayFilters) {
+        for (const bins of binCounts) {
+          configs.push({ sensor, lookbackWeeks, dayFilter, bins });
+        }
+      }
+    }
+  }
+  return configs;
+}
+
+/**
  * Compute predictions for target hours, mirroring the historical predictor's
  * predict() shape so results feed the same summing machinery.
  */

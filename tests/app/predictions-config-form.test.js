@@ -429,6 +429,22 @@ describe('prediction config form', () => {
     expect(saved[2]).toEqual({ type: 'historical', sensor: 'Total Load', lookbackWeeks: 2, dayFilter: 'same', aggregation: 'mean' });
   });
 
+  it('applyValidatedPredictor matches by type, so a temperature row never overwrites a historical predictor', async () => {
+    applyPredictionConfigToForm(baseConfig);
+    savePredictionConfig.mockResolvedValue({});
+
+    await applyValidatedPredictor({ type: 'temperature', sensor: 'Grid Import', lookbackWeeks: 6, dayFilter: 'weekday-weekend', bins: 3 });
+    const saved = savePredictionConfig.mock.calls[0][0].predictors;
+    expect(saved).toHaveLength(3);
+    expect(saved[0]).toMatchObject({ type: 'historical', sensor: 'Grid Import', lookbackWeeks: 3 });
+    expect(saved[2]).toEqual({ type: 'temperature', sensor: 'Grid Import', lookbackWeeks: 6, dayFilter: 'weekday-weekend', bins: 3 });
+
+    await applyValidatedPredictor({ type: 'temperature', sensor: 'Grid Import', lookbackWeeks: 8, dayFilter: 'all', bins: 4 });
+    const updated = savePredictionConfig.mock.calls[1][0].predictors;
+    expect(updated).toHaveLength(3);
+    expect(updated[2]).toEqual({ type: 'temperature', sensor: 'Grid Import', lookbackWeeks: 8, dayFilter: 'all', bins: 4 });
+  });
+
   it('wires forecast buttons and ignores unowned inputs', async () => {
     applyPredictionConfigToForm(baseConfig);
     const onForecastAll = vi.fn();
