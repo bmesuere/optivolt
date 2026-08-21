@@ -260,6 +260,40 @@ describe('POST /predictions/load/forecast', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 when a predictor entry is not an object', async () => {
+    loadPredictionConfig.mockResolvedValue({ ...mockConfig, predictors: [null] });
+    const res = await request(app).post('/predictions/load/forecast').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/must be an object/);
+  });
+
+  it('returns 400 when a predictor has an unsupported type', async () => {
+    loadPredictionConfig.mockResolvedValue({ ...mockConfig, predictors: [{ type: 'weather' }] });
+    const res = await request(app).post('/predictions/load/forecast').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/unsupported load predictor type/);
+  });
+
+  it('returns 400 when a historical predictor has an invalid dayFilter', async () => {
+    loadPredictionConfig.mockResolvedValue({
+      ...mockConfig,
+      predictors: [{ type: 'historical', sensor: 'Total Load', lookbackWeeks: 4, dayFilter: 'bogus', aggregation: 'mean' }],
+    });
+    const res = await request(app).post('/predictions/load/forecast').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/dayFilter/);
+  });
+
+  it('returns 400 when a historical predictor has an invalid aggregation', async () => {
+    loadPredictionConfig.mockResolvedValue({
+      ...mockConfig,
+      predictors: [{ type: 'historical', sensor: 'Total Load', lookbackWeeks: 4, dayFilter: 'same', aggregation: 'p95' }],
+    });
+    const res = await request(app).post('/predictions/load/forecast').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/aggregation/);
+  });
+
   it('returns 502 on HA connection error', async () => {
     runForecast.mockRejectedValue(new Error('HA WebSocket timed out after 30000ms'));
     const res = await request(app).post('/predictions/load/forecast').send({});

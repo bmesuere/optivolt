@@ -155,6 +155,28 @@ describe('prediction config form', () => {
     expect(initValidation).toHaveBeenCalled();
   });
 
+  it('disables removal of the last remaining predictor', async () => {
+    applyPredictionConfigToForm({ ...baseConfig, predictors: [{ type: 'fixed', load_W: 100 }] });
+    savePredictionConfig.mockResolvedValue({});
+    wirePredictionForm({ onForecastAll: vi.fn(), onPvForecast: vi.fn() });
+
+    const removeBtn = document.querySelector('[data-predictor-index="0"] [data-remove]');
+    expect(removeBtn.disabled).toBe(true);
+
+    removeBtn.click();
+    expect(document.querySelectorAll('[data-predictor-index]')).toHaveLength(1);
+
+    vi.advanceTimersByTime(600);
+    await Promise.resolve();
+    expect(savePredictionConfig).not.toHaveBeenCalled();
+
+    // Adding a second predictor re-enables removal on both cards.
+    document.getElementById('pred-add-predictor').click();
+    const buttons = document.querySelectorAll('[data-remove]');
+    expect(buttons).toHaveLength(2);
+    for (const btn of buttons) expect(btn.disabled).toBe(false);
+  });
+
   it('applyValidatedPredictor updates a matching predictor or appends a new one', async () => {
     applyPredictionConfigToForm(baseConfig);
     savePredictionConfig.mockResolvedValue({});

@@ -140,7 +140,7 @@ function renderPredictorList() {
   if (predictors.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'text-sm text-slate-400 dark:text-slate-500';
-    empty.textContent = 'No predictors configured — the load forecast will be 0 W.';
+    empty.textContent = 'No predictors configured — add one to enable the load forecast.';
     container.appendChild(empty);
     return;
   }
@@ -196,7 +196,7 @@ function buildPredictorCard(predictor, index) {
         <option value="fixed">Fixed</option>
       </select>
       <button type="button" data-remove title="Remove predictor"
-        class="shrink-0 rounded p-1.5 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors">✕</button>
+        class="shrink-0 rounded p-1.5 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">✕</button>
     </div>
     ${fields}
   `;
@@ -233,7 +233,13 @@ function buildPredictorCard(predictor, index) {
   }
   card.querySelector('[data-field="type"]').value = predictor.type;
 
-  card.querySelector('[data-remove]').addEventListener('click', () => {
+  // At least one predictor must remain: the server rejects an empty list.
+  const removeBtn = card.querySelector('[data-remove]');
+  if (predictors.length === 1) {
+    removeBtn.disabled = true;
+    removeBtn.title = 'At least one predictor is required';
+  }
+  removeBtn.addEventListener('click', () => {
     predictors.splice(index, 1);
     renderPredictorList();
     debouncedSave();
