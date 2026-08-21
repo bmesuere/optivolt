@@ -17,8 +17,9 @@ import { loadData, saveData } from '../../api/services/data-store.ts';
 const mockConfig = {
   sensors: [{ id: 'sensor.grid', name: 'Grid Import', unit: 'kWh' }],
   derived: [],
-  activeType: 'historical',
-  historicalPredictor: { sensor: 'Grid Import', lookbackWeeks: 4, dayFilter: 'weekday-weekend', aggregation: 'mean' },
+  predictors: [
+    { type: 'historical', sensor: 'Grid Import', lookbackWeeks: 4, dayFilter: 'weekday-weekend', aggregation: 'mean' },
+  ],
 };
 
 const mockSettings = {
@@ -52,10 +53,10 @@ describe('POST /predictions/config', () => {
   it('merges and saves config', async () => {
     const res = await request(app)
       .post('/predictions/config')
-      .send({ historicalPredictor: { sensor: 'Total Load', lookbackWeeks: 4, dayFilter: 'same', aggregation: 'mean' } });
+      .send({ predictors: [{ type: 'historical', sensor: 'Total Load', lookbackWeeks: 4, dayFilter: 'same', aggregation: 'mean' }] });
 
     expect(res.status).toBe(200);
-    expect(res.body.config.historicalPredictor.sensor).toBe('Total Load');
+    expect(res.body.config.predictors[0].sensor).toBe('Total Load');
     expect(savePredictionConfig).toHaveBeenCalled();
   });
 
@@ -211,8 +212,8 @@ describe('POST /predictions/forecast (combined)', () => {
     expect(runForecast).toHaveBeenCalled();
   });
 
-  it('returns load=null when activeType missing (graceful fallback)', async () => {
-    loadPredictionConfig.mockResolvedValue({ ...mockConfig, activeType: undefined });
+  it('returns load=null when predictors missing (graceful fallback)', async () => {
+    loadPredictionConfig.mockResolvedValue({ ...mockConfig, predictors: undefined });
     const res = await request(app).post('/predictions/forecast').send({});
     expect(res.status).toBe(200);
     expect(res.body.load).toBeNull();
@@ -247,8 +248,14 @@ describe('POST /predictions/load/forecast', () => {
     expect(runForecast).toHaveBeenCalled();
   });
 
-  it('returns 400 when activeType missing', async () => {
-    loadPredictionConfig.mockResolvedValue({ ...mockConfig, activeType: undefined });
+  it('returns 400 when predictors missing', async () => {
+    loadPredictionConfig.mockResolvedValue({ ...mockConfig, predictors: undefined });
+    const res = await request(app).post('/predictions/load/forecast').send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when predictors is empty', async () => {
+    loadPredictionConfig.mockResolvedValue({ ...mockConfig, predictors: [] });
     const res = await request(app).post('/predictions/load/forecast').send({});
     expect(res.status).toBe(400);
   });

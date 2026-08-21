@@ -13,6 +13,8 @@ vi.mock('../../app/src/predictions-validation.js', () => ({
 import { fetchPredictionConfig, savePredictionConfig } from '../../app/src/api/api.js';
 import { initValidation } from '../../app/src/predictions-validation.js';
 import {
+  applyPredictionConfigToForm,
+  applyValidatedPredictor,
   hydratePredictionForm,
   readPredictionFormValues,
   savePredictionFormToServer,
@@ -23,23 +25,8 @@ function setupDom() {
   document.body.innerHTML = `
     <textarea id="pred-sensors" data-predictions-only="true"></textarea>
     <textarea id="pred-derived" data-predictions-only="true"></textarea>
-    <select id="pred-active-type" data-predictions-only="true">
-      <option value="historical">Historical</option>
-      <option value="fixed">Fixed</option>
-    </select>
-    <select id="pred-active-sensor" data-predictions-only="true"></select>
-    <input id="pred-fixed-load-w" data-predictions-only="true" />
-    <div id="pred-fixed-fields"></div>
-    <div id="pred-historical-fields"></div>
-    <input id="pred-active-lookback" data-predictions-only="true" />
-    <select id="pred-active-filter" data-predictions-only="true">
-      <option value="same">same</option>
-      <option value="weekday-weekend">weekday-weekend</option>
-    </select>
-    <select id="pred-active-agg" data-predictions-only="true">
-      <option value="mean">mean</option>
-      <option value="median">median</option>
-    </select>
+    <div id="pred-predictor-list"></div>
+    <button id="pred-add-predictor" type="button"></button>
     <select id="pred-pv-sensor" data-predictions-only="true"></select>
     <input id="pred-pv-lat" data-predictions-only="true" />
     <input id="pred-pv-lon" data-predictions-only="true" />
@@ -59,6 +46,16 @@ function setupDom() {
   `;
 }
 
+const baseConfig = {
+  sensors: [{ id: 'sensor.grid', name: 'Grid Import' }],
+  derived: [{ name: 'Total Load' }],
+  predictors: [
+    { type: 'historical', sensor: 'Grid Import', lookbackWeeks: 3, dayFilter: 'same', aggregation: 'median' },
+    { type: 'fixed', load_W: 420 },
+  ],
+  pvConfig: { pvSensor: 'Total Load', latitude: 51.1, longitude: 3.7, historyDays: 9, forecastResolution: 15, pvModel: 'robustLinear' },
+};
+
 describe('prediction config form', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -71,37 +68,28 @@ describe('prediction config form', () => {
     document.body.innerHTML = '';
   });
 
-  it('hydrates predictor and PV form fields from server config', async () => {
-    fetchPredictionConfig.mockResolvedValue({
-      sensors: [{ id: 'sensor.grid', name: 'Grid Import' }],
-      derived: [{ name: 'Total Load' }],
-      activeType: 'fixed',
-      fixedPredictor: { load_W: 420 },
-      historicalPredictor: { sensor: 'Grid Import', lookbackWeeks: 3, dayFilter: 'same', aggregation: 'median' },
-      pvConfig: { pvSensor: 'Total Load', latitude: 51.1, longitude: 3.7, historyDays: 9, forecastResolution: 15, pvModel: 'robustLinear' },
-    });
+  it('hydrates predictor cards and PV form fields from server config', async () => {
+    fetchPredictionConfig.mockResolvedValue(baseConfig);
 
     await hydratePredictionForm();
 
-    expect(document.getElementById('pred-fixed-load-w').value).toBe('420');
-    expect(document.getElementById('pred-active-sensor').options).toHaveLength(3);
-    expect([...document.getElementById('pred-active-sensor').options].map(opt => opt.value)).toContain('Grid Import');
+    const cards = document.querySelectorAll('#pred-predictor-list [data-predictor-index]');
+    expect(cards).toHaveLength(2);
+    expect(cards[0].querySelector('[data-field="type"]').value).toBe('historical');
+    expect(cards[0].querySelector('[data-field="sensor"]').value).toBe('Grid Import');
+    expect(cards[0].querySelector('[data-field="lookbackWeeks"]').value).toBe('3');
+    expect(cards[0].querySelector('[data-field="aggregation"]').value).toBe('median');
+    expect(cards[1].querySelector('[data-field="type"]').value).toBe('fixed');
+    expect(cards[1].querySelector('[data-field="load_W"]').value).toBe('420');
     expect(document.getElementById('pred-pv-sensor').value).toBe('Total Load');
     expect(document.getElementById('pred-pv-mode').value).toBe('hybrid');
     expect(document.getElementById('pred-pv-model').value).toBe('robustLinear');
-    expect(document.getElementById('pred-fixed-fields').classList.contains('hidden')).toBe(false);
-    expect(document.getElementById('pred-historical-fields').classList.contains('hidden')).toBe(true);
   });
 
-  it('reads and saves only valid prediction form values', async () => {
+  it('reads and saves sanitized predictors and PV values', async () => {
+    applyPredictionConfigToForm(baseConfig);
     document.getElementById('pred-sensors').value = '[{"id":"sensor.grid","name":"Grid"}]';
     document.getElementById('pred-derived').value = 'not json';
-    document.getElementById('pred-active-type').value = 'historical';
-    document.getElementById('pred-active-sensor').innerHTML = '<option value="Grid">Grid</option>';
-    document.getElementById('pred-active-sensor').value = 'Grid';
-    document.getElementById('pred-active-lookback').value = '5';
-    document.getElementById('pred-active-filter').value = 'weekday-weekend';
-    document.getElementById('pred-active-agg').value = 'median';
     document.getElementById('pred-pv-lat').value = '51.1';
     document.getElementById('pred-pv-lon').value = '3.7';
     document.getElementById('pred-pv-history').value = '10';
@@ -114,13 +102,10 @@ describe('prediction config form', () => {
 
     expect(values).toMatchObject({
       sensors: [{ id: 'sensor.grid', name: 'Grid' }],
-      activeType: 'historical',
-      historicalPredictor: {
-        sensor: 'Grid',
-        lookbackWeeks: 5,
-        dayFilter: 'weekday-weekend',
-        aggregation: 'median',
-      },
+      predictors: [
+        { type: 'historical', sensor: 'Grid Import', lookbackWeeks: 3, dayFilter: 'same', aggregation: 'median' },
+        { type: 'fixed', load_W: 420 },
+      ],
       pvConfig: {
         latitude: 51.1,
         longitude: 3.7,
@@ -133,23 +118,70 @@ describe('prediction config form', () => {
     expect(savePredictionConfig).toHaveBeenCalledWith(values);
   });
 
-  it('wires prediction-owned controls, buttons, and settings toggle', async () => {
+  it('edits a card field and saves the updated predictor', async () => {
+    applyPredictionConfigToForm(baseConfig);
+    savePredictionConfig.mockResolvedValue({});
+    wirePredictionForm({ onForecastAll: vi.fn(), onPvForecast: vi.fn() });
+
+    const lookback = document.querySelector('[data-predictor-index="0"] [data-field="lookbackWeeks"]');
+    lookback.value = '6';
+    lookback.dispatchEvent(new Event('input', { bubbles: true }));
+    vi.advanceTimersByTime(600);
+    await Promise.resolve();
+
+    expect(savePredictionConfig).toHaveBeenCalledTimes(1);
+    expect(savePredictionConfig.mock.calls[0][0].predictors[0].lookbackWeeks).toBe(6);
+  });
+
+  it('adds and removes predictors', async () => {
+    applyPredictionConfigToForm(baseConfig);
+    savePredictionConfig.mockResolvedValue({});
+    wirePredictionForm({ onForecastAll: vi.fn(), onPvForecast: vi.fn() });
+
+    document.getElementById('pred-add-predictor').click();
+    expect(document.querySelectorAll('[data-predictor-index]')).toHaveLength(3);
+
+    document.querySelector('[data-predictor-index="1"] [data-remove]').click();
+    expect(document.querySelectorAll('[data-predictor-index]')).toHaveLength(2);
+
+    vi.advanceTimersByTime(600);
+    await Promise.resolve();
+
+    expect(savePredictionConfig).toHaveBeenCalledTimes(1);
+    const saved = savePredictionConfig.mock.calls[0][0].predictors;
+    expect(saved).toHaveLength(2);
+    expect(saved[0].type).toBe('historical');
+    expect(saved[1].type).toBe('historical');
+    expect(initValidation).toHaveBeenCalled();
+  });
+
+  it('applyValidatedPredictor updates a matching predictor or appends a new one', async () => {
+    applyPredictionConfigToForm(baseConfig);
+    savePredictionConfig.mockResolvedValue({});
+
+    await applyValidatedPredictor({ sensor: 'Grid Import', lookbackWeeks: 8, dayFilter: 'all', aggregation: 'mean' });
+    expect(savePredictionConfig.mock.calls[0][0].predictors[0]).toEqual(
+      { type: 'historical', sensor: 'Grid Import', lookbackWeeks: 8, dayFilter: 'all', aggregation: 'mean' },
+    );
+
+    await applyValidatedPredictor({ sensor: 'Total Load', lookbackWeeks: 2, dayFilter: 'same', aggregation: 'mean' });
+    const saved = savePredictionConfig.mock.calls[1][0].predictors;
+    expect(saved).toHaveLength(3);
+    expect(saved[2]).toEqual({ type: 'historical', sensor: 'Total Load', lookbackWeeks: 2, dayFilter: 'same', aggregation: 'mean' });
+  });
+
+  it('wires forecast buttons and ignores unowned inputs', async () => {
+    applyPredictionConfigToForm(baseConfig);
     const onForecastAll = vi.fn();
     const onPvForecast = vi.fn();
     savePredictionConfig.mockResolvedValue({});
 
     wirePredictionForm({ onForecastAll, onPvForecast });
 
-    document.getElementById('pred-active-type').value = 'fixed';
-    document.getElementById('pred-active-type').dispatchEvent(new Event('change', { bubbles: true }));
     document.getElementById('unowned-input').dispatchEvent(new Event('input', { bubbles: true }));
     vi.advanceTimersByTime(600);
     await Promise.resolve();
-
-    expect(savePredictionConfig).toHaveBeenCalledTimes(1);
-    expect(document.getElementById('pred-fixed-fields').classList.contains('hidden')).toBe(false);
-    expect(document.getElementById('pred-historical-fields').classList.contains('hidden')).toBe(true);
-    expect(initValidation).toHaveBeenCalled();
+    expect(savePredictionConfig).not.toHaveBeenCalled();
 
     document.getElementById('pred-load-forecast').click();
     document.getElementById('pred-pv-forecast').click();

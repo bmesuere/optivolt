@@ -81,8 +81,8 @@ describe('prediction-config-store', () => {
     });
   });
 
-  describe('migration: activeConfig → historicalPredictor', () => {
-    it('migrates old activeConfig format to historicalPredictor + activeType', async () => {
+  describe('migration: activeConfig → predictors', () => {
+    it('migrates old activeConfig format through to a predictors list', async () => {
       await writeFile(
         path.join(tmpDir, 'prediction-config.json'),
         JSON.stringify({
@@ -101,14 +101,89 @@ describe('prediction-config-store', () => {
       const { loadPredictionConfig } = await importStore();
       const config = await loadPredictionConfig();
 
-      expect(config.activeType).toBe('historical');
-      expect(config.historicalPredictor).toEqual({
+      expect(config.predictors).toEqual([{
+        type: 'historical',
         sensor: 'Total Load',
         lookbackWeeks: 4,
         dayFilter: 'weekday-weekend',
         aggregation: 'mean',
-      });
+      }]);
       expect(config).not.toHaveProperty('activeConfig');
+      expect(config).not.toHaveProperty('activeType');
+      expect(config).not.toHaveProperty('historicalPredictor');
+    });
+  });
+
+  describe('migration: v1 single active predictor → predictors', () => {
+    it('folds an active historical predictor into the predictors list', async () => {
+      await writeFile(
+        path.join(tmpDir, 'prediction-config.json'),
+        JSON.stringify({
+          schemaVersion: 1,
+          sensors: [],
+          derived: [],
+          activeType: 'historical',
+          historicalPredictor: { sensor: 'Total Load', lookbackWeeks: 3, dayFilter: 'same', aggregation: 'median' },
+          fixedPredictor: { load_W: 200 },
+        }),
+        'utf8',
+      );
+
+      const { loadPredictionConfig } = await importStore();
+      const config = await loadPredictionConfig();
+
+      expect(config.predictors).toEqual([{
+        type: 'historical',
+        sensor: 'Total Load',
+        lookbackWeeks: 3,
+        dayFilter: 'same',
+        aggregation: 'median',
+      }]);
+      expect(config).not.toHaveProperty('activeType');
+      expect(config).not.toHaveProperty('historicalPredictor');
+      expect(config).not.toHaveProperty('fixedPredictor');
+    });
+
+    it('folds an active fixed predictor into the predictors list', async () => {
+      await writeFile(
+        path.join(tmpDir, 'prediction-config.json'),
+        JSON.stringify({
+          schemaVersion: 1,
+          sensors: [],
+          derived: [],
+          activeType: 'fixed',
+          historicalPredictor: { sensor: 'Total Load', lookbackWeeks: 3, dayFilter: 'same', aggregation: 'median' },
+          fixedPredictor: { load_W: 420 },
+        }),
+        'utf8',
+      );
+
+      const { loadPredictionConfig } = await importStore();
+      const config = await loadPredictionConfig();
+
+      expect(config.predictors).toEqual([{ type: 'fixed', load_W: 420 }]);
+    });
+
+    it('leaves an existing predictors list untouched and strips stray v1 keys', async () => {
+      await writeFile(
+        path.join(tmpDir, 'prediction-config.json'),
+        JSON.stringify({
+          schemaVersion: 2,
+          sensors: [],
+          derived: [],
+          predictors: [{ type: 'fixed', load_W: 100 }],
+          activeType: 'historical',
+          historicalPredictor: { sensor: 'Total Load', lookbackWeeks: 3, dayFilter: 'same', aggregation: 'median' },
+        }),
+        'utf8',
+      );
+
+      const { loadPredictionConfig } = await importStore();
+      const config = await loadPredictionConfig();
+
+      expect(config.predictors).toEqual([{ type: 'fixed', load_W: 100 }]);
+      expect(config).not.toHaveProperty('activeType');
+      expect(config).not.toHaveProperty('historicalPredictor');
     });
   });
 
@@ -152,8 +227,9 @@ describe('prediction-config-store', () => {
       const { loadPredictionConfig } = await importStore();
       const config = await loadPredictionConfig();
 
-      expect(config.activeType).toBe('historical');
-      expect(config.historicalPredictor).toMatchObject({ sensor: 'sensor.load', lookbackWeeks: 3 });
+      expect(config.predictors).toEqual([
+        expect.objectContaining({ type: 'historical', sensor: 'sensor.load', lookbackWeeks: 3 }),
+      ]);
       expect(config.activeConfig).toBeUndefined();
     });
   });

@@ -7,12 +7,14 @@ const DATA_DIR = resolveDataDir();
 const PREDICTION_CONFIG_PATH = path.join(DATA_DIR, 'prediction-config.json');
 const DEFAULT_PATH = fileURLToPath(new URL('../defaults/default-prediction-config.json', import.meta.url));
 
-export const PREDICTION_CONFIG_SCHEMA_VERSION = 1;
+export const PREDICTION_CONFIG_SCHEMA_VERSION = 2;
 
 /**
  * Bring a persisted config of any prior shape up to the current schema.
  * Version 0 = files written before versioning existed, including the pre-2026
  * `activeConfig` shape (replaced by historicalPredictor + activeType).
+ * Version 1 = single active predictor (activeType + historicalPredictor/fixedPredictor),
+ * replaced in v2 by the summed `predictors` list.
  * A newer on-disk marker is preserved through load/save (never downgraded),
  * so an upgrade after a downgrade cannot re-run migrations on migrated state.
  */
@@ -41,6 +43,19 @@ function migratePredictionConfig(raw: Record<string, unknown>): Record<string, u
     }
   }
 
+  // v1 → v2: fold the single active predictor into the summed `predictors` list
+  if (!('predictors' in raw) && ('activeType' in raw || 'historicalPredictor' in raw || 'fixedPredictor' in raw)) {
+    const { activeType, historicalPredictor, fixedPredictor, ...rest } = raw;
+    const active = activeType ?? (historicalPredictor ? 'historical' : fixedPredictor ? 'fixed' : undefined);
+    const predictors: unknown[] = [];
+    if (active === 'historical' && typeof historicalPredictor === 'object' && historicalPredictor !== null) {
+      predictors.push({ type: 'historical', ...historicalPredictor });
+    } else if (active === 'fixed' && typeof fixedPredictor === 'object' && fixedPredictor !== null) {
+      predictors.push({ type: 'fixed', ...fixedPredictor });
+    }
+    raw = predictors.length > 0 ? { ...rest, predictors } : rest;
+  }
+
   return raw;
 }
 
@@ -56,8 +71,8 @@ export async function loadPredictionConfig(): Promise<PredictionConfig> {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
 
-  // Strip activeConfig from userConfig (guard for stored configs that have both activeConfig and historicalPredictor)
-  const { activeConfig: _ac, ...cleanUserConfig } = userConfig;
+  // Strip superseded keys (guard for stored configs that carry both old and new shapes)
+  const { activeConfig: _ac, activeType: _at, historicalPredictor: _hp, fixedPredictor: _fp, ...cleanUserConfig } = userConfig;
   const cleanConfig = cleanUserConfig as Partial<PredictionConfig>;
   const pvConfig: PredictionConfig['pvConfig'] = (defaults.pvConfig || cleanConfig.pvConfig)
     ? { ...defaults.pvConfig, ...cleanConfig.pvConfig } as PvPredictionConfig

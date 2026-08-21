@@ -25,16 +25,15 @@
       "formula": ["+Total Load", "-Wallbox Energy"]
     }
   ],
-  "activeType": "historical",
-  "historicalPredictor": {
-    "sensor": "Total Load",
-    "lookbackWeeks": 4,
-    "dayFilter": "weekday-weekend",
-    "aggregation": "mean"
-  },
-  "fixedPredictor": {
-    "load_W": 200
-  },
+  "predictors": [
+    {
+      "type": "historical",
+      "sensor": "Total Load",
+      "lookbackWeeks": 4,
+      "dayFilter": "weekday-weekend",
+      "aggregation": "mean"
+    }
+  ],
   "pvConfig": {
     "latitude": 51.05,
     "longitude": 3.71,

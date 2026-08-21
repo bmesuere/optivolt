@@ -51,22 +51,26 @@ export async function runCombinedPredictionForecast(config: PredictionRunConfig,
 }
 
 export async function executeLoadForecast(config: PredictionRunConfig, logLabel: string): Promise<ForecastRunResult> {
-  assertCondition(config.activeType != null, 400, 'activeType is required');
-  if (config.activeType === 'historical') {
+  const predictors = config.predictors;
+  assertCondition(Array.isArray(predictors) && predictors.length > 0, 400, 'At least one load predictor is required');
+  const historical = predictors!.filter(p => p.type === 'historical');
+  if (historical.length > 0) {
     assertHaConnection(config);
     assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
-    assertCondition(config.historicalPredictor != null, 400, 'historicalPredictor is required for historical activeType');
+    for (const p of historical) {
+      assertCondition(typeof p.sensor === 'string' && p.sensor.length > 0, 400, 'historical predictor requires a sensor');
+      assertCondition(Number.isFinite(p.lookbackWeeks) && p.lookbackWeeks >= 1, 400, 'historical predictor lookbackWeeks must be >= 1');
+    }
   }
-  if (config.activeType === 'fixed') {
-    assertCondition(config.fixedPredictor != null, 400, 'fixedPredictor is required for fixed activeType');
+  for (const p of predictors!.filter(p => p.type === 'fixed')) {
     assertCondition(
-      Number.isFinite(config.fixedPredictor!.load_W) && config.fixedPredictor!.load_W >= 0,
+      Number.isFinite(p.load_W) && p.load_W >= 0,
       400,
-      'fixedPredictor.load_W must be a non-negative finite number'
+      'fixed predictor load_W must be a non-negative finite number'
     );
   }
 
-  logPredictionCall(logLabel + ' (load)', { activeType: config.activeType });
+  logPredictionCall(logLabel + ' (load)', { predictors: predictors!.map(p => p.type) });
 
   try {
     return await runLoadForecast(config);
