@@ -191,7 +191,10 @@ function binIntoAnchors(days: DaySummary[], bins: number): TemperatureAnchor[] {
  * temperature, interpolating between the bracketing anchors. Extrapolation
  * beyond the outermost anchors follows the outermost segment, with the
  * temperature clamped to half the anchor span beyond the extremes so a
- * freak forecast cannot run the line off to absurd values.
+ * freak forecast cannot run the line off to absurd values, and the result
+ * floored at the lowest anchor value for the hour — devices keep a small
+ * idle draw at mild temperatures, so extrapolation flattens out there
+ * instead of running down to 0.
  */
 export function predictHourFromAnchors(
   anchors: TemperatureAnchor[],
@@ -202,7 +205,14 @@ export function predictHourFromAnchors(
   const first = anchors[0];
   const last = anchors[anchors.length - 1];
 
-  if (anchors.length === 1) return clampNonNegative(first.profile[hour]);
+  let floor_W = Infinity;
+  for (const anchor of anchors) {
+    const value = anchor.profile[hour];
+    if (value !== null && value < floor_W) floor_W = value;
+  }
+  floor_W = floor_W === Infinity ? 0 : Math.max(0, floor_W);
+
+  if (anchors.length === 1) return clampToFloor(first.profile[hour], floor_W);
 
   const span = last.temp_C - first.temp_C;
   const t = Math.min(Math.max(effTemp_C, first.temp_C - span / 2), last.temp_C + span / 2);
@@ -221,17 +231,17 @@ export function predictHourFromAnchors(
 
   const loVal = lo.profile[hour];
   const hiVal = hi.profile[hour];
-  if (loVal === null || hiVal === null) return clampNonNegative(loVal ?? hiVal);
+  if (loVal === null || hiVal === null) return clampToFloor(loVal ?? hiVal, floor_W);
 
   const dt = hi.temp_C - lo.temp_C;
-  if (Math.abs(dt) < 0.5) return clampNonNegative((loVal + hiVal) / 2);
+  if (Math.abs(dt) < 0.5) return clampToFloor((loVal + hiVal) / 2, floor_W);
 
   const frac = (t - lo.temp_C) / dt;
-  return clampNonNegative(loVal + frac * (hiVal - loVal));
+  return clampToFloor(loVal + frac * (hiVal - loVal), floor_W);
 }
 
-function clampNonNegative(value: number | null): number | null {
-  return value === null ? null : Math.max(0, value);
+function clampToFloor(value: number | null, floor_W: number): number | null {
+  return value === null ? null : Math.max(floor_W, value);
 }
 
 /**

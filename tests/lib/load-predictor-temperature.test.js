@@ -151,8 +151,18 @@ describe('predictHourFromAnchors', () => {
     expect(predictHourFromAnchors(anchors, -30, 10)).toBeCloseTo(1400, 10);
   });
 
-  it('never returns negative load', () => {
-    expect(predictHourFromAnchors(anchors, 30, 10)).toBe(0);
+  it('floors extrapolation at the lowest anchor value, not 0', () => {
+    // At 30 °C the line would run to -200, but the mildest anchor's 200 W
+    // is the device's idle draw — the prediction flattens out there.
+    expect(predictHourFromAnchors(anchors, 30, 10)).toBe(200);
+  });
+
+  it('still floors at 0 when the lowest anchor value is 0', () => {
+    const withIdleOff = [
+      { temp_C: 2, profile: Array(24).fill(1000), dayCount: 5 },
+      { temp_C: 12, profile: Array(24).fill(0), dayCount: 5 },
+    ];
+    expect(predictHourFromAnchors(withIdleOff, 30, 10)).toBe(0);
   });
 
   it('returns the profile as-is for a single anchor', () => {
