@@ -192,9 +192,9 @@ function binIntoAnchors(days: DaySummary[], bins: number): TemperatureAnchor[] {
  * beyond the outermost anchors follows the outermost segment, with the
  * temperature clamped to half the anchor span beyond the extremes so a
  * freak forecast cannot run the line off to absurd values, and the result
- * floored at the lowest anchor value for the hour — devices keep a small
- * idle draw at mild temperatures, so extrapolation flattens out there
- * instead of running down to 0.
+ * floored at the lowest value anywhere in the anchors — a device's idle
+ * draw is time- and temperature-independent, so extrapolation flattens
+ * out there instead of running down to 0.
  */
 export function predictHourFromAnchors(
   anchors: TemperatureAnchor[],
@@ -207,8 +207,9 @@ export function predictHourFromAnchors(
 
   let floor_W = Infinity;
   for (const anchor of anchors) {
-    const value = anchor.profile[hour];
-    if (value !== null && value < floor_W) floor_W = value;
+    for (const value of anchor.profile) {
+      if (value !== null && value < floor_W) floor_W = value;
+    }
   }
   floor_W = floor_W === Infinity ? 0 : Math.max(0, floor_W);
 

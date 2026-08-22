@@ -157,6 +157,16 @@ describe('predictHourFromAnchors', () => {
     expect(predictHourFromAnchors(anchors, 30, 10)).toBe(200);
   });
 
+  it('takes the floor over all hours, not just the predicted hour', () => {
+    const profile = Array(24).fill(200);
+    profile[3] = 50; // idle draw shows at hour 3; the floor applies everywhere
+    const withNightIdle = [
+      { temp_C: 2, profile: Array(24).fill(1000), dayCount: 5 },
+      { temp_C: 12, profile, dayCount: 5 },
+    ];
+    expect(predictHourFromAnchors(withNightIdle, 30, 10)).toBe(50);
+  });
+
   it('still floors at 0 when the lowest anchor value is 0', () => {
     const withIdleOff = [
       { temp_C: 2, profile: Array(24).fill(1000), dayCount: 5 },
