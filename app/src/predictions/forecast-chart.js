@@ -68,13 +68,13 @@ export function createForecastChartController({ getForecasts, onAdjustmentsChang
    * the plan tabs make — standard-window boundary from the last plan when one
    * has run, browser-local day-ahead rule otherwise.
    */
-  function resolveForecastView({ load, pv, rawLoad, rawPv }) {
+  function resolveForecastView({ load, pv, rawLoad, rawPv, loadComponents = [] }) {
     const reference = load ?? pv;
     if (!reference?.values?.length) {
       return {
         view: { hasExtended: false, range: 'standard' },
         resolution: resolveFlowsResolution(0),
-        series: { load, pv, rawLoad, rawPv },
+        series: { load, pv, rawLoad, rawPv, loadComponents },
       };
     }
 
@@ -97,6 +97,7 @@ export function createForecastChartController({ getForecasts, onAdjustmentsChang
         pv: sliceForecastToEnd(pv, cutMs),
         rawLoad: sliceForecastToEnd(rawLoad, cutMs),
         rawPv: sliceForecastToEnd(rawPv, cutMs),
+        loadComponents: loadComponents.map(c => ({ ...c, forecast: sliceForecastToEnd(c.forecast, cutMs) })),
       },
     };
   }
@@ -119,7 +120,7 @@ export function createForecastChartController({ getForecasts, onAdjustmentsChang
 
     const raw = getForecasts();
     const { view, resolution, series } = resolveForecastView(raw);
-    const { load, pv, rawLoad, rawPv } = series;
+    const { load, pv, rawLoad, rawPv, loadComponents } = series;
     const stepMinutes = resolution === '60' ? 60 : 15;
     viewToggles?.update({ hasExtended: view.hasExtended, view: view.range, resolution });
 
@@ -140,6 +141,13 @@ export function createForecastChartController({ getForecasts, onAdjustmentsChang
     const pvMap = new Map(pvAgg.timestamps.map((t, i) => [t, pvAgg.values[i]]));
     const rawLoadMap = new Map(rawLoadAgg.timestamps.map((t, i) => [t, rawLoadAgg.values[i]]));
     const rawPvMap = new Map(rawPvAgg.timestamps.map((t, i) => [t, rawPvAgg.values[i]]));
+
+    // Per-predictor load breakdown for the tooltip; only worth showing when
+    // there is more than one component.
+    const componentMaps = (loadComponents?.length > 1 ? loadComponents : []).map(c => {
+      const agg = aggregateForecastKwh(c.forecast, stepMinutes);
+      return { label: c.label, map: new Map(agg.timestamps.map((t, i) => [t, agg.values[i]])) };
+    });
 
     renderChart(canvas, {
       type: 'bar',
@@ -164,6 +172,14 @@ export function createForecastChartController({ getForecasts, onAdjustmentsChang
                 for (const pt of (tooltip.dataPoints ?? [])) {
                   if (pt.raw == null) continue;
                   html += ttRow(pt.dataset.borderColor, pt.dataset.label, `${fmtKwh(pt.raw)} kWh`);
+                  if (pt.dataset.series === 'load') {
+                    for (const { label, map } of componentMaps) {
+                      const value = map.get(allTs[pt.dataIndex]);
+                      if (value != null) {
+                        html += ttRow(toRGBA(pt.dataset.borderColor, 0.45), `· ${escapeHtml(label)}`, `${fmtKwh(value)} kWh`);
+                      }
+                    }
+                  }
                   const rawMap = pt.dataset.series === 'pv' ? rawPvMap : rawLoadMap;
                   const raw = rawMap.get(allTs[pt.dataIndex]);
                   if (raw != null && Math.abs(raw - pt.raw) > 0.001) {

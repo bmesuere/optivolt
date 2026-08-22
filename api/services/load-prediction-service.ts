@@ -50,6 +50,8 @@ interface ValidationRunResult {
 
 export interface ForecastRunResult {
   forecast: ForecastSeries;
+  /** Per-predictor contribution to the summed forecast, for display. */
+  components: Array<{ label: string; forecast: ForecastSeries }>;
   recent: PredictionResult[];
   metrics: { mae: number; rmse: number; mape: number; n: number };
 }
@@ -212,7 +214,7 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
     const endMs = new Date(endIso).getTime();
     const nSlots = Math.round((endMs - startMs) / (15 * 60 * 1000));
     const forecast: ForecastSeries = { start: startIso, step: 15, values: Array(nSlots).fill(fixed_W) };
-    return { forecast, recent: [], metrics: noMetrics };
+    return { forecast, components: [], recent: [], metrics: noMetrics };
   }
 
   const includeRecent = config.includeRecent !== false;
@@ -270,6 +272,25 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
   }));
   const forecastSeries = buildForecastSeries(mappedPoints, startIso, endIso);
 
+  const components = sensorPredictors.map((p, idx) => ({
+    label: `${p.sensor} (${p.type})`,
+    forecast: buildForecastSeries(
+      futureTargets.map((t, i) => ({ time: t.time, value: perPredictorFuture[idx][i].predicted ?? 0 })),
+      startIso,
+      endIso,
+    ),
+  }));
+  if (fixed_W > 0) {
+    components.push({
+      label: 'Fixed',
+      forecast: buildForecastSeries(
+        futureTargets.map(t => ({ time: t.time, value: fixed_W })),
+        startIso,
+        endIso,
+      ),
+    });
+  }
+
   // Recent accuracy: sum per slot across predictors, only where every predictor
   // has an entry; a null component makes the slot's sum null.
   let recent: PredictionResult[] = [];
@@ -306,7 +327,7 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
     ? computeErrorMetrics(recent, r => r.actual, r => r.predicted)
     : noMetrics;
 
-  return { forecast: forecastSeries, recent, metrics };
+  return { forecast: forecastSeries, components, recent, metrics };
 }
 
 /**

@@ -223,6 +223,11 @@ describe('runForecast (temperature predictor)', () => {
     // Constant history at constant temperature → flat profile of 100 W
     expect(result.forecast.values.every(v => v === 125)).toBe(true);
 
+    // Per-predictor breakdown: the temperature term and the fixed term
+    expect(result.components.map(c => c.label)).toEqual(['Heat Pump (temperature)', 'Fixed']);
+    expect(result.components[0].forecast.values.every(v => v === 100)).toBe(true);
+    expect(result.components[1].forecast.values.every(v => v === 25)).toBe(true);
+
     const withPrediction = result.recent.filter(r => r.predicted !== null);
     expect(withPrediction.length).toBeGreaterThan(0);
     expect(withPrediction.every(r => r.actual === 100 && r.predicted === 100)).toBe(true);
