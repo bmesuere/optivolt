@@ -103,7 +103,7 @@ export function computeEffectiveDayTemps(dayMeans: Map<string, number>): Map<str
   return eff;
 }
 
-interface DaySummary {
+export interface TemperatureDaySummary {
   dayOfWeek: number;
   effTemp_C: number;
   /** Load per UTC hour; null where the hour is missing. */
@@ -124,7 +124,7 @@ export function buildTemperatureAnchors(
   const todayKey = dayKey(nowMs);
   const earliestMs = nowMs - lookbackWeeks * 7 * DAY_MS;
 
-  const days = new Map<string, DaySummary>();
+  const days = new Map<string, TemperatureDaySummary>();
   for (const rec of data) {
     if (rec.sensor !== sensor) continue;
     if (rec.time < earliestMs) continue;
@@ -142,9 +142,63 @@ export function buildTemperatureAnchors(
     day.hours[rec.hour] = (day.hours[rec.hour] ?? 0) + rec.value;
   }
 
-  const usable = [...days.values()].filter(d => d.hourCount >= MIN_HOURS_PER_DAY);
+  return anchorsFromDays([...days.values()], dayFilter, bins);
+}
 
-  const byBucket = new Map<string | number, DaySummary[]>();
+/**
+ * Summarize one sensor's full load history into per-day profiles, keyed by
+ * UTC day. One pass over the raw records; the result feeds
+ * buildAnchorsFromDaySummaries() for arbitrary cutoffs without rescanning.
+ */
+export function summarizeTemperatureDays(
+  data: StatRecord[],
+  sensor: string,
+  effTemps: Map<string, number>,
+): Map<string, TemperatureDaySummary> {
+  const days = new Map<string, TemperatureDaySummary>();
+  for (const rec of data) {
+    if (rec.sensor !== sensor) continue;
+    const key = dayKey(rec.time);
+    const effTemp = effTemps.get(key);
+    if (effTemp === undefined) continue;
+
+    let day = days.get(key);
+    if (!day) {
+      day = { dayOfWeek: rec.dayOfWeek, effTemp_C: effTemp, hours: Array(24).fill(null), hourCount: 0 };
+      days.set(key, day);
+    }
+    if (day.hours[rec.hour] === null) day.hourCount += 1;
+    day.hours[rec.hour] = (day.hours[rec.hour] ?? 0) + rec.value;
+  }
+  return days;
+}
+
+/**
+ * Build a temperature model from precomputed day summaries: full days
+ * strictly before `cutoffMs` and within the lookback window. `cutoffMs` must
+ * be a UTC day boundary (the rolling backtests always cut at day starts).
+ */
+export function buildAnchorsFromDaySummaries(
+  summaries: Map<string, TemperatureDaySummary>,
+  { lookbackWeeks, dayFilter, bins }: TemperaturePredictConfig,
+  cutoffMs: number,
+): TemperatureModel {
+  const cutoffKey = dayKey(cutoffMs);
+  const earliestKey = dayKey(cutoffMs - lookbackWeeks * 7 * DAY_MS);
+  const days = [...summaries.entries()]
+    .filter(([key]) => key >= earliestKey && key < cutoffKey)
+    .map(([, day]) => day);
+  return anchorsFromDays(days, dayFilter, bins);
+}
+
+function anchorsFromDays(
+  days: TemperatureDaySummary[],
+  dayFilter: DayFilter,
+  bins: number,
+): TemperatureModel {
+  const usable = days.filter(d => d.hourCount >= MIN_HOURS_PER_DAY);
+
+  const byBucket = new Map<string | number, TemperatureDaySummary[]>();
   for (const day of usable) {
     const bucket = getDayBucket(day.dayOfWeek, dayFilter);
     if (!byBucket.has(bucket)) byBucket.set(bucket, []);
@@ -160,7 +214,7 @@ export function buildTemperatureAnchors(
   return { buckets, pooled: binIntoAnchors(usable, bins) };
 }
 
-function binIntoAnchors(days: DaySummary[], bins: number): TemperatureAnchor[] {
+function binIntoAnchors(days: TemperatureDaySummary[], bins: number): TemperatureAnchor[] {
   const nBins = Math.min(bins, Math.floor(days.length / MIN_DAYS_PER_BIN));
   if (nBins < 1) return [];
 
@@ -250,10 +304,12 @@ function clampToFloor(value: number | null, floor_W: number): number | null {
  * day with the cutoff at that day's start, so each day is predicted from
  * exactly the history available before it — the same rolling information set
  * the historical predictor uses. This keeps type comparisons fair while the
- * target day still never feeds its own anchors.
+ * target day still never feeds its own anchors. Takes precomputed day
+ * summaries (summarizeTemperatureDays) so callers evaluating many configs
+ * scan the raw records only once per sensor.
  */
 export function predictTemperatureLoadRolling(
-  data: StatRecord[],
+  summaries: Map<string, TemperatureDaySummary>,
   config: TemperaturePredictConfig,
   targets: Array<Pick<StatRecord, 'date' | 'time' | 'hour' | 'dayOfWeek'> & { value?: number | null }>,
   effTemps: Map<string, number>,
@@ -263,7 +319,7 @@ export function predictTemperatureLoadRolling(
     const key = dayKey(target.time);
     if (!models.has(key)) {
       const dayStartMs = new Date(key + 'T00:00:00Z').getTime();
-      models.set(key, buildTemperatureAnchors(data, effTemps, config, dayStartMs));
+      models.set(key, buildAnchorsFromDaySummaries(summaries, config, dayStartMs));
     }
   }
   return targets.flatMap(target =>

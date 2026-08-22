@@ -32,6 +32,7 @@ let lastLoadForecast = null;
 let lastPvForecast = null;
 let lastLoadForecastRaw = null;
 let lastPvForecastRaw = null;
+let lastLoadComponents = [];
 
 const forecastChart = createForecastChartController({
   getForecasts: () => ({
@@ -39,6 +40,7 @@ const forecastChart = createForecastChartController({
     pv: lastPvForecast,
     rawLoad: lastLoadForecastRaw,
     rawPv: lastPvForecastRaw,
+    loadComponents: lastLoadComponents,
   }),
   onAdjustmentsChanged: refreshAdjustedForecastsFromRaw,
 });
@@ -81,6 +83,8 @@ export async function reloadStoredForecasts() {
 
     lastLoadForecastRaw = load;
     lastPvForecastRaw = pv;
+    // The persisted series carry no per-predictor breakdown.
+    lastLoadComponents = [];
     refreshAdjustedForecastsFromRaw();
     forecastChart.render();
     if (load) updateStoredForecastMetrics('load', load, lastLoadForecast);
@@ -129,6 +133,7 @@ function updateForecastUI(type, result) {
   if (type === 'load') {
     lastLoadForecastRaw = result.rawForecast ?? result.forecast ?? null;
     lastLoadForecast = result.forecast ?? null;
+    lastLoadComponents = Array.isArray(result.components) ? result.components : [];
     renderLoadAccuracyChart(result.recent);
   } else {
     lastPvForecastRaw = result.rawForecast ?? result.forecast ?? null;

@@ -6,6 +6,7 @@ import {
   predictHourFromAnchors,
   predictTemperatureLoad,
   predictTemperatureLoadRolling,
+  summarizeTemperatureDays,
   dayKey,
 } from '../../lib/load-predictor-temperature.ts';
 
@@ -236,8 +237,9 @@ describe('predictTemperatureLoadRolling', () => {
     const effTemps = new Map(days.map(day => [day, 10]));
 
     const targetFor = day => data.find(d => dayKey(d.time) === day && d.hour === 12);
+    const summaries = summarizeTemperatureDays(data, 'Heat Pump', effTemps);
     const results = predictTemperatureLoadRolling(
-      data, cfg, [targetFor('2026-04-04'), targetFor('2026-04-09')], effTemps);
+      summaries, cfg, [targetFor('2026-04-04'), targetFor('2026-04-09')], effTemps);
 
     // The first 500 W day is predicted from 100 W days only — its own values
     // never feed its anchors — while five days later the rolling lookback
