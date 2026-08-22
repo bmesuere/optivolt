@@ -5,6 +5,7 @@ import {
   buildTemperatureAnchors,
   predictHourFromAnchors,
   predictTemperatureLoad,
+  predictTemperatureLoadRolling,
   dayKey,
 } from '../../lib/load-predictor-temperature.ts';
 
@@ -222,5 +223,27 @@ describe('predictTemperatureLoad', () => {
 
     const [result] = predictTemperatureLoad(model, 'all', targets, new Map());
     expect(result.predicted).toBeNull();
+  });
+});
+
+describe('predictTemperatureLoadRolling', () => {
+  it('predicts each day from only the history before it', () => {
+    // 100 W through 2026-04-03, 500 W from 2026-04-04 on, constant temp.
+    const cfg = { sensor: 'Heat Pump', lookbackWeeks: 1, dayFilter: 'all', bins: 4 };
+    const days = dayRange('2026-04-10', 12); // 2026-03-29 .. 2026-04-09
+    const data = days.flatMap(day =>
+      loadForDay(day, 'Heat Pump', () => (day < '2026-04-04' ? 100 : 500)));
+    const effTemps = new Map(days.map(day => [day, 10]));
+
+    const targetFor = day => data.find(d => dayKey(d.time) === day && d.hour === 12);
+    const results = predictTemperatureLoadRolling(
+      data, cfg, [targetFor('2026-04-04'), targetFor('2026-04-09')], effTemps);
+
+    // The first 500 W day is predicted from 100 W days only — its own values
+    // never feed its anchors — while five days later the rolling lookback
+    // has caught up with the new level.
+    expect(results[0].predicted).toBe(100);
+    expect(results[0].actual).toBe(500);
+    expect(results[1].predicted).toBe(500);
   });
 });

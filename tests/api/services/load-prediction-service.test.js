@@ -208,8 +208,8 @@ describe('runForecast (temperature predictor)', () => {
   });
 
   it('forecasts from temperature anchors and sums with fixed predictors', async () => {
-    // 14 days of history: the recent-accuracy models are cut off a week ago,
-    // so they need enough full days before that cutoff to form a bin.
+    // 14 days of history: the earliest scored day's rolling backtest model
+    // needs enough full days before it to form a bin.
     fetchHaStats.mockResolvedValue({ 'sensor.heatpump': makeHourlyHistory(100, 14) });
     fetchTemperatureSeries.mockResolvedValue(makeTemps(10));
 
@@ -237,9 +237,12 @@ describe('runForecast (temperature predictor)', () => {
     expect(forecastDays).toBeGreaterThanOrEqual(2);
   });
 
-  it('scores recent accuracy out of sample', async () => {
-    // 100 W before the scored week, 200 W during it: the backtest models are
-    // cut off at the start of the week, so they must still predict 100 W.
+  it('scores recent accuracy out of sample with a rolling per-day cutoff', async () => {
+    // 100 W before the scored week, 200 W during it. Each scored day's
+    // anchors are cut off at that day's start (like the historical
+    // predictor's rolling lookback): the first scored days still predict
+    // 100 W — a day never sees its own values — while by the end of the
+    // week the rolling lookback has caught up with the new level.
     const recentStartMs = NOW.getTime() - 7 * 24 * HOUR_MS;
     const nowHour = Math.floor(NOW.getTime() / HOUR_MS) * HOUR_MS;
     const readings = [];
@@ -254,8 +257,13 @@ describe('runForecast (temperature predictor)', () => {
 
     const scored = result.recent.filter(r => r.predicted !== null && r.actual !== null);
     expect(scored.length).toBeGreaterThan(0);
-    expect(scored.every(r => r.predicted === 100 && r.actual === 200)).toBe(true);
-    expect(result.metrics.mae).toBe(100);
+    expect(scored.every(r => r.actual === 200)).toBe(true);
+
+    const onDay = day => scored.filter(r => new Date(r.time).toISOString().startsWith(day));
+    expect(onDay('2026-03-26').every(r => r.predicted === 100)).toBe(true);
+    expect(onDay('2026-03-26').length).toBeGreaterThan(0);
+    expect(onDay('2026-03-31').every(r => r.predicted === 200)).toBe(true);
+    expect(onDay('2026-03-31').length).toBeGreaterThan(0);
   });
 
   it('rejects when no coordinates are configured', async () => {

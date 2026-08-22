@@ -246,6 +246,32 @@ function clampToFloor(value: number | null, floor_W: number): number | null {
 }
 
 /**
+ * Backtest variant of predictTemperatureLoad: anchors are rebuilt per target
+ * day with the cutoff at that day's start, so each day is predicted from
+ * exactly the history available before it — the same rolling information set
+ * the historical predictor uses. This keeps type comparisons fair while the
+ * target day still never feeds its own anchors.
+ */
+export function predictTemperatureLoadRolling(
+  data: StatRecord[],
+  config: TemperaturePredictConfig,
+  targets: Array<Pick<StatRecord, 'date' | 'time' | 'hour' | 'dayOfWeek'> & { value?: number | null }>,
+  effTemps: Map<string, number>,
+): PredictionResult[] {
+  const models = new Map<string, TemperatureModel>();
+  for (const target of targets) {
+    const key = dayKey(target.time);
+    if (!models.has(key)) {
+      const dayStartMs = new Date(key + 'T00:00:00Z').getTime();
+      models.set(key, buildTemperatureAnchors(data, effTemps, config, dayStartMs));
+    }
+  }
+  return targets.flatMap(target =>
+    predictTemperatureLoad(models.get(dayKey(target.time))!, config.dayFilter, [target], effTemps),
+  );
+}
+
+/**
  * Generate all temperature-predictor configurations to evaluate in a
  * validation run, mirroring generateAllConfigs() for historical predictors.
  * The lookbacks stay within the 8-week validation data fetch.

@@ -19,6 +19,7 @@ import {
   computeEffectiveDayTemps,
   generateTemperatureConfigs,
   predictTemperatureLoad,
+  predictTemperatureLoadRolling,
 } from '../../lib/load-predictor-temperature.ts';
 import { fetchTemperatureSeries } from './open-meteo-client.ts';
 import type { HistoricalLoadPredictor, PredictionRunConfig, TemperatureLoadPredictor } from '../types.ts';
@@ -121,9 +122,11 @@ export async function runValidation(config: PredictionRunConfig): Promise<Valida
 
 /**
  * Evaluate the temperature-predictor grid against the validation window.
- * Anchors are built as of the window start, so the validated days never feed
- * their own anchors. Skipped (with a warning) when no coordinates are
- * configured or Open-Meteo is unavailable — historical results still stand.
+ * Anchors are rebuilt per validated day with the cutoff at that day's start
+ * (rolling, like the historical predictor's per-day lookback), so a day never
+ * feeds its own anchors and both types are scored on the same information
+ * set. Skipped (with a warning) when no coordinates are configured or
+ * Open-Meteo is unavailable — historical results still stand.
  */
 async function runTemperatureValidation(
   config: PredictionRunConfig,
@@ -150,11 +153,10 @@ async function runTemperatureValidation(
 
   const results: ValidationEntry[] = [];
   for (const cfg of generateTemperatureConfigs(sensorNames)) {
-    const model = buildTemperatureAnchors(data, effTemps, cfg, windowStartMs);
     const targets = data.filter(
       d => d.sensor === cfg.sensor && d.time >= windowStartMs && d.time < windowEndMs
     );
-    const predictions = predictTemperatureLoad(model, cfg.dayFilter, targets, effTemps);
+    const predictions = predictTemperatureLoadRolling(data, cfg, targets, effTemps);
     const metrics = validate(predictions, validationWindow);
 
     results.push({
@@ -228,18 +230,16 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
 
   // Temperature anchors are rebuilt from raw history on every run (stateless,
   // like the PV models).
-  const buildModels = (cutoffMs: number) => new Map(
-    temperature.map(p => [p, buildTemperatureAnchors(data, effTemps, p, cutoffMs)]),
+  const temperatureModels = new Map(
+    temperature.map(p => [p, buildTemperatureAnchors(data, effTemps, p, nowMs)]),
   );
-  const temperatureModels = buildModels(nowMs);
 
   const predictFor = (
     p: HistoricalLoadPredictor | TemperatureLoadPredictor,
     targets: PredictTarget[],
-    models = temperatureModels,
   ) => p.type === 'historical'
     ? predict(data, p, targets)
-    : predictTemperatureLoad(models.get(p)!, p.dayFilter, targets, effTemps);
+    : predictTemperatureLoad(temperatureModels.get(p)!, p.dayFilter, targets, effTemps);
 
   const futureTargets: PredictTarget[] = [];
   for (let t = futureStart; t < futureEnd; t += 3600000) {
@@ -266,12 +266,15 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
   // has an entry; a null component makes the slot's sum null.
   let recent: PredictionResult[] = [];
   if (includeRecent) {
-    // Temperature models for the backtest are cut off at the start of the
-    // scored week so the scored days never feed their own anchors.
-    const recentModels = buildModels(recentStart);
+    // Temperature anchors for the backtest are rebuilt per scored day with
+    // the cutoff at that day's start — the same rolling information set the
+    // historical predictor uses, and a day never feeds its own anchors.
     const recentMaps = sensorPredictors.map(p => {
       const recentTargets = data.filter(d => d.sensor === p.sensor && d.time >= recentStart && d.time <= nowMs);
-      return new Map(predictFor(p, recentTargets, recentModels).map(r => [r.time, r]));
+      const results = p.type === 'historical'
+        ? predict(data, p, recentTargets)
+        : predictTemperatureLoadRolling(data, p, recentTargets, effTemps);
+      return new Map(results.map(r => [r.time, r]));
     });
     const times = [...recentMaps[0].keys()]
       .filter(time => recentMaps.every(m => m.has(time)))
