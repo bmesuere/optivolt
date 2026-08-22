@@ -20,6 +20,7 @@ import {
   generateTemperatureConfigs,
   predictTemperatureLoad,
   predictTemperatureLoadRolling,
+  summarizeTemperatureDays,
 } from '../../lib/load-predictor-temperature.ts';
 import { fetchTemperatureSeries } from './open-meteo-client.ts';
 import type { HistoricalLoadPredictor, PredictionRunConfig, TemperatureLoadPredictor } from '../types.ts';
@@ -87,18 +88,19 @@ export async function runValidation(config: PredictionRunConfig): Promise<Valida
   const sensorNames = getSensorNames(data);
   const allConfigs = generateAllConfigs(sensorNames);
 
+  // validationWindow is always set by loadPredictionConfig()
+  const windowStart = new Date(validationWindow!.start).getTime();
+  const windowEnd = new Date(validationWindow!.end).getTime();
+
   const results: ValidationEntry[] = [];
   for (const cfg of allConfigs) {
-    const predictions = predict(data, cfg);
-    // validationWindow is always set by loadPredictionConfig()
-    const metrics = validate(predictions, validationWindow!);
-
-    const windowStart = new Date(validationWindow!.start).getTime();
-    const windowEnd = new Date(validationWindow!.end).getTime();
-
-    const validationPredictions = predictions.filter(
-      p => p.time >= windowStart && p.time < windowEnd
+    // Predict only the scored window — predicting the full history and
+    // filtering afterwards did ~9x the work for the same metrics.
+    const targets = data.filter(
+      d => d.sensor === cfg.sensor && d.time >= windowStart && d.time < windowEnd
     );
+    const validationPredictions = predict(data, cfg, targets);
+    const metrics = validate(validationPredictions, validationWindow!);
 
     results.push({
       type: 'historical',
@@ -151,12 +153,18 @@ async function runTemperatureValidation(
     return [];
   }
 
+  // One raw-record scan per sensor; the config grid then works on the
+  // per-day summaries only.
+  const summariesBySensor = new Map(
+    sensorNames.map(s => [s, summarizeTemperatureDays(data, s, effTemps)]),
+  );
+
   const results: ValidationEntry[] = [];
   for (const cfg of generateTemperatureConfigs(sensorNames)) {
     const targets = data.filter(
       d => d.sensor === cfg.sensor && d.time >= windowStartMs && d.time < windowEndMs
     );
-    const predictions = predictTemperatureLoadRolling(data, cfg, targets, effTemps);
+    const predictions = predictTemperatureLoadRolling(summariesBySensor.get(cfg.sensor)!, cfg, targets, effTemps);
     const metrics = validate(predictions, validationWindow);
 
     results.push({
@@ -273,7 +281,7 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
       const recentTargets = data.filter(d => d.sensor === p.sensor && d.time >= recentStart && d.time <= nowMs);
       const results = p.type === 'historical'
         ? predict(data, p, recentTargets)
-        : predictTemperatureLoadRolling(data, p, recentTargets, effTemps);
+        : predictTemperatureLoadRolling(summarizeTemperatureDays(data, p.sensor, effTemps), p, recentTargets, effTemps);
       return new Map(results.map(r => [r.time, r]));
     });
     const times = [...recentMaps[0].keys()]
