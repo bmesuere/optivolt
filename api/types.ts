@@ -173,8 +173,18 @@ export interface FixedLoadPredictor {
   load_W: number;
 }
 
+/** Predicts a sensor's load from the outside-temperature forecast (e.g. a heat pump). */
+export interface TemperatureLoadPredictor {
+  type: 'temperature';
+  sensor: string;
+  lookbackWeeks: number;
+  dayFilter: DayFilter;
+  /** Number of temperature quantile bins per day bucket (anchors to interpolate between). */
+  bins: number;
+}
+
 /** One term of the load forecast; the total forecast is the per-slot sum over all predictors. */
-export type LoadPredictor = HistoricalLoadPredictor | FixedLoadPredictor;
+export type LoadPredictor = HistoricalLoadPredictor | FixedLoadPredictor | TemperatureLoadPredictor;
 
 export interface PredictionConfig {
   /** Persisted-file schema version; stamped by the store on save. */

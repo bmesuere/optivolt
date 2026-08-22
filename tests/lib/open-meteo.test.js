@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   buildArchiveUrl,
   buildForecastUrl,
+  buildTemperatureUrl,
   parseIrradianceResponse,
   parseMinutely15Response,
   parseForecastResponse,
+  parseTemperatureResponse,
   expandHourlyTo15Min,
 } from '../../lib/open-meteo.ts';
 
@@ -321,5 +323,49 @@ describe('expandHourlyTo15Min', () => {
 
   it('handles empty input', () => {
     expect(expandHourlyTo15Min([])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildTemperatureUrl / parseTemperatureResponse
+// ---------------------------------------------------------------------------
+
+describe('buildTemperatureUrl', () => {
+  it('requests hourly temperature_2m in GMT without a model override', () => {
+    const url = buildTemperatureUrl({ latitude: 51.05, longitude: 3.71, pastDays: 58, forecastDays: 3 });
+    expect(url).toContain('https://api.open-meteo.com/v1/forecast');
+    expect(url).toContain('latitude=51.05');
+    expect(url).toContain('longitude=3.71');
+    expect(url).toContain('hourly=temperature_2m');
+    expect(url).toContain('timezone=GMT');
+    expect(url).toContain('past_days=58');
+    expect(url).toContain('forecast_days=3');
+    expect(url).not.toContain('models=');
+  });
+});
+
+describe('parseTemperatureResponse', () => {
+  it('parses hourly temperatures at the labeled time without alignment shift', () => {
+    const records = parseTemperatureResponse({
+      hourly: {
+        time: ['2026-01-10T00:00', '2026-01-10T01:00'],
+        temperature_2m: [4.2, -1.5],
+      },
+    });
+    expect(records).toEqual([
+      { time: new Date('2026-01-10T00:00:00Z').getTime(), temp_C: 4.2 },
+      { time: new Date('2026-01-10T01:00:00Z').getTime(), temp_C: -1.5 },
+    ]);
+  });
+
+  it('skips null temperatures', () => {
+    const records = parseTemperatureResponse({
+      hourly: {
+        time: ['2026-01-10T00:00', '2026-01-10T01:00'],
+        temperature_2m: [null, 3],
+      },
+    });
+    expect(records).toHaveLength(1);
+    expect(records[0].temp_C).toBe(3);
   });
 });

@@ -13,16 +13,27 @@ import {
   generateAllConfigs,
 } from '../../lib/load-predictor-historical.ts';
 import type { DayFilter, Aggregation } from '../../lib/load-predictor-historical.ts';
-import type { PredictionRunConfig } from '../types.ts';
+import {
+  buildTemperatureAnchors,
+  computeDayMeanTemps,
+  computeEffectiveDayTemps,
+  generateTemperatureConfigs,
+  predictTemperatureLoad,
+  predictTemperatureLoadRolling,
+} from '../../lib/load-predictor-temperature.ts';
+import { fetchTemperatureSeries } from './open-meteo-client.ts';
+import type { HistoricalLoadPredictor, PredictionRunConfig, TemperatureLoadPredictor } from '../types.ts';
 import { getForecastTimeRange, buildForecastSeries, computeErrorMetrics, type ForecastSeries, type PredictionResult } from '../../lib/time-series-utils.ts';
 
 type PredictTarget = Pick<StatRecord, 'date' | 'time' | 'hour' | 'dayOfWeek'> & { value?: number | null };
 
 interface ValidationEntry {
+  type: 'historical' | 'temperature';
   sensor: string;
   lookbackWeeks: number;
   dayFilter: DayFilter;
-  aggregation: Aggregation;
+  aggregation?: Aggregation;
+  bins?: number;
   mae: number;
   rmse: number;
   mape: number;
@@ -40,6 +51,18 @@ export interface ForecastRunResult {
   forecast: ForecastSeries;
   recent: PredictionResult[];
   metrics: { mae: number; rmse: number; mape: number; n: number };
+}
+
+/**
+ * True when pvConfig carries usable coordinates. (0, 0) is rejected as the
+ * "cleared fields" sentinel older versions of the config form saved.
+ */
+function hasCoordinates(
+  pvConfig: { latitude?: number | null; longitude?: number | null } | undefined,
+): boolean {
+  const { latitude, longitude } = pvConfig ?? {};
+  if (latitude == null || longitude == null || Number.isNaN(latitude) || Number.isNaN(longitude)) return false;
+  return latitude !== 0 || longitude !== 0;
 }
 
 /**
@@ -78,6 +101,7 @@ export async function runValidation(config: PredictionRunConfig): Promise<Valida
     );
 
     results.push({
+      type: 'historical',
       sensor: cfg.sensor,
       lookbackWeeks: cfg.lookbackWeeks,
       dayFilter: cfg.dayFilter,
@@ -91,7 +115,65 @@ export async function runValidation(config: PredictionRunConfig): Promise<Valida
     });
   }
 
+  results.push(...await runTemperatureValidation(config, data, sensorNames, MAX_LOOKBACK_WEEKS));
+
   return { sensorNames, results };
+}
+
+/**
+ * Evaluate the temperature-predictor grid against the validation window.
+ * Anchors are rebuilt per validated day with the cutoff at that day's start
+ * (rolling, like the historical predictor's per-day lookback), so a day never
+ * feeds its own anchors and both types are scored on the same information
+ * set. Skipped (with a warning) when no coordinates are configured or
+ * Open-Meteo is unavailable — historical results still stand.
+ */
+async function runTemperatureValidation(
+  config: PredictionRunConfig,
+  data: ReturnType<typeof postprocess>,
+  sensorNames: string[],
+  maxLookbackWeeks: number,
+): Promise<ValidationEntry[]> {
+  if (!hasCoordinates(config.pvConfig)) return [];
+  const { latitude, longitude } = config.pvConfig!;
+
+  const validationWindow = config.validationWindow!;
+  const windowStartMs = new Date(validationWindow.start).getTime();
+  const windowEndMs = new Date(validationWindow.end).getTime();
+
+  let effTemps: Map<string, number>;
+  try {
+    const pastDays = (maxLookbackWeeks + 1) * 7 + 2;
+    const temps = await fetchTemperatureSeries(latitude, longitude, pastDays, 2);
+    effTemps = computeEffectiveDayTemps(computeDayMeanTemps(temps));
+  } catch (err) {
+    console.warn('[predict] temperature validation skipped:', err instanceof Error ? err.message : err);
+    return [];
+  }
+
+  const results: ValidationEntry[] = [];
+  for (const cfg of generateTemperatureConfigs(sensorNames)) {
+    const targets = data.filter(
+      d => d.sensor === cfg.sensor && d.time >= windowStartMs && d.time < windowEndMs
+    );
+    const predictions = predictTemperatureLoadRolling(data, cfg, targets, effTemps);
+    const metrics = validate(predictions, validationWindow);
+
+    results.push({
+      type: 'temperature',
+      sensor: cfg.sensor,
+      lookbackWeeks: cfg.lookbackWeeks,
+      dayFilter: cfg.dayFilter,
+      bins: cfg.bins,
+      mae: metrics.mae,
+      rmse: metrics.rmse,
+      mape: metrics.mape,
+      n: metrics.n,
+      nSkipped: metrics.nSkipped,
+      validationPredictions: predictions,
+    });
+  }
+  return results;
 }
 
 /**
@@ -106,6 +188,7 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
   const predictors = config.predictors ?? [];
 
   const historical = predictors.filter(p => p.type === 'historical');
+  const temperature = predictors.filter(p => p.type === 'temperature');
   const fixed_W = predictors
     .filter(p => p.type === 'fixed')
     .reduce((sum, p) => sum + p.load_W, 0);
@@ -114,7 +197,9 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
   const { startIso, endIso } = getForecastTimeRange(nowMs, config.extendedHorizonDays ?? 0);
   const noMetrics = { mae: NaN, rmse: NaN, mape: NaN, n: 0 };
 
-  if (historical.length === 0) {
+  const sensorPredictors: Array<HistoricalLoadPredictor | TemperatureLoadPredictor> = [...historical, ...temperature];
+
+  if (sensorPredictors.length === 0) {
     const startMs = new Date(startIso).getTime();
     const endMs = new Date(endIso).getTime();
     const nSlots = Math.round((endMs - startMs) / (15 * 60 * 1000));
@@ -124,21 +209,37 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
 
   const includeRecent = config.includeRecent !== false;
   const extraWeeks = includeRecent ? 1 : 0;
-  const maxLookbackWeeks = Math.max(...historical.map(p => p.lookbackWeeks));
+  const maxLookbackWeeks = Math.max(...sensorPredictors.map(p => p.lookbackWeeks));
   const startTime = new Date(nowMs - (maxLookbackWeeks + extraWeeks) * 7 * 24 * 60 * 60 * 1000).toISOString();
-
-  const rawData = await fetchHaStats({
-    haUrl,
-    haToken,
-    entityIds: sensors.map(s => s.id),
-    startTime,
-  });
-
-  const data = postprocess(rawData, sensors, derived);
 
   const recentStart = nowMs - 7 * 24 * 60 * 60 * 1000;
   const futureStart = Math.floor(nowMs / 3600000) * 3600000;
   const futureEnd = new Date(endIso).getTime();
+
+  const [rawData, effTemps] = await Promise.all([
+    fetchHaStats({
+      haUrl,
+      haToken,
+      entityIds: sensors.map(s => s.id),
+      startTime,
+    }),
+    fetchEffectiveDayTemps(config, temperature, { nowMs, extraWeeks, futureEnd }),
+  ]);
+
+  const data = postprocess(rawData, sensors, derived);
+
+  // Temperature anchors are rebuilt from raw history on every run (stateless,
+  // like the PV models).
+  const temperatureModels = new Map(
+    temperature.map(p => [p, buildTemperatureAnchors(data, effTemps, p, nowMs)]),
+  );
+
+  const predictFor = (
+    p: HistoricalLoadPredictor | TemperatureLoadPredictor,
+    targets: PredictTarget[],
+  ) => p.type === 'historical'
+    ? predict(data, p, targets)
+    : predictTemperatureLoad(temperatureModels.get(p)!, p.dayFilter, targets, effTemps);
 
   const futureTargets: PredictTarget[] = [];
   for (let t = futureStart; t < futureEnd; t += 3600000) {
@@ -154,7 +255,7 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
 
   // Forecast: per-slot sum of each predictor's future predictions (null → 0),
   // plus the fixed terms.
-  const perPredictorFuture = historical.map(p => predict(data, p, futureTargets));
+  const perPredictorFuture = sensorPredictors.map(p => predictFor(p, futureTargets));
   const mappedPoints = futureTargets.map((t, i) => ({
     time: t.time,
     value: fixed_W + perPredictorFuture.reduce((sum, predictions) => sum + (predictions[i].predicted ?? 0), 0),
@@ -165,9 +266,15 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
   // has an entry; a null component makes the slot's sum null.
   let recent: PredictionResult[] = [];
   if (includeRecent) {
-    const recentMaps = historical.map(p => {
+    // Temperature anchors for the backtest are rebuilt per scored day with
+    // the cutoff at that day's start — the same rolling information set the
+    // historical predictor uses, and a day never feeds its own anchors.
+    const recentMaps = sensorPredictors.map(p => {
       const recentTargets = data.filter(d => d.sensor === p.sensor && d.time >= recentStart && d.time <= nowMs);
-      return new Map(predict(data, p, recentTargets).map(r => [r.time, r]));
+      const results = p.type === 'historical'
+        ? predict(data, p, recentTargets)
+        : predictTemperatureLoadRolling(data, p, recentTargets, effTemps);
+      return new Map(results.map(r => [r.time, r]));
     });
     const times = [...recentMaps[0].keys()]
       .filter(time => recentMaps.every(m => m.has(time)))
@@ -192,4 +299,32 @@ export async function runForecast(config: PredictionRunConfig): Promise<Forecast
     : noMetrics;
 
   return { forecast: forecastSeries, recent, metrics };
+}
+
+/**
+ * Fetch outside temperatures covering the temperature predictors' lookback
+ * (plus 2 days for the inertia blend) through the forecast window, reduced
+ * to effective per-day temperatures. Empty map when no temperature
+ * predictors are configured.
+ */
+async function fetchEffectiveDayTemps(
+  config: PredictionRunConfig,
+  temperature: TemperatureLoadPredictor[],
+  { nowMs, extraWeeks, futureEnd }: { nowMs: number; extraWeeks: number; futureEnd: number },
+): Promise<Map<string, number>> {
+  if (temperature.length === 0) return new Map();
+
+  if (!hasCoordinates(config.pvConfig)) {
+    throw new Error('temperature predictor requires latitude/longitude in the PV forecast settings');
+  }
+  const { latitude, longitude } = config.pvConfig!;
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const maxLookbackWeeks = Math.max(...temperature.map(p => p.lookbackWeeks));
+  const pastDays = (maxLookbackWeeks + extraWeeks) * 7 + 2;
+  const todayStart = Math.floor(nowMs / DAY_MS) * DAY_MS;
+  const forecastDays = Math.max(2, Math.ceil((futureEnd - todayStart) / DAY_MS));
+
+  const temps = await fetchTemperatureSeries(latitude, longitude, pastDays, forecastDays);
+  return computeEffectiveDayTemps(computeDayMeanTemps(temps));
 }

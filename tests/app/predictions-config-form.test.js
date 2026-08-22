@@ -326,6 +326,46 @@ describe('prediction config form', () => {
     expect(secondOptions).not.toContain('Residual Load');
   });
 
+  it('keeps cleared coordinate fields null instead of saving 0', () => {
+    applyPredictionConfigToForm(baseConfig);
+    document.getElementById('pred-pv-lat').value = '';
+    document.getElementById('pred-pv-lon').value = '';
+
+    const values = readPredictionFormValues();
+
+    expect(values.pvConfig.latitude).toBeNull();
+    expect(values.pvConfig.longitude).toBeNull();
+  });
+
+  it('renders a temperature card with bins and sanitizes its values', async () => {
+    applyPredictionConfigToForm({
+      ...baseConfig,
+      predictors: [{ type: 'temperature', sensor: 'Total Load', lookbackWeeks: 8, dayFilter: 'weekday-weekend', bins: 4 }],
+    });
+
+    const card = document.querySelector('[data-predictor-index="0"]');
+    expect(card.querySelector('[data-field="type"]').value).toBe('temperature');
+    expect(card.querySelector('[data-field="sensor"]').value).toBe('Total Load');
+    expect(card.querySelector('[data-field="bins"]').value).toBe('4');
+    expect(card.querySelector('[data-field="aggregation"]')).toBeNull();
+
+    const values = readPredictionFormValues();
+    expect(values.predictors).toEqual([
+      { type: 'temperature', sensor: 'Total Load', lookbackWeeks: 8, dayFilter: 'weekday-weekend', bins: 4 },
+    ]);
+  });
+
+  it('clamps out-of-range temperature parameters to defaults on read', () => {
+    applyPredictionConfigToForm({
+      ...baseConfig,
+      predictors: [{ type: 'temperature', sensor: 'Total Load', lookbackWeeks: 99, dayFilter: 'weekday-weekend', bins: 0 }],
+    });
+
+    const values = readPredictionFormValues();
+    expect(values.predictors[0].lookbackWeeks).toBe(8);
+    expect(values.predictors[0].bins).toBe(4);
+  });
+
   it('edits a card field and saves the updated predictor', async () => {
     applyPredictionConfigToForm(baseConfig);
     savePredictionConfig.mockResolvedValue({});
@@ -398,6 +438,22 @@ describe('prediction config form', () => {
     const saved = savePredictionConfig.mock.calls[1][0].predictors;
     expect(saved).toHaveLength(3);
     expect(saved[2]).toEqual({ type: 'historical', sensor: 'Total Load', lookbackWeeks: 2, dayFilter: 'same', aggregation: 'mean' });
+  });
+
+  it('applyValidatedPredictor matches by type, so a temperature row never overwrites a historical predictor', async () => {
+    applyPredictionConfigToForm(baseConfig);
+    savePredictionConfig.mockResolvedValue({});
+
+    await applyValidatedPredictor({ type: 'temperature', sensor: 'Grid Import', lookbackWeeks: 6, dayFilter: 'weekday-weekend', bins: 3 });
+    const saved = savePredictionConfig.mock.calls[0][0].predictors;
+    expect(saved).toHaveLength(3);
+    expect(saved[0]).toMatchObject({ type: 'historical', sensor: 'Grid Import', lookbackWeeks: 3 });
+    expect(saved[2]).toEqual({ type: 'temperature', sensor: 'Grid Import', lookbackWeeks: 6, dayFilter: 'weekday-weekend', bins: 3 });
+
+    await applyValidatedPredictor({ type: 'temperature', sensor: 'Grid Import', lookbackWeeks: 8, dayFilter: 'all', bins: 4 });
+    const updated = savePredictionConfig.mock.calls[1][0].predictors;
+    expect(updated).toHaveLength(3);
+    expect(updated[2]).toEqual({ type: 'temperature', sensor: 'Grid Import', lookbackWeeks: 8, dayFilter: 'all', bins: 4 });
   });
 
   it('wires forecast buttons and ignores unowned inputs', async () => {

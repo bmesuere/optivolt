@@ -124,9 +124,10 @@ function renderMetricsTable(results, sensorName, deps) {
     const tr = document.createElement('tr');
     tr.className = 'border-t border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/50';
     tr.innerHTML = `
+      <td class="px-3 py-2 text-xs">${row.type === 'temperature' ? 'temperature' : 'historical'}</td>
       <td class="px-3 py-2 font-mono text-xs">${row.lookbackWeeks}w</td>
       <td class="px-3 py-2 text-xs">${row.dayFilter}</td>
-      <td class="px-3 py-2 text-xs">${row.aggregation}</td>
+      <td class="px-3 py-2 text-xs">${rowParams(row)}</td>
       <td class="px-3 py-2 font-mono text-xs text-right">${isNaN(row.mae) ? '—' : row.mae.toFixed(1)}</td>
       <td class="px-3 py-2 font-mono text-xs text-right">${isNaN(row.rmse) ? '—' : row.rmse.toFixed(1)}</td>
       <td class="px-3 py-2 font-mono text-xs text-right">${isNaN(row.mape) ? '—' : row.mape.toFixed(1)}</td>
@@ -146,15 +147,21 @@ function renderMetricsTable(results, sensorName, deps) {
   }
 }
 
+function rowParams(row) {
+  return row.type === 'temperature' ? `${row.bins} bins` : row.aggregation;
+}
+
+/** The predictor a validation row describes, in config shape. */
+function rowPredictor(row) {
+  return row.type === 'temperature'
+    ? { type: 'temperature', sensor: row.sensor, lookbackWeeks: row.lookbackWeeks, dayFilter: row.dayFilter, bins: row.bins }
+    : { type: 'historical', sensor: row.sensor, lookbackWeeks: row.lookbackWeeks, dayFilter: row.dayFilter, aggregation: row.aggregation };
+}
+
 async function onUseConfig(row, { applyValidatedPredictor, setComparisonStatus }) {
   try {
-    await applyValidatedPredictor({
-      sensor: row.sensor,
-      lookbackWeeks: row.lookbackWeeks,
-      dayFilter: row.dayFilter,
-      aggregation: row.aggregation,
-    });
-    setComparisonStatus(`Predictor updated: ${row.sensor} / ${row.lookbackWeeks}w / ${row.dayFilter} / ${row.aggregation}`);
+    await applyValidatedPredictor(rowPredictor(row));
+    setComparisonStatus(`Predictor updated: ${row.sensor} / ${rowPredictor(row).type} / ${row.lookbackWeeks}w / ${row.dayFilter} / ${rowParams(row)}`);
   } catch (err) {
     setComparisonStatus(`Failed to save predictor: ${err.message}`, true);
   }
@@ -288,6 +295,6 @@ function onShowChart(row) {
 
   const title = document.getElementById('pred-chart-title');
   if (title) {
-    title.textContent = `Accuracy: ${row.sensor} / ${row.lookbackWeeks}w / ${row.dayFilter} / ${row.aggregation}`;
+    title.textContent = `Accuracy: ${row.sensor} / ${row.type ?? 'historical'} / ${row.lookbackWeeks}w / ${row.dayFilter} / ${rowParams(row)}`;
   }
 }

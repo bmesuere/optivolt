@@ -149,10 +149,17 @@ async function savePredictionFormSilently() {
 }
 
 export function readPredictionFormValues() {
+  // Blank coordinate fields stay null so clearing them disables the
+  // location-based forecasts instead of pointing them at (0, 0).
+  const coordOrNull = (id) => {
+    const value = parseFloat(getVal(id));
+    return Number.isFinite(value) ? value : null;
+  };
+
   const pvConfig = {
     pvSensor: getVal('pred-pv-sensor') || 'Solar Generation',
-    latitude: parseFloat(getVal('pred-pv-lat')) || 0,
-    longitude: parseFloat(getVal('pred-pv-lon')) || 0,
+    latitude: coordOrNull('pred-pv-lat'),
+    longitude: coordOrNull('pred-pv-lon'),
     historyDays: parseInt(getVal('pred-pv-history'), 10) || 14,
     pvMode: getVal('pred-pv-mode') || 'hourly',
     pvModel: getVal('pred-pv-model') || 'clearSkyRatio',
@@ -183,25 +190,29 @@ function sanitizeDerived(d) {
 }
 
 /**
- * Update the historical predictor for the given sensor with validated
- * parameters, or add one if none targets that sensor yet. Used by the
- * validation table's "Use" button.
+ * Update the predictor of this type targeting this sensor with validated
+ * parameters, or add one if none exists yet. Used by the validation
+ * table's "Use" button. `predictor` is a full config-shape predictor
+ * ({ type: 'historical'|'temperature', sensor, ...params }).
  */
-export async function applyValidatedPredictor({ sensor, lookbackWeeks, dayFilter, aggregation }) {
-  const existing = predictors.find(p => p.type === 'historical' && p.sensor === sensor);
+export async function applyValidatedPredictor(predictor) {
+  const type = predictor.type ?? 'historical';
+  const existing = predictors.find(p => p.type === type && p.sensor === predictor.sensor);
   if (existing) {
-    Object.assign(existing, { lookbackWeeks, dayFilter, aggregation });
+    Object.assign(existing, predictor);
   } else {
-    predictors.push({ type: 'historical', sensor, lookbackWeeks, dayFilter, aggregation });
+    predictors.push({ ...predictor, type });
   }
   renderPredictorList();
   await savePredictionFormToServer();
 }
 
 function defaultPredictor(type) {
-  return type === 'fixed'
-    ? { type: 'fixed', load_W: 200 }
-    : { type: 'historical', sensor: sensorOptions[0] ?? '', lookbackWeeks: 4, dayFilter: 'weekday-weekend', aggregation: 'mean' };
+  if (type === 'fixed') return { type: 'fixed', load_W: 200 };
+  if (type === 'temperature') {
+    return { type: 'temperature', sensor: sensorOptions[0] ?? '', lookbackWeeks: 8, dayFilter: 'weekday-weekend', bins: 4 };
+  }
+  return { type: 'historical', sensor: sensorOptions[0] ?? '', lookbackWeeks: 4, dayFilter: 'weekday-weekend', aggregation: 'mean' };
 }
 
 function sanitizePredictor(p) {
@@ -210,6 +221,16 @@ function sanitizePredictor(p) {
     return { type: 'fixed', load_W: Number.isFinite(load) && load >= 0 ? load : 0 };
   }
   const lookback = parseInt(p.lookbackWeeks, 10);
+  if (p.type === 'temperature') {
+    const bins = parseInt(p.bins, 10);
+    return {
+      type: 'temperature',
+      sensor: p.sensor ?? '',
+      lookbackWeeks: Number.isFinite(lookback) && lookback >= 1 && lookback <= 12 ? lookback : 8,
+      dayFilter: p.dayFilter || 'weekday-weekend',
+      bins: Number.isFinite(bins) && bins >= 2 && bins <= 8 ? bins : 4,
+    };
+  }
   return {
     type: 'historical',
     sensor: p.sensor ?? '',
@@ -242,30 +263,17 @@ function buildPredictorCard(predictor, index) {
   card.className = 'rounded-lg border border-slate-200 dark:border-white/10 p-3 space-y-3';
   card.dataset.predictorIndex = String(index);
 
-  const fields = predictor.type === 'fixed'
-    ? `
-      <label class="block text-sm">
-        <span class="${FIELD_LABEL_CLASS}">Fixed Load (W)</span>
-        <input data-field="load_W" type="number" min="0" step="10" class="form-input" />
-      </label>`
-    : `
+  const sensorField = `
       <label class="block text-sm">
         <span class="${FIELD_LABEL_CLASS}">Sensor</span>
         <select data-field="sensor" class="form-select"></select>
-      </label>
-      <div class="grid grid-cols-2 gap-3">
+      </label>`;
+  const lookbackField = (max) => `
         <label class="block text-sm">
           <span class="${FIELD_LABEL_CLASS}">Lookback (weeks)</span>
-          <input data-field="lookbackWeeks" type="number" min="1" class="form-input" />
-        </label>
-        <label class="block text-sm">
-          <span class="${FIELD_LABEL_CLASS}">Aggregation</span>
-          <select data-field="aggregation" class="form-select">
-            <option value="mean">Mean</option>
-            <option value="median">Median</option>
-          </select>
-        </label>
-      </div>
+          <input data-field="lookbackWeeks" type="number" min="1"${max ? ` max="${max}"` : ''} class="form-input" />
+        </label>`;
+  const dayFilterField = `
       <label class="block text-sm">
         <span class="${FIELD_LABEL_CLASS}">Day Filter</span>
         <select data-field="dayFilter" class="form-select">
@@ -276,10 +284,45 @@ function buildPredictorCard(predictor, index) {
         </select>
       </label>`;
 
+  let fields;
+  if (predictor.type === 'fixed') {
+    fields = `
+      <label class="block text-sm">
+        <span class="${FIELD_LABEL_CLASS}">Fixed Load (W)</span>
+        <input data-field="load_W" type="number" min="0" step="10" class="form-input" />
+      </label>`;
+  } else if (predictor.type === 'temperature') {
+    fields = `
+      ${sensorField}
+      <div class="grid grid-cols-2 gap-3">
+        ${lookbackField(12)}
+        <label class="block text-sm">
+          <span class="${FIELD_LABEL_CLASS}">Temperature Bins</span>
+          <input data-field="bins" type="number" min="2" max="8" class="form-input" />
+        </label>
+      </div>
+      ${dayFilterField}`;
+  } else {
+    fields = `
+      ${sensorField}
+      <div class="grid grid-cols-2 gap-3">
+        ${lookbackField()}
+        <label class="block text-sm">
+          <span class="${FIELD_LABEL_CLASS}">Aggregation</span>
+          <select data-field="aggregation" class="form-select">
+            <option value="mean">Mean</option>
+            <option value="median">Median</option>
+          </select>
+        </label>
+      </div>
+      ${dayFilterField}`;
+  }
+
   card.innerHTML = `
     <div class="flex items-center gap-2">
       <select data-field="type" class="form-select flex-1">
         <option value="historical">Historical</option>
+        <option value="temperature">Temperature</option>
         <option value="fixed">Fixed</option>
       </select>
       <button type="button" data-remove title="Remove predictor"

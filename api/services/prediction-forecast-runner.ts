@@ -54,9 +54,16 @@ export async function executeLoadForecast(config: PredictionRunConfig, logLabel:
   const predictors = config.predictors;
   assertCondition(Array.isArray(predictors) && predictors.length > 0, 400, 'At least one load predictor is required');
   for (const p of predictors!) assertValidLoadPredictor(p);
-  if (predictors!.some(p => p.type === 'historical')) {
+  if (predictors!.some(p => p.type === 'historical' || p.type === 'temperature')) {
     assertHaConnection(config);
     assertCondition(config.sensors.length > 0, 400, 'At least one sensor must be configured');
+  }
+  if (predictors!.some(p => p.type === 'temperature')) {
+    assertCondition(
+      hasCoordinates(config.pvConfig),
+      400,
+      'temperature predictor requires latitude/longitude in the PV forecast settings'
+    );
   }
 
   logPredictionCall(logLabel + ' (load)', { predictors: predictors!.map(p => p.type) });
@@ -153,6 +160,25 @@ function assertValidLoadPredictor(p: unknown): void {
       400,
       `historical predictor aggregation must be one of: ${[...AGGREGATIONS].join(', ')}`
     );
+  } else if (pred.type === 'temperature') {
+    assertCondition(typeof pred.sensor === 'string' && pred.sensor.length > 0, 400, 'temperature predictor requires a sensor');
+    // 12 weeks + the recent-accuracy week + 2 inertia-blend days stays within
+    // Open-Meteo's 92-day past_days limit.
+    assertCondition(
+      typeof pred.lookbackWeeks === 'number' && Number.isFinite(pred.lookbackWeeks) && pred.lookbackWeeks >= 1 && pred.lookbackWeeks <= 12,
+      400,
+      'temperature predictor lookbackWeeks must be between 1 and 12'
+    );
+    assertCondition(
+      typeof pred.dayFilter === 'string' && DAY_FILTERS.has(pred.dayFilter),
+      400,
+      `temperature predictor dayFilter must be one of: ${[...DAY_FILTERS].join(', ')}`
+    );
+    assertCondition(
+      typeof pred.bins === 'number' && Number.isInteger(pred.bins) && pred.bins >= 2 && pred.bins <= 8,
+      400,
+      'temperature predictor bins must be between 2 and 8'
+    );
   } else if (pred.type === 'fixed') {
     assertCondition(
       typeof pred.load_W === 'number' && Number.isFinite(pred.load_W) && pred.load_W >= 0,
@@ -162,6 +188,16 @@ function assertValidLoadPredictor(p: unknown): void {
   } else {
     throw new HttpError(400, `unsupported load predictor type: ${String(pred.type)}`);
   }
+}
+
+/**
+ * True when pvConfig carries usable coordinates. (0, 0) is rejected as the
+ * "cleared fields" sentinel older versions of the config form saved.
+ */
+function hasCoordinates(pvConfig: { latitude?: number | null; longitude?: number | null } | undefined): boolean {
+  const { latitude, longitude } = pvConfig ?? {};
+  if (latitude == null || longitude == null || Number.isNaN(latitude) || Number.isNaN(longitude)) return false;
+  return latitude !== 0 || longitude !== 0;
 }
 
 function assertHaConnection(config: PredictionRunConfig): void {
@@ -193,9 +229,10 @@ function applyForecastAdjustments<T extends { forecast?: TimeSeries } | null>(
   };
 }
 
-function mapPredictionError(err: unknown, isPv: boolean): Error {
+function mapPredictionError(err: unknown, _isPv: boolean): Error {
   const msg = err instanceof Error ? err.message : String(err);
-  if (isPv && msg.includes('Open-Meteo')) {
+  // Load forecasts can hit Open-Meteo too (temperature predictors).
+  if (msg.includes('Open-Meteo')) {
     return toHttpError(err, 502, `Open-Meteo error: ${msg}`);
   }
   if (msg.includes('auth') || msg.includes('WebSocket') || msg.includes('timed out') || msg.includes('connection refused')) {
