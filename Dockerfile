@@ -8,13 +8,15 @@
 # TypeScript type stripping (>=22.18), the add-on fails to boot with a
 # confusing parse error that's invisible to CI. Bump this deliberately when
 # updating.
-# The pin lives on the literal FROM line below because Dependabot can only
-# bump a literal `FROM image:tag`, never an ARG-based one. The HA builder
-# still overrides the base per architecture via BUILD_FROM; local and CI
-# builds fall through to this pinned amd64 stage.
-ARG BUILD_FROM=default-base
-FROM ghcr.io/home-assistant/amd64-base:3.24-2026.06.1 AS default-base
-
+# The base must stay ARG-interpolated per architecture. A literal
+# `FROM ghcr.io/home-assistant/amd64-base:... AS default-base` stage (which
+# Dependabot could bump automatically) breaks every aarch64 build: that
+# repository publishes an amd64-only manifest, and BuildKit resolves the
+# metadata of the stage even when BUILD_FROM points elsewhere, so an arm
+# build fails with "no match for platform in manifest". Bump this pin by
+# hand instead.
+ARG BUILD_ARCH=amd64
+ARG BUILD_FROM=ghcr.io/home-assistant/${BUILD_ARCH}-base:3.24-2026.06.1
 FROM $BUILD_FROM
 
 # Minimal runtime env
