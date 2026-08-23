@@ -15,7 +15,7 @@ updates:
     schedule:
       interval: 'monthly'
 
-  - package-ecosystem: "docker" # Bumps the Dockerfile's literal `FROM ...-base` pin (the default-base stage)
-    directory: "/"
-    schedule:
-      interval: 'monthly'
+  # No "docker" ecosystem entry: the base image is pinned through
+  # `ARG BUILD_FROM=...${BUILD_ARCH}...` so that aarch64 builds resolve their
+  # own base, and Dependabot only rewrites literal `FROM image:tag` lines.
+  # Bump the pin in the Dockerfile manually.
