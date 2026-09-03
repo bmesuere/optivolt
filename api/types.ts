@@ -52,6 +52,7 @@ export interface Settings {
   evSocSensor: string;
   evPlugSensor: string;
   evChargeEfficiency_percent: number;
+  evMaxSoc_percent: number;
   evSocValue_cents_per_kWh: number;
   evTripSocBuffer_percent: number;
   /** Extra planning days beyond the standard day-ahead window. 0 = off (default behaviour). */

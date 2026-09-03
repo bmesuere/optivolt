@@ -136,6 +136,32 @@ export function buildLP({
     .filter((tg) => tg.slot >= 0 && tg.slot < T)
     .map((tg) => ({ slot: tg.slot, soc_Wh: Math.min(tg.soc_Wh, evCapacityWh) }));
 
+  // Per-slot ceiling on ev_soc. The configured cap only limits opportunistic charging: it never
+  // overrides an anchor (a car that arrives above the cap) or an explicit target (a trip that
+  // needs more than the cap), so a chain's ceiling is the highest of the three.
+  //
+  // The ceiling is held constant from one reset to the next rather than varying per slot. Within
+  // a chain the only way ev_soc comes down is a trip drop, whose size the schedule fixes and the
+  // solver cannot choose, so once an anchor or a target has pinned ev_soc above the cap nothing
+  // can bring it back under a lower bound at a later slot: a ceiling that dipped back to the cap
+  // there would just be infeasible. Chains run from slot 0, or a reset, to the next reset.
+  const evMaxSocWh = evCapacityWh * ((ev?.evMaxSoc_percent ?? 100) / 100);
+  const evSocUpper: number[] = Array(T).fill(evCapacityWh);
+  if (evActive) {
+    const chainStarts = [0, ...[...evResetAt.keys()].filter((s) => s > 0).sort((a, b) => a - b)];
+    for (let i = 0; i < chainStarts.length; i++) {
+      const start = chainStarts[i];
+      const end = chainStarts[i + 1] ?? T; // exclusive
+      const anchorWh = start === 0 ? evInitialWh : (evResetAt.get(start) ?? 0);
+      let ceilingWh = Math.max(evMaxSocWh, anchorWh);
+      for (const tg of evTargets) {
+        if (tg.slot >= start && tg.slot < end) ceilingWh = Math.max(ceilingWh, tg.soc_Wh);
+      }
+      ceilingWh = Math.min(ceilingWh, evCapacityWh);
+      for (let t = start; t < end; t++) evSocUpper[t] = ceilingWh;
+    }
+  }
+
   // Variable name helpers
   const gridToLoad = lpVar.gridToLoad.name;
   const gridToBattery = lpVar.gridToBattery.name;
@@ -372,7 +398,7 @@ export function buildLP({
       lines.push(` 0 <= ${gridToEv(t)} <= ${toNum(evMaxPow_W)}`);
       lines.push(` 0 <= ${pvToEv(t)} <= ${toNum(Math.min(pv_W[t], evMaxPow_W))}`);
       lines.push(` 0 <= ${batteryToEv(t)} <= ${toNum(Math.min(maxDischargePower_W, evMaxPow_W))}`);
-      lines.push(` 0 <= ${evSocVar(t)} <= ${toNum(evCapacityWh)}`);
+      lines.push(` 0 <= ${evSocVar(t)} <= ${toNum(evSocUpper[t])}`);
     }
   }
   lines.push("");

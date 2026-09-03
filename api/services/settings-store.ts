@@ -16,7 +16,8 @@ const NUMERIC_FIELDS: (keyof Settings)[] = [
   'dischargeEfficiency_percent', 'batteryCost_cent_per_kWh', 'idleDrain_W',
   'terminalSocCustomPrice_cents_per_kWh', 'rebalanceHoldHours',
   'evMinChargeCurrent_A', 'evMaxChargeCurrent_A', 'evBatteryCapacity_kWh',
-  'evChargeEfficiency_percent', 'evSocValue_cents_per_kWh', 'evTripSocBuffer_percent',
+  'evChargeEfficiency_percent', 'evMaxSoc_percent', 'evSocValue_cents_per_kWh',
+  'evTripSocBuffer_percent',
   'extendedHorizonDays',
 ];
 
@@ -129,6 +130,9 @@ function validateSettings(s: Settings): Settings {
 
   // Trip buffer is a SoC share on top of the trip usage; clamp to a sane [0, 100].
   s.evTripSocBuffer_percent = Math.max(0, Math.min(100, s.evTripSocBuffer_percent));
+
+  // EV charge ceiling is a share of the EV battery; clamp to [0, 100] (100 = no cap).
+  s.evMaxSoc_percent = Math.max(0, Math.min(100, s.evMaxSoc_percent));
 
   // Whole days only; 6 extra days is the practical limit of the price forecast feed.
   s.extendedHorizonDays = Math.max(0, Math.min(6, Math.round(s.extendedHorizonDays)));
