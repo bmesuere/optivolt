@@ -18,6 +18,8 @@ function setup() {
     evEntryTripHint: Object.assign(document.createElement('p'), { className: 'hidden' }),
     evEntryTime: document.createElement('input'),
     evEntryEndTime: document.createElement('input'),
+    step: Object.assign(document.createElement('input'), { type: 'number', value: '15' }),
+    evEntryError: Object.assign(document.createElement('p'), { className: 'hidden' }),
     evEntryTimeClear: document.createElement('button'),
     evEntrySave: document.createElement('button'),
   };
@@ -113,18 +115,72 @@ describe('ev schedule — the arrival field follows the departure', () => {
   });
 });
 
-describe('ev schedule — times snap to the 15-minute grid', () => {
-  it('rounds a hand-typed off-grid departure and arrival to the nearest block', async () => {
-    const { controller, els } = setup();
-    controller.openEditor(null);
-    els.evEntryTime.value = '2099-05-01T08:07';
-    els.evEntryEndTime.value = '2099-05-01T17:23';
+describe('ev schedule — times snap to the planning grid', () => {
+  async function saveTrip(els, time, endTime) {
+    els.evEntryTime.value = time;
+    els.evEntryEndTime.value = endTime;
     els.evEntrySave.dispatchEvent(new Event('click'));
     await vi.waitFor(() => expect(createEvScheduleEntry).toHaveBeenCalled());
+    return createEvScheduleEntry.mock.calls.at(-1)[0];
+  }
 
-    expect(createEvScheduleEntry).toHaveBeenCalledWith(expect.objectContaining({
+  it('floors a hand-typed off-grid departure and arrival onto the block the solver uses', async () => {
+    const { controller, els } = setup();
+    controller.openEditor(null);
+    const payload = await saveTrip(els, '2099-05-01T08:07', '2099-05-01T17:23');
+
+    expect(payload).toMatchObject({
       time: new Date('2099-05-01T08:00').toISOString(),
-      endTime: new Date('2099-05-01T17:30').toISOString(),
-    }));
+      endTime: new Date('2099-05-01T17:15').toISOString(),
+    });
+  });
+
+  it('floors a time in the upper half of a block too, never forward', async () => {
+    const { controller, els } = setup();
+    controller.openEditor(null);
+    // 08:08 belongs to the 08:00 slot; storing 08:15 would give the plan a slot the car is gone for.
+    const payload = await saveTrip(els, '2099-05-01T08:08', '2099-05-01T09:40');
+
+    expect(payload).toMatchObject({
+      time: new Date('2099-05-01T08:00').toISOString(),
+      endTime: new Date('2099-05-01T09:30').toISOString(),
+    });
+  });
+
+  it('keeps a trip shorter than one slot savable by stretching it to a single slot', async () => {
+    const { controller, els } = setup();
+    controller.openEditor(null);
+    const payload = await saveTrip(els, '2099-05-01T08:08', '2099-05-01T08:14');
+
+    expect(payload).toMatchObject({
+      time: new Date('2099-05-01T08:00').toISOString(),
+      endTime: new Date('2099-05-01T08:15').toISOString(),
+    });
+  });
+
+  it('still rejects an arrival that is not after the departure', async () => {
+    const { controller, els } = setup();
+    controller.openEditor(null);
+    createEvScheduleEntry.mockClear();
+    els.evEntryTime.value = '2099-05-01T08:00';
+    els.evEntryEndTime.value = '2099-05-01T08:00';
+    els.evEntrySave.dispatchEvent(new Event('click'));
+
+    expect(createEvScheduleEntry).not.toHaveBeenCalled();
+    expect(els.evEntryError.textContent).toContain('Arrival must be after departure');
+  });
+
+  it('snaps onto the configured step size, not a hard-coded 15 minutes', async () => {
+    const { controller, els } = setup();
+    els.step.value = '60';
+    controller.openEditor(null);
+    const payload = await saveTrip(els, '2099-05-01T08:17', '2099-05-01T17:45');
+
+    expect(payload).toMatchObject({
+      time: new Date('2099-05-01T08:00').toISOString(),
+      endTime: new Date('2099-05-01T17:00').toISOString(),
+    });
+    expect(els.evEntryTime.step).toBe('3600');
+    expect(els.evEntryEndTime.step).toBe('3600');
   });
 });

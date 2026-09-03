@@ -23,14 +23,7 @@ const TYPE_INACTIVE = ["text-slate-500", "dark:text-slate-400"];
 
 const DEFAULT_TRIP_BUFFER_PERCENT = 20;
 
-const SLOT_MS = 15 * 60 * 1000;
-const blockNowMs = () => Math.floor(Date.now() / SLOT_MS) * SLOT_MS;
-// The pickers step in 15-minute blocks, but a hand-typed minute can still land off-grid, so snap
-// to the nearest block: the stored entry then matches the slot the solver actually plans it in.
-const fromDatetimeLocal = (value) => {
-  const ms = new Date(value).getTime();
-  return Number.isFinite(ms) ? new Date(Math.round(ms / SLOT_MS) * SLOT_MS).toISOString() : null;
-};
+const DEFAULT_STEP_M = 15;
 const fmtEntryTime = new Intl.DateTimeFormat([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 const fmtEntryTimeShort = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit", hour12: false });
 
@@ -51,6 +44,21 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
   let arrivalFollowsDeparture = false;
 
   const getEntries = () => entries;
+
+  // The planning slot length, straight from the Step setting (which accepts 30 and 60 too).
+  const slotMs = () => {
+    const n = Number(els.step?.value);
+    return (Number.isFinite(n) && n > 0 ? n : DEFAULT_STEP_M) * 60 * 1000;
+  };
+  const blockNowMs = () => Math.floor(Date.now() / slotMs()) * slotMs();
+  // The pickers step in slot-sized blocks, but a hand-typed minute can still land off-grid, so
+  // snap to a boundary on save and store the time the solver actually plans the entry at.
+  // buildEvConfig floors an event into its slot, so this floors too: rounding 08:08 up to 08:15
+  // under a 15-minute step would hand the optimizer a charging slot the car is not there for.
+  const fromDatetimeLocal = (value) => {
+    const ms = new Date(value).getTime();
+    return Number.isFinite(ms) ? new Date(Math.floor(ms / slotMs()) * slotMs()).toISOString() : null;
+  };
 
   const tripBufferPercent = () => {
     const n = Number(els.evTripSocBuffer?.value);
@@ -189,6 +197,9 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
       els.evEntrySoc.value = Number.isFinite(value) ? String(value) : "";
     }
     if (els.evEntryDelete) els.evEntryDelete.classList.toggle("hidden", !entry);
+    for (const input of [els.evEntryTime, els.evEntryEndTime]) {
+      if (input) input.step = String(slotMs() / 1000);
+    }
     clearError();
     refreshTypeSegments();
     if (els.evEntryEditor) els.evEntryEditor.classList.remove("hidden");
@@ -218,11 +229,15 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     if (type === "trip") {
       const endTime = fromDatetimeLocal(els.evEntryEndTime?.value ?? "");
       if (!endTime) { showError("Pick a valid arrival date and time."); return null; }
-      if (new Date(endTime).getTime() <= new Date(time).getTime()) {
+      // Order is judged on what the user typed, not on the floored times: a trip shorter than a
+      // slot (08:08 → 08:14) is a real trip and must stay savable. buildEvConfig stretches such a
+      // trip to a single slot, so store exactly that rather than a zero-length one.
+      if (new Date(els.evEntryEndTime.value).getTime() <= new Date(els.evEntryTime.value).getTime()) {
         showError("Arrival must be after departure."); return null;
       }
+      const endMs = Math.max(new Date(endTime).getTime(), new Date(time).getTime() + slotMs());
       // Always send usage_percent (null when cleared) so an edit can remove a previously-set value.
-      return { type, time, endTime, usage_percent: soc_percent ?? null };
+      return { type, time, endTime: new Date(endMs).toISOString(), usage_percent: soc_percent ?? null };
     }
     // Always send soc_percent (null when cleared) so an edit can remove a previously-set value.
     return { type, time, soc_percent: soc_percent ?? null };
