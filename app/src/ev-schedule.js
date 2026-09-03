@@ -23,11 +23,7 @@ const TYPE_INACTIVE = ["text-slate-500", "dark:text-slate-400"];
 
 const DEFAULT_TRIP_BUFFER_PERCENT = 20;
 
-const blockNowMs = () => Math.floor(Date.now() / (15 * 60 * 1000)) * (15 * 60 * 1000);
-const fromDatetimeLocal = (value) => {
-  const ms = new Date(value).getTime();
-  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
-};
+const DEFAULT_STEP_M = 15;
 const fmtEntryTime = new Intl.DateTimeFormat([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 const fmtEntryTimeShort = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit", hour12: false });
 
@@ -43,8 +39,26 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
   let entries = [];
   let draft = null; // { id?, type, } — current editor state
   let horizonMs = null;
+  // A trip almost always returns on the day it starts, so the arrival field mirrors the departure
+  // until the user edits it themselves — the date is then already right and only the time is left.
+  let arrivalFollowsDeparture = false;
 
   const getEntries = () => entries;
+
+  // The planning slot length, straight from the Step setting (which accepts 30 and 60 too).
+  const slotMs = () => {
+    const n = Number(els.step?.value);
+    return (Number.isFinite(n) && n > 0 ? n : DEFAULT_STEP_M) * 60 * 1000;
+  };
+  const blockNowMs = () => Math.floor(Date.now() / slotMs()) * slotMs();
+  // The pickers step in slot-sized blocks, but a hand-typed minute can still land off-grid, so
+  // snap to a boundary on save and store the time the solver actually plans the entry at.
+  // buildEvConfig floors an event into its slot, so this floors too: rounding 08:08 up to 08:15
+  // under a 15-minute step would hand the optimizer a charging slot the car is not there for.
+  const fromDatetimeLocal = (value) => {
+    const ms = new Date(value).getTime();
+    return Number.isFinite(ms) ? new Date(Math.floor(ms / slotMs()) * slotMs()).toISOString() : null;
+  };
 
   const tripBufferPercent = () => {
     const n = Number(els.evTripSocBuffer?.value);
@@ -164,17 +178,28 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     if (els.evEntryError) { els.evEntryError.textContent = msg; els.evEntryError.classList.remove("hidden"); }
   }
 
+  function mirrorDepartureIntoArrival() {
+    if (!els.evEntryTime || !els.evEntryEndTime) return;
+    if (!arrivalFollowsDeparture && els.evEntryEndTime.value !== "") return;
+    els.evEntryEndTime.value = els.evEntryTime.value;
+    arrivalFollowsDeparture = els.evEntryTime.value !== "";
+  }
+
   function openEditor(entry) {
     draft = entry
       ? { id: entry.id, type: entry.type }
       : { type: "trip" };
     if (els.evEntryTime) els.evEntryTime.value = entry?.time ? toDatetimeLocal(new Date(entry.time)) : "";
     if (els.evEntryEndTime) els.evEntryEndTime.value = entry?.endTime ? toDatetimeLocal(new Date(entry.endTime)) : "";
+    arrivalFollowsDeparture = false;
     if (els.evEntrySoc) {
       const value = entry?.type === "trip" ? entry?.usage_percent : entry?.soc_percent;
       els.evEntrySoc.value = Number.isFinite(value) ? String(value) : "";
     }
     if (els.evEntryDelete) els.evEntryDelete.classList.toggle("hidden", !entry);
+    for (const input of [els.evEntryTime, els.evEntryEndTime]) {
+      if (input) input.step = String(slotMs() / 1000);
+    }
     clearError();
     refreshTypeSegments();
     if (els.evEntryEditor) els.evEntryEditor.classList.remove("hidden");
@@ -204,11 +229,15 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     if (type === "trip") {
       const endTime = fromDatetimeLocal(els.evEntryEndTime?.value ?? "");
       if (!endTime) { showError("Pick a valid arrival date and time."); return null; }
-      if (new Date(endTime).getTime() <= new Date(time).getTime()) {
+      // Order is judged on what the user typed, not on the floored times: a trip shorter than a
+      // slot (08:08 → 08:14) is a real trip and must stay savable. buildEvConfig stretches such a
+      // trip to a single slot, so store exactly that rather than a zero-length one.
+      if (new Date(els.evEntryEndTime.value).getTime() <= new Date(els.evEntryTime.value).getTime()) {
         showError("Arrival must be after departure."); return null;
       }
+      const endMs = Math.max(new Date(endTime).getTime(), new Date(time).getTime() + slotMs());
       // Always send usage_percent (null when cleared) so an edit can remove a previously-set value.
-      return { type, time, endTime, usage_percent: soc_percent ?? null };
+      return { type, time, endTime: new Date(endMs).toISOString(), usage_percent: soc_percent ?? null };
     }
     // Always send soc_percent (null when cleared) so an edit can remove a previously-set value.
     return { type, time, soc_percent: soc_percent ?? null };
@@ -257,16 +286,27 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
       btn.addEventListener("click", () => setType(btn.dataset.entryType));
     });
 
-    els.evEntryTimeClear?.addEventListener("click", () => { if (els.evEntryTime) els.evEntryTime.value = ""; });
+    els.evEntryTime?.addEventListener("input", mirrorDepartureIntoArrival);
+    els.evEntryTimeClear?.addEventListener("click", () => {
+      if (els.evEntryTime) els.evEntryTime.value = "";
+      mirrorDepartureIntoArrival();
+    });
     els.evEntryTimeNow?.addEventListener("click", () => {
       if (els.evEntryTime) els.evEntryTime.value = toDatetimeLocal(new Date(blockNowMs()));
+      mirrorDepartureIntoArrival();
     });
     els.evEntryTimeHorizon?.addEventListener("click", () => {
       if (horizonMs != null && els.evEntryTime) els.evEntryTime.value = toDatetimeLocal(new Date(horizonMs));
+      mirrorDepartureIntoArrival();
     });
-    els.evEntryEndClear?.addEventListener("click", () => { if (els.evEntryEndTime) els.evEntryEndTime.value = ""; });
+    els.evEntryEndTime?.addEventListener("input", () => { arrivalFollowsDeparture = false; });
+    els.evEntryEndClear?.addEventListener("click", () => {
+      if (els.evEntryEndTime) els.evEntryEndTime.value = "";
+      arrivalFollowsDeparture = false;
+    });
     els.evEntryEndHorizon?.addEventListener("click", () => {
       if (horizonMs != null && els.evEntryEndTime) els.evEntryEndTime.value = toDatetimeLocal(new Date(horizonMs));
+      arrivalFollowsDeparture = false;
     });
     els.evEntrySoc?.addEventListener("input", updateTripHint);
     // The derived "≥ x%" targets in the list and the editor hint both depend on the global trip
