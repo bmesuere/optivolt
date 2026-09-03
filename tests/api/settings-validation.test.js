@@ -87,11 +87,12 @@ describe('POST /settings validation', () => {
   it('returns the clamped settings and round-trips them through GET', async () => {
     const res = await request(app)
       .post('/settings')
-      .send({ minSoc_percent: -10, evTripSocBuffer_percent: 250 });
+      .send({ minSoc_percent: -10, evTripSocBuffer_percent: 250, evMaxSoc_percent: 120 });
 
     expect(res.status).toBe(200);
     expect(res.body.settings.minSoc_percent).toBe(0);
     expect(res.body.settings.evTripSocBuffer_percent).toBe(100);
+    expect(res.body.settings.evMaxSoc_percent).toBe(100);
 
     const persisted = await readPersisted();
     expect(persisted.minSoc_percent).toBe(0);

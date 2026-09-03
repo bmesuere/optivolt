@@ -265,6 +265,57 @@ describe('buildLP — EV charging (MILP)', () => {
     expect(lp).not.toContain('c_ev_target_');
   });
 
+  it('bounds ev_soc by the full capacity when no max SoC is configured', () => {
+    const lp = buildLP({ ...base, ev: evCfg });
+    for (let t = 0; t < T; t++) expect(lp).toContain(`0 <= ev_soc_${t} <= 60000`);
+  });
+
+  it('caps ev_soc at evMaxSoc_percent of capacity', () => {
+    // 90% of 60 000 Wh = 54 000 Wh.
+    const lp = buildLP({ ...base, ev: { ...evCfg, evMaxSoc_percent: 90, targets: [] } });
+    for (let t = 0; t < T; t++) expect(lp).toContain(`0 <= ev_soc_${t} <= 54000`);
+  });
+
+  it('raises the cap to an explicit target that exceeds it', () => {
+    // Cap 60% (36 000 Wh) but a 48 000 Wh target at slot 3: the target wins for the whole chain,
+    // since ev_soc can never come back down below it.
+    const lp = buildLP({ ...base, ev: { ...evCfg, evMaxSoc_percent: 60 } });
+    for (let t = 0; t < T; t++) expect(lp).toContain(`0 <= ev_soc_${t} <= 48000`);
+  });
+
+  it('raises the cap to an anchor SoC that already exceeds it', () => {
+    // Car arrives at 95% (57 000 Wh) with a 90% cap: the plan must stay feasible, so the cap
+    // only prevents further charging.
+    const lp = buildLP({
+      ...base,
+      ev: {
+        ...evCfg,
+        evMaxSoc_percent: 90,
+        evInitialSoc_percent: 95,
+        availabilityWindows: [{ startSlot: 0, endSlot: T, resetSoc_Wh: 57000 }],
+        targets: [],
+      },
+    });
+    for (let t = 0; t < T; t++) expect(lp).toContain(`0 <= ev_soc_${t} <= 57000`);
+  });
+
+  it('applies the cap per SoC chain, so a later reset gets its own ceiling', () => {
+    const lp = buildLP({
+      ...base,
+      ev: {
+        ...evCfg,
+        evMaxSoc_percent: 90,
+        availabilityWindows: [
+          { startSlot: 0, endSlot: 2, resetSoc_Wh: 30000 },
+          { startSlot: 3, endSlot: T, resetSoc_Wh: 57000 },
+        ],
+        targets: [],
+      },
+    });
+    for (const t of [0, 1, 2]) expect(lp).toContain(`0 <= ev_soc_${t} <= 54000`);
+    for (const t of [3, 4]) expect(lp).toContain(`0 <= ev_soc_${t} <= 57000`);
+  });
+
   it('applies evChargeEfficiency_percent to EV SoC evolution coefficients', () => {
     // 90% efficiency → evChargeWhPerW = 0.25 * 0.9 = 0.225
     const lp = buildLP({ ...base, ev: { ...evCfg, evChargeEfficiency_percent: 90 } });

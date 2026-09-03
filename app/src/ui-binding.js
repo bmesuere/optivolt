@@ -95,6 +95,7 @@ export function getElements() {
     evBatteryCapacity: $("#ev-battery-capacity"),
     evChargeEfficiency: $("#ev-charge-efficiency"),
     evSocValuation: $("#ev-soc-valuation"),
+    evMaxSoc: $("#ev-max-soc"),
     evTripSocBuffer: $("#ev-trip-soc-buffer"),
     // EV schedule entries (list + inline editor)
     evScheduleEntriesList: $("#ev-schedule-entries-list"),

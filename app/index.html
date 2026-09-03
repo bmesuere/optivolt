@@ -876,6 +876,14 @@
                   class="form-input" data-settings-input />
               </label>
             </div>
+            <label class="block text-sm">Max charge level (%)
+              <input id="ev-max-soc" type="number" min="0" max="100" step="1"
+                class="form-input" data-settings-input />
+              <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                Ceiling for opportunistic charging. Scheduled targets and trips still charge
+                above it. 100 = no cap.
+              </span>
+            </label>
             <label class="block text-sm">Trip SoC buffer (%)
               <input id="ev-trip-soc-buffer" type="number" min="0" max="100" step="1"
                 class="form-input" data-settings-input />

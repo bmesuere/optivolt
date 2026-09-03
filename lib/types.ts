@@ -54,6 +54,8 @@ export interface EvConfig {
   evInitialSoc_percent: number;
   /** AC-to-DC efficiency of the EV's onboard charger, as a percentage (e.g. 90 = 90%). */
   evChargeEfficiency_percent: number;
+  /** Ceiling for opportunistic charging, as a percentage of capacity (100 = no cap). */
+  evMaxSoc_percent: number;
   /** Availability windows; charging is forced off outside all of them. */
   availabilityWindows: EvAvailabilityWindow[];
   /** SoC deadlines layered onto the plan. Empty means no enforced target (latent charging only). */

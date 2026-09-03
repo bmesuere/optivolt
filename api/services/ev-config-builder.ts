@@ -242,6 +242,7 @@ export function buildEvConfig(
     evBatteryCapacity_Wh: capacityWh,
     evInitialSoc_percent: initialSoc_percent,
     evChargeEfficiency_percent: settings.evChargeEfficiency_percent,
+    evMaxSoc_percent: settings.evMaxSoc_percent ?? 100,
     availabilityWindows: windows,
     targets: dedupedTargets,
   };

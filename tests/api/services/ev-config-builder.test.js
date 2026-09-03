@@ -264,3 +264,15 @@ describe('buildEvConfig — multi-day horizon', () => {
     expect(extended.targets).toEqual([{ slot: 287, soc_Wh: 48000 }]);
   });
 });
+
+describe('buildEvConfig — max SoC', () => {
+  it('passes evMaxSoc_percent through to the EV config', () => {
+    const ev = buildEvConfig({ ...base, evMaxSoc_percent: 90 }, [], pluggedIn, NOW_MS, T);
+    expect(ev.evMaxSoc_percent).toBe(90);
+  });
+
+  it('defaults to no cap when the setting is absent', () => {
+    const ev = buildEvConfig(base, [], pluggedIn, NOW_MS, T);
+    expect(ev.evMaxSoc_percent).toBe(100);
+  });
+});
