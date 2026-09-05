@@ -113,6 +113,11 @@ describe('prediction forecast chart controller', () => {
   });
 
   it('renders adjustment ranges on a 24-hour clock', async () => {
+    // The formatter asks for the browser's own locale, so pin it to a 12-hour one here:
+    // on a machine that already defaults to en-GB the assertion would hold either way.
+    const format = Date.prototype.toLocaleString;
+    const spy = vi.spyOn(Date.prototype, 'toLocaleString')
+      .mockImplementation(function (_locale, options) { return format.call(this, 'en-US', options); });
     fetchPredictionAdjustments.mockResolvedValue({
       adjustments: [
         { id: 'pm', series: 'load', mode: 'add', value_W: 250, start: '2099-01-01T13:00:00.000Z', end: '2099-01-01T15:00:00.000Z' },
@@ -120,10 +125,12 @@ describe('prediction forecast chart controller', () => {
     });
     const controller = createForecastChartController({ getForecasts: () => ({}) });
 
-    await controller.loadAdjustments();
-
-    // Fails under an en-US default locale before the explicit hour12: false.
-    expect(document.getElementById('prediction-adjustments-list').textContent).not.toMatch(/\b[AP]M\b/);
+    try {
+      await controller.loadAdjustments();
+      expect(document.getElementById('prediction-adjustments-list').textContent).not.toMatch(/\b[AP]M\b/);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('opens an existing adjustment and saves edits through the API', async () => {
