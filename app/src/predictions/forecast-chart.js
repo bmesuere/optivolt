@@ -513,6 +513,9 @@ function formatAdjustmentTime(value) {
     weekday: 'short',
     hour: '2-digit',
     minute: '2-digit',
+    // The plan is a 24-hour grid everywhere else in the UI; an en-US browser would
+    // otherwise render these bounds as "3:00 PM".
+    hour12: false,
   });
 }
 

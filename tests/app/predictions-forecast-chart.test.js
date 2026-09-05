@@ -112,6 +112,20 @@ describe('prediction forecast chart controller', () => {
     expect(document.querySelector('#prediction-adjustments-list b')).toBeNull();
   });
 
+  it('renders adjustment ranges on a 24-hour clock', async () => {
+    fetchPredictionAdjustments.mockResolvedValue({
+      adjustments: [
+        { id: 'pm', series: 'load', mode: 'add', value_W: 250, start: '2099-01-01T13:00:00.000Z', end: '2099-01-01T15:00:00.000Z' },
+      ],
+    });
+    const controller = createForecastChartController({ getForecasts: () => ({}) });
+
+    await controller.loadAdjustments();
+
+    // Fails under an en-US default locale before the explicit hour12: false.
+    expect(document.getElementById('prediction-adjustments-list').textContent).not.toMatch(/\b[AP]M\b/);
+  });
+
   it('opens an existing adjustment and saves edits through the API', async () => {
     const existing = {
       id: 'adj-1',
