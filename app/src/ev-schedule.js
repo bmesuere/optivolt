@@ -59,6 +59,32 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     const ms = new Date(value).getTime();
     return Number.isFinite(ms) ? new Date(Math.floor(ms / slotMs()) * slotMs()).toISOString() : null;
   };
+  // The block a trip's arrival lands in: floored like any other time, but never earlier than one
+  // block after the departure, so a trip shorter than a slot stays a real (one-slot) trip.
+  const snappedTripEndMs = (departureIso, arrivalIso) =>
+    Math.max(new Date(arrivalIso).getTime(), new Date(departureIso).getTime() + slotMs());
+
+  // Rewrite a time field to the block its value will be stored in, so the editor shows the grid
+  // the solver plans on while editing instead of only after saving. Runs on blur rather than on
+  // every keystroke: assigning `value` mid-edit would throw the caret back to the first segment.
+  function snapDepartureInput() {
+    const iso = fromDatetimeLocal(els.evEntryTime?.value ?? "");
+    if (!iso) return;
+    els.evEntryTime.value = toDatetimeLocal(new Date(iso));
+  }
+
+  function snapArrivalInput() {
+    const arrivalIso = fromDatetimeLocal(els.evEntryEndTime?.value ?? "");
+    if (!arrivalIso) return;
+    const departureIso = fromDatetimeLocal(els.evEntryTime?.value ?? "");
+    // Only stretch an arrival the user typed after the departure; one typed before it is left
+    // where it is, so saving still reports the ordering rather than silently moving it forward.
+    const typedInOrder = new Date(els.evEntryEndTime.value).getTime() > new Date(els.evEntryTime?.value ?? "").getTime();
+    const ms = departureIso && typedInOrder
+      ? snappedTripEndMs(departureIso, arrivalIso)
+      : new Date(arrivalIso).getTime();
+    els.evEntryEndTime.value = toDatetimeLocal(new Date(ms));
+  }
 
   const tripBufferPercent = () => {
     const n = Number(els.evTripSocBuffer?.value);
@@ -235,7 +261,7 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
       if (new Date(els.evEntryEndTime.value).getTime() <= new Date(els.evEntryTime.value).getTime()) {
         showError("Arrival must be after departure."); return null;
       }
-      const endMs = Math.max(new Date(endTime).getTime(), new Date(time).getTime() + slotMs());
+      const endMs = snappedTripEndMs(time, endTime);
       // Always send usage_percent (null when cleared) so an edit can remove a previously-set value.
       return { type, time, endTime: new Date(endMs).toISOString(), usage_percent: soc_percent ?? null };
     }
@@ -287,6 +313,11 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     });
 
     els.evEntryTime?.addEventListener("input", mirrorDepartureIntoArrival);
+    els.evEntryTime?.addEventListener("blur", () => {
+      snapDepartureInput();
+      mirrorDepartureIntoArrival(); // an arrival still following the departure follows the snap too
+    });
+    els.evEntryEndTime?.addEventListener("blur", snapArrivalInput);
     els.evEntryTimeClear?.addEventListener("click", () => {
       if (els.evEntryTime) els.evEntryTime.value = "";
       mirrorDepartureIntoArrival();
