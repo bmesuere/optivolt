@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEvScheduleController } from '../../app/src/ev-schedule.js';
-import { createEvScheduleEntry } from '../../app/src/api/api.js';
+import { createEvScheduleEntry, fetchEvScheduleEntries } from '../../app/src/api/api.js';
 
 vi.mock('../../app/src/api/api.js', () => ({
   fetchEvScheduleEntries: vi.fn(async () => ({ entries: [] })),
@@ -112,6 +112,21 @@ describe('ev schedule — the arrival field follows the departure', () => {
     els.evEntryTimeClear.dispatchEvent(new Event('click'));
     expect(els.evEntryTime.value).toBe('');
     expect(els.evEntryEndTime.value).toBe('');
+  });
+});
+
+describe('ev schedule — reloading entries', () => {
+  it('keeps the entries it has when the refresh fetch fails', async () => {
+    const { controller, els } = setup();
+    controller.setEntries([trip]);
+    fetchEvScheduleEntries.mockRejectedValueOnce(new Error('offline'));
+
+    await controller.loadEntries();
+
+    // A solve refreshes the entries; a failed fetch must not blank the list (and with it the
+    // chart annotations) until the next successful one.
+    expect(controller.getEntries()).toEqual([trip]);
+    expect(els.evScheduleEntriesList.innerHTML).toContain('trip');
   });
 });
 

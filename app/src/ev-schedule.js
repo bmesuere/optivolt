@@ -73,13 +73,13 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     onChange(entries);
   }
 
+  // Read the server's (pruned) entry list. Called on boot and after every solve, so a failed
+  // fetch keeps the entries already held rather than blanking the list and its annotations.
   async function loadEntries() {
     try {
       const result = await fetchEvScheduleEntries();
-      entries = Array.isArray(result?.entries) ? result.entries : [];
-    } catch {
-      entries = [];
-    }
+      if (Array.isArray(result?.entries)) entries = result.entries;
+    } catch { /* keep the entries we have */ }
     renderList();
   }
 
