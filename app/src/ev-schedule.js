@@ -59,8 +59,9 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     const ms = new Date(value).getTime();
     return Number.isFinite(ms) ? new Date(Math.floor(ms / slotMs()) * slotMs()).toISOString() : null;
   };
-  // The block a trip's arrival lands in: floored like any other time, but never earlier than one
-  // block after the departure, so a trip shorter than a slot stays a real (one-slot) trip.
+  // Given a departure and arrival already floored by fromDatetimeLocal, the block the arrival is
+  // stored in: their own block, unless that is the departure's — a trip shorter than one slot is
+  // stretched to a single slot rather than collapsed to a zero-length one.
   const snappedTripEndMs = (departureIso, arrivalIso) =>
     Math.max(new Date(arrivalIso).getTime(), new Date(departureIso).getTime() + slotMs());
 
@@ -255,9 +256,11 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     if (type === "trip") {
       const endTime = fromDatetimeLocal(els.evEntryEndTime?.value ?? "");
       if (!endTime) { showError("Pick a valid arrival date and time."); return null; }
-      // Order is judged on what the user typed, not on the floored times: a trip shorter than a
-      // slot (08:08 → 08:14) is a real trip and must stay savable. buildEvConfig stretches such a
-      // trip to a single slot, so store exactly that rather than a zero-length one.
+      // Order is judged on the field values, not on the floored times: a trip shorter than a
+      // slot (08:08 → 08:14) is a real trip and must stay savable. Leaving either field snaps it
+      // (08:00 → 08:15), so this usually compares already-snapped values; it still has to hold
+      // for a value that reaches save unblurred. buildEvConfig stretches a sub-slot trip to a
+      // single slot, so store exactly that rather than a zero-length one.
       if (new Date(els.evEntryEndTime.value).getTime() <= new Date(els.evEntryTime.value).getTime()) {
         showError("Arrival must be after departure."); return null;
       }
