@@ -120,8 +120,12 @@ describe('ev schedule — reloading entries', () => {
     const { controller, els } = setup();
     controller.setEntries([trip]);
     fetchEvScheduleEntries.mockRejectedValueOnce(new Error('offline'));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await controller.loadEntries();
+
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
 
     // A solve refreshes the entries; a failed fetch must not blank the list (and with it the
     // chart annotations) until the next successful one.

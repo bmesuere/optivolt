@@ -79,7 +79,11 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     try {
       const result = await fetchEvScheduleEntries();
       if (Array.isArray(result?.entries)) entries = result.entries;
-    } catch { /* keep the entries we have */ }
+    } catch (error) {
+      // Keep the entries we have — but say so, or a refresh that silently fails looks like
+      // the server simply having nothing to prune.
+      console.error("Failed to load EV schedule entries", error);
+    }
     renderList();
   }
 
