@@ -361,14 +361,16 @@ function buildPredictorCard(predictor, index) {
   }
 
   card.innerHTML = `
-    <summary class="flex cursor-pointer list-none items-center gap-2 p-3 text-sm">
+    <summary class="flex cursor-pointer list-none flex-wrap items-center gap-x-2 p-3 text-sm">
       <svg class="h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform" data-chevron viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
       </svg>
       <span class="shrink-0 font-medium text-ink dark:text-slate-100" data-summary-type></span>
-      <span class="truncate text-xs text-slate-400 dark:text-slate-500" data-summary-detail></span>
       <button type="button" data-remove title="Remove predictor"
         class="ml-auto shrink-0 rounded p-1 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">✕</button>
+      <!-- Full width: the parameters take the line below the type, since the sidebar is too
+           narrow to hold both without cutting the last ones off. -->
+      <span class="w-full pl-5 text-xs text-slate-400 dark:text-slate-500" data-summary-detail></span>
     </summary>
     <div class="space-y-3 border-t border-slate-200 p-3 dark:border-white/10">
       ${fields}
