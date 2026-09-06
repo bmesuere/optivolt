@@ -701,73 +701,72 @@
     class="mx-auto w-full max-w-7xl px-4 py-8 panel-hidden">
     <div class="grid gap-6 lg:grid-cols-2 lg:items-start">
 
-      <!-- Left column: System Settings -->
-      <section id="card-system" class="card">
-        <div class="mb-4 flex items-center justify-between gap-3">
-          <h2 class="sidebar-label">System settings</h2>
-          <button id="vrm-fetch-settings" type="button" title="Fetch settings from Victron VRM"
-            class="inline-flex items-center justify-center h-9 w-9 rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 sm:w-auto sm:px-3 sm:gap-2 sm:rounded-pill sm:text-sm">
-            <!-- autorenew icon -->
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24">
-              <title>autorenew</title>
-              <path fill="currentColor"
-                d="M12 19C12 19.34 12.03 19.67 12.08 20H6.5C5 20 3.69 19.5 2.61 18.43C1.54 17.38 1 16.09 1 14.58C1 13.28 1.39 12.12 2.17 11.1S4 9.43 5.25 9.15C5.67 7.62 6.5 6.38 7.75 5.43S10.42 4 12 4C13.95 4 15.6 4.68 16.96 6.04C18.32 7.4 19 9.05 19 11C20.15 11.13 21.1 11.63 21.86 12.5C21.92 12.55 21.96 12.63 22 12.69C21.1 12.25 20.08 12 19 12C18.31 12 17.63 12.11 17 12.29V11C17 9.62 16.5 8.44 15.54 7.46C14.56 6.5 13.38 6 12 6S9.44 6.5 8.46 7.46C7.5 8.44 7 9.62 7 11H6.5C5.53 11 4.71 11.34 4.03 12.03C3.34 12.71 3 13.53 3 14.5S3.34 16.29 4.03 17C4.71 17.66 5.53 18 6.5 18H12.08C12.03 18.33 12 18.66 12 19M23.83 20.64L22.83 22.37C22.76 22.5 22.63 22.5 22.5 22.5L21.27 22C21 22.18 20.73 22.34 20.43 22.47L20.24 23.79C20.22 23.91 20.11 24 20 24H18C17.86 24 17.76 23.91 17.74 23.79L17.55 22.47C17.24 22.35 16.96 22.18 16.7 22L15.46 22.5C15.34 22.5 15.21 22.5 15.15 22.37L14.15 20.64C14.09 20.53 14.12 20.4 14.21 20.32L15.27 19.5C15.25 19.33 15.24 19.17 15.24 19S15.25 18.67 15.27 18.5L14.21 17.68C14.11 17.6 14.09 17.47 14.15 17.36L15.15 15.63C15.22 15.5 15.35 15.5 15.46 15.5L16.7 16C16.96 15.82 17.25 15.66 17.55 15.53L17.74 14.21C17.76 14.09 17.87 14 18 14H20C20.11 14 20.22 14.09 20.23 14.21L20.42 15.53C20.73 15.65 21 15.82 21.27 16L22.5 15.5C22.63 15.5 22.76 15.5 22.82 15.63L23.82 17.36C23.88 17.47 23.85 17.6 23.76 17.68L22.7 18.5C22.73 18.67 22.74 18.83 22.74 19S22.72 19.33 22.7 19.5L23.77 20.32C23.86 20.4 23.89 20.53 23.83 20.64M20.5 19C20.5 18.17 19.82 17.5 19 17.5S17.5 18.17 17.5 19 18.16 20.5 19 20.5 20.5 19.83 20.5 19Z" />
-            </svg>
-            <span class="hidden sm:inline">Fetch settings</span>
-          </button>
-        </div>
-
-        <div id="system-settings-body" class="grid grid-cols-2 gap-3">
-          <label class="text-sm">Battery capacity (Wh)
-            <input id="cap" type="number" class="form-input" data-settings-input />
-          </label>
-          <label class="text-sm">
-            <span class="whitespace-nowrap">Battery cost (c€/kWh)</span>
-            <input id="bwear" type="number" class="form-input" data-settings-input />
-          </label>
-          <label class="text-sm">Min SoC (%)
-            <input id="minsoc" type="number" class="form-input" data-settings-input />
-          </label>
-          <label class="text-sm">Max SoC (%)
-            <input id="maxsoc" type="number" class="form-input" data-settings-input />
-          </label>
-          <label class="text-sm">Max charge (W)
-            <input id="pchg" type="number" class="form-input" data-settings-input />
-          </label>
-          <label class="text-sm">Max discharge (W)
-            <input id="pdis" type="number" class="form-input" data-settings-input />
-          </label>
-          <label class="text-sm">Max grid import (W)
-            <input id="gimp" type="number" class="form-input" data-settings-input />
-          </label>
-          <label class="text-sm">Max grid export (W)
-            <input id="gexp" type="number" class="form-input" data-settings-input />
-          </label>
-          <label class="text-sm">Charge efficiency (%)
-            <input id="etaC" type="number" class="form-input" data-settings-input />
-          </label>
-          <label class="text-sm">Discharge efficiency (%)
-            <input id="etaD" type="number" class="form-input" data-settings-input />
-          </label>
-          <label class="text-sm">Step (min)
-            <input id="step" type="number" class="form-input" data-settings-input />
-          </label>
-          <label class="text-sm">Idle drain (W)
-            <input id="idle-drain" type="number" min="0" step="1" class="form-input" data-settings-input />
-          </label>
-          <label class="text-sm">Rebalance hold (h)
-            <input id="rebalance-hold-hours" type="number" min="0.25" step="0.25" class="form-input" data-settings-input />
-          </label>
-          <label class="toggle col-span-2 mt-2">
-            <input id="block-feedin-negative-prices" type="checkbox" checked data-settings-input>
-            <span class="toggle-knob"></span>
-            <span class="text-sm">Block feed-in when export price is negative</span>
-          </label>
-        </div>
-      </section>
-
-      <!-- Right column: stacked cards -->
+      <!-- Left column: system settings, sources, Home Assistant and EV -->
       <div class="space-y-6">
+
+        <section id="card-system" class="card">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h2 class="sidebar-label">System settings</h2>
+            <button id="vrm-fetch-settings" type="button" title="Fetch settings from Victron VRM"
+              class="inline-flex items-center justify-center h-9 w-9 rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400/30 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 sm:w-auto sm:px-3 sm:gap-2 sm:rounded-pill sm:text-sm">
+              <!-- autorenew icon -->
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24">
+                <title>autorenew</title>
+                <path fill="currentColor"
+                  d="M12 19C12 19.34 12.03 19.67 12.08 20H6.5C5 20 3.69 19.5 2.61 18.43C1.54 17.38 1 16.09 1 14.58C1 13.28 1.39 12.12 2.17 11.1S4 9.43 5.25 9.15C5.67 7.62 6.5 6.38 7.75 5.43S10.42 4 12 4C13.95 4 15.6 4.68 16.96 6.04C18.32 7.4 19 9.05 19 11C20.15 11.13 21.1 11.63 21.86 12.5C21.92 12.55 21.96 12.63 22 12.69C21.1 12.25 20.08 12 19 12C18.31 12 17.63 12.11 17 12.29V11C17 9.62 16.5 8.44 15.54 7.46C14.56 6.5 13.38 6 12 6S9.44 6.5 8.46 7.46C7.5 8.44 7 9.62 7 11H6.5C5.53 11 4.71 11.34 4.03 12.03C3.34 12.71 3 13.53 3 14.5S3.34 16.29 4.03 17C4.71 17.66 5.53 18 6.5 18H12.08C12.03 18.33 12 18.66 12 19M23.83 20.64L22.83 22.37C22.76 22.5 22.63 22.5 22.5 22.5L21.27 22C21 22.18 20.73 22.34 20.43 22.47L20.24 23.79C20.22 23.91 20.11 24 20 24H18C17.86 24 17.76 23.91 17.74 23.79L17.55 22.47C17.24 22.35 16.96 22.18 16.7 22L15.46 22.5C15.34 22.5 15.21 22.5 15.15 22.37L14.15 20.64C14.09 20.53 14.12 20.4 14.21 20.32L15.27 19.5C15.25 19.33 15.24 19.17 15.24 19S15.25 18.67 15.27 18.5L14.21 17.68C14.11 17.6 14.09 17.47 14.15 17.36L15.15 15.63C15.22 15.5 15.35 15.5 15.46 15.5L16.7 16C16.96 15.82 17.25 15.66 17.55 15.53L17.74 14.21C17.76 14.09 17.87 14 18 14H20C20.11 14 20.22 14.09 20.23 14.21L20.42 15.53C20.73 15.65 21 15.82 21.27 16L22.5 15.5C22.63 15.5 22.76 15.5 22.82 15.63L23.82 17.36C23.88 17.47 23.85 17.6 23.76 17.68L22.7 18.5C22.73 18.67 22.74 18.83 22.74 19S22.72 19.33 22.7 19.5L23.77 20.32C23.86 20.4 23.89 20.53 23.83 20.64M20.5 19C20.5 18.17 19.82 17.5 19 17.5S17.5 18.17 17.5 19 18.16 20.5 19 20.5 20.5 19.83 20.5 19Z" />
+              </svg>
+              <span class="hidden sm:inline">Fetch settings</span>
+            </button>
+          </div>
+
+          <div id="system-settings-body" class="grid grid-cols-2 gap-3">
+            <label class="text-sm">Battery capacity (Wh)
+              <input id="cap" type="number" class="form-input" data-settings-input />
+            </label>
+            <label class="text-sm">
+              <span class="whitespace-nowrap">Battery cost (c€/kWh)</span>
+              <input id="bwear" type="number" class="form-input" data-settings-input />
+            </label>
+            <label class="text-sm">Min SoC (%)
+              <input id="minsoc" type="number" class="form-input" data-settings-input />
+            </label>
+            <label class="text-sm">Max SoC (%)
+              <input id="maxsoc" type="number" class="form-input" data-settings-input />
+            </label>
+            <label class="text-sm">Max charge (W)
+              <input id="pchg" type="number" class="form-input" data-settings-input />
+            </label>
+            <label class="text-sm">Max discharge (W)
+              <input id="pdis" type="number" class="form-input" data-settings-input />
+            </label>
+            <label class="text-sm">Max grid import (W)
+              <input id="gimp" type="number" class="form-input" data-settings-input />
+            </label>
+            <label class="text-sm">Max grid export (W)
+              <input id="gexp" type="number" class="form-input" data-settings-input />
+            </label>
+            <label class="text-sm">Charge efficiency (%)
+              <input id="etaC" type="number" class="form-input" data-settings-input />
+            </label>
+            <label class="text-sm">Discharge efficiency (%)
+              <input id="etaD" type="number" class="form-input" data-settings-input />
+            </label>
+            <label class="text-sm">Step (min)
+              <input id="step" type="number" class="form-input" data-settings-input />
+            </label>
+            <label class="text-sm">Idle drain (W)
+              <input id="idle-drain" type="number" min="0" step="1" class="form-input" data-settings-input />
+            </label>
+            <label class="text-sm">Rebalance hold (h)
+              <input id="rebalance-hold-hours" type="number" min="0.25" step="0.25" class="form-input" data-settings-input />
+            </label>
+            <label class="toggle col-span-2 mt-2">
+              <input id="block-feedin-negative-prices" type="checkbox" checked data-settings-input>
+              <span class="toggle-knob"></span>
+              <span class="text-sm">Block feed-in when export price is negative</span>
+            </label>
+          </div>
+        </section>
 
         <!-- Data Sources Card -->
         <section class="card">
@@ -805,30 +804,6 @@
             <label class="text-sm col-span-2">Price forecast URL
               <input id="price-forecast-url" type="url" placeholder="https://…/forecast.json" class="form-input" data-settings-input />
             </label>
-          </div>
-        </section>
-
-        <!-- Sensors Card -->
-        <section class="card">
-          <div class="mb-4">
-            <h2 class="sidebar-label">Sensors</h2>
-          </div>
-          <div class="space-y-3">
-            <p class="text-xs text-slate-400 dark:text-slate-500">Home Assistant sensors fetched for predictions.
-              Sensors sharing a display name are summed.</p>
-            <div id="pred-sensor-list" class="space-y-2"></div>
-            <button id="pred-add-sensor" type="button"
-              class="w-full rounded-lg border border-dashed border-slate-300 dark:border-white/15 px-4 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:border-sky-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors">
-              + Add Sensor
-            </button>
-
-            <p class="text-xs text-slate-400 dark:text-slate-500 pt-2">Derived sensors add and subtract the sensors
-              above; each may also use derived sensors defined before it.</p>
-            <div id="pred-derived-list" class="space-y-2"></div>
-            <button id="pred-add-derived" type="button"
-              class="w-full rounded-lg border border-dashed border-slate-300 dark:border-white/15 px-4 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:border-sky-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors">
-              + Add Derived Sensor
-            </button>
           </div>
         </section>
 
@@ -876,21 +851,23 @@
                   class="form-input" data-settings-input />
               </label>
             </div>
-            <label class="block text-sm">Max charge level (%)
-              <input id="ev-max-soc" type="number" min="0" max="100" step="1"
-                class="form-input" data-settings-input />
-              <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">
-                Ceiling for opportunistic charging. Scheduled targets and trips still charge
-                above it. 100 = no cap.
-              </span>
-            </label>
-            <label class="block text-sm">Trip SoC buffer (%)
-              <input id="ev-trip-soc-buffer" type="number" min="0" max="100" step="1"
-                class="form-input" data-settings-input />
-              <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">
-                Extra charge required at departure on top of a trip's estimated usage.
-              </span>
-            </label>
+            <div class="grid grid-cols-2 items-start gap-3">
+              <label class="block text-sm">Max charge level (%)
+                <input id="ev-max-soc" type="number" min="0" max="100" step="1"
+                  class="form-input" data-settings-input />
+                <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                  Ceiling for opportunistic charging; targets and trips still charge above it.
+                  100 = no cap.
+                </span>
+              </label>
+              <label class="block text-sm">Trip SoC buffer (%)
+                <input id="ev-trip-soc-buffer" type="number" min="0" max="100" step="1"
+                  class="form-input" data-settings-input />
+                <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                  Extra charge required at departure on top of a trip's estimated usage.
+                </span>
+              </label>
+            </div>
             <label class="block text-sm">SoC sensor entity ID
               <input id="ev-soc-sensor" type="text" placeholder="sensor.ev_battery_level"
                 class="form-input font-mono text-xs" data-no-autosolve data-settings-input />
@@ -904,6 +881,33 @@
           </div>
         </section>
 
+      </div><!-- end left column -->
+
+      <!-- Right column: the sensor list, which is long enough to hold a column on its own -->
+      <div class="space-y-6">
+        <!-- Sensors Card -->
+        <section class="card">
+          <div class="mb-4">
+            <h2 class="sidebar-label">Sensors</h2>
+          </div>
+          <div class="space-y-3">
+            <p class="text-xs text-slate-400 dark:text-slate-500">Home Assistant sensors fetched for predictions.
+              Sensors sharing a display name are summed.</p>
+            <div id="pred-sensor-list" class="space-y-2"></div>
+            <button id="pred-add-sensor" type="button"
+              class="w-full rounded-lg border border-dashed border-slate-300 dark:border-white/15 px-4 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:border-sky-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors">
+              + Add Sensor
+            </button>
+
+            <p class="text-xs text-slate-400 dark:text-slate-500 pt-2">Derived sensors add and subtract the sensors
+              above; each may also use derived sensors defined before it.</p>
+            <div id="pred-derived-list" class="space-y-2"></div>
+            <button id="pred-add-derived" type="button"
+              class="w-full rounded-lg border border-dashed border-slate-300 dark:border-white/15 px-4 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:border-sky-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors">
+              + Add Derived Sensor
+            </button>
+          </div>
+        </section>
       </div><!-- end right column -->
 
     </div>
@@ -993,6 +997,9 @@
                 <input id="ev-entry-soc" type="number" min="0" max="100" step="1" placeholder="none" class="form-input mt-1" />
                 <span id="ev-entry-trip-hint" class="mt-1 hidden block text-xs text-slate-500 dark:text-slate-400"></span>
               </label>
+
+              <!-- Trip only: named usage presets ("Knokke" → 35%), filled in by ev-schedule.js -->
+              <div id="ev-entry-presets" class="hidden flex-wrap items-center gap-1"></div>
 
               <p id="ev-entry-error" class="hidden text-xs text-red-600 dark:text-red-400"></p>
 

@@ -3,6 +3,12 @@ import type { Request, Response, NextFunction } from 'express';
 import { assertCondition, toHttpError } from '../http-errors.ts';
 import { getLastPlan } from '../services/planner-service.ts';
 import type { EvScheduleEntryInput } from '../services/ev-schedule-entries.ts';
+import type { EvTripPresetInput } from '../services/ev-trip-preset-store.ts';
+import {
+  deleteEvTripPreset,
+  loadEvTripPresets,
+  saveEvTripPreset,
+} from '../services/ev-trip-preset-store.ts';
 import {
   createStoredEvScheduleEntry,
   deleteStoredEvScheduleEntry,
@@ -144,6 +150,39 @@ router.delete('/schedule-entries/:id', async (req: Request, res: Response, next:
     res.json(await deleteStoredEvScheduleEntry(String(req.params.id)));
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to delete EV schedule entry'));
+  }
+});
+
+// ----------------------------- Trip usage presets -----------------------
+// Named, reusable trip usage estimates ("Knokke" → 35%), persisted in data.json.
+
+router.get('/trip-presets', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ presets: await loadEvTripPresets() });
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to read EV trip presets'));
+  }
+});
+
+// PUT rather than POST: saving an existing name overwrites its percentage.
+router.put('/trip-presets', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    assertCondition(
+      req.body && typeof req.body === 'object' && !Array.isArray(req.body),
+      400,
+      'EV trip preset payload must be an object',
+    );
+    res.json(await saveEvTripPreset(req.body as EvTripPresetInput));
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to save EV trip preset'));
+  }
+});
+
+router.delete('/trip-presets/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await deleteEvTripPreset(String(req.params.id)));
+  } catch (error) {
+    next(toHttpError(error, 500, 'Failed to delete EV trip preset'));
   }
 });
 

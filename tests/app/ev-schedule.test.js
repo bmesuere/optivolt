@@ -1,13 +1,22 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEvScheduleController } from '../../app/src/ev-schedule.js';
-import { createEvScheduleEntry, fetchEvScheduleEntries } from '../../app/src/api/api.js';
+import {
+  createEvScheduleEntry,
+  deleteEvTripPreset,
+  fetchEvScheduleEntries,
+  fetchEvTripPresets,
+  saveEvTripPreset,
+} from '../../app/src/api/api.js';
 
 vi.mock('../../app/src/api/api.js', () => ({
   fetchEvScheduleEntries: vi.fn(async () => ({ entries: [] })),
   createEvScheduleEntry: vi.fn(async () => ({ entries: [] })),
   updateEvScheduleEntry: vi.fn(async () => ({ entries: [] })),
   deleteEvScheduleEntry: vi.fn(async () => ({ entries: [] })),
+  fetchEvTripPresets: vi.fn(async () => ({ presets: [] })),
+  saveEvTripPreset: vi.fn(async () => ({ presets: [] })),
+  deleteEvTripPreset: vi.fn(async () => ({ presets: [] })),
 }));
 
 function setup() {
@@ -20,6 +29,7 @@ function setup() {
     evEntryEndTime: document.createElement('input'),
     step: Object.assign(document.createElement('input'), { type: 'number', value: '15' }),
     evEntryError: Object.assign(document.createElement('p'), { className: 'hidden' }),
+    evEntryPresets: Object.assign(document.createElement('div'), { className: 'hidden' }),
     evEntryTimeClear: document.createElement('button'),
     evEntrySave: document.createElement('button'),
   };
@@ -252,5 +262,70 @@ describe('ev schedule — times snap to the planning grid', () => {
     });
     expect(els.evEntryTime.step).toBe('3600');
     expect(els.evEntryEndTime.step).toBe('3600');
+  });
+});
+
+describe('ev schedule — named trip usage presets', () => {
+  const presets = [
+    { id: 'p1', name: 'Knokke', usage_percent: 35 },
+    { id: 'p2', name: 'Brussels commute', usage_percent: 18 },
+  ];
+
+  async function setupWithPresets() {
+    fetchEvTripPresets.mockResolvedValueOnce({ presets });
+    const { controller, els } = setup();
+    controller.openEditor(null); // a new entry defaults to a trip draft
+    await vi.waitFor(() => expect(els.evEntryPresets.innerHTML).toContain('Knokke'));
+    return { controller, els };
+  }
+
+  it('shows the presets only while a trip is being edited', async () => {
+    const { controller, els } = await setupWithPresets();
+    expect(els.evEntryPresets.classList.contains('hidden')).toBe(false);
+    // Sorted by name, each chip carrying its percentage.
+    expect(els.evEntryPresets.textContent.replace(/\s+/g, ' ')).toContain('Brussels commute 18%');
+
+    controller.openEditor({ ...trip, type: 'target', soc_percent: 80 });
+    expect(els.evEntryPresets.classList.contains('hidden')).toBe(true);
+  });
+
+  it('fills the usage field (and its hint) from a chip', async () => {
+    const { els } = await setupWithPresets();
+    els.evEntryPresets.querySelector('[data-preset-apply="p1"]').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(els.evEntrySoc.value).toBe('35');
+    expect(els.evEntryTripHint.textContent).toContain('≥ 55%'); // 35% usage + 20% buffer
+  });
+
+  it('refuses to name a preset before a usage estimate is filled in', async () => {
+    const { els } = await setupWithPresets();
+    els.evEntryPresets.querySelector('[data-preset-add]').dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(els.evEntryError.textContent).toContain('usage estimate');
+    expect(els.evEntryPresets.querySelector('[data-preset-name]')).toBe(null);
+  });
+
+  it('saves the typed value under a new name and shows the returned chips', async () => {
+    const { els } = await setupWithPresets();
+    els.evEntrySoc.value = '22';
+    els.evEntryPresets.querySelector('[data-preset-add]').dispatchEvent(new Event('click', { bubbles: true }));
+
+    const nameInput = els.evEntryPresets.querySelector('[data-preset-name]');
+    nameInput.value = '  Parents  ';
+    saveEvTripPreset.mockResolvedValueOnce({ presets: [...presets, { id: 'p3', name: 'Parents', usage_percent: 22 }] });
+    els.evEntryPresets.querySelector('[data-preset-confirm]').dispatchEvent(new Event('click', { bubbles: true }));
+
+    await vi.waitFor(() => expect(els.evEntryPresets.innerHTML).toContain('Parents'));
+    expect(saveEvTripPreset).toHaveBeenCalledWith({ name: 'Parents', usage_percent: 22 });
+  });
+
+  it('removes a preset from the row', async () => {
+    const { els } = await setupWithPresets();
+    deleteEvTripPreset.mockResolvedValueOnce({ presets: [presets[1]] });
+    els.evEntryPresets.querySelector('[data-preset-remove="p1"]').dispatchEvent(new Event('click', { bubbles: true }));
+
+    await vi.waitFor(() => expect(els.evEntryPresets.innerHTML).not.toContain('Knokke'));
+    expect(deleteEvTripPreset).toHaveBeenCalledWith('p1');
+    expect(els.evEntryPresets.innerHTML).toContain('Brussels commute');
   });
 });
