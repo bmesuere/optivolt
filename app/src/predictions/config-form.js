@@ -1,9 +1,14 @@
 import { fetchPredictionConfig, savePredictionConfig, fetchHaEntityState } from '../api/api.js';
 import { debounce } from '../utils.js';
 import { initValidation } from '../predictions-validation.js';
+import { dayGroupingLabel } from './day-grouping.js';
 
 // Predictor list state; the forecast is the per-slot sum of these.
 let predictors = [];
+// Which predictor cards are expanded (they render collapsed to a summary line). Keyed by the
+// predictor object rather than its index, so the set survives a rerender that shifts indices
+// (a removal) and several cards can stay open at once without the state drifting from the DOM.
+const expandedPredictors = new WeakSet();
 let sensorOptions = [];
 // Sensor config state: HA sensors ({ id, name, unit }) and derived sensors
 // ({ name, formula: ['+Ref', '-Ref', …] }).
@@ -108,7 +113,9 @@ export function wirePredictionForm({ onForecastAll, onPvForecast }) {
 
   document.getElementById('pred-add-predictor')
     ?.addEventListener('click', () => {
-      predictors.push(defaultPredictor('historical'));
+      const added = defaultPredictor('historical');
+      predictors.push(added);
+      expandedPredictors.add(added); // a just-added predictor opens for editing
       renderPredictorList();
       debouncedSave();
     });
@@ -258,10 +265,27 @@ function renderPredictorList() {
 
 const FIELD_LABEL_CLASS = 'block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide';
 
+const TYPE_LABEL = { historical: 'Historical', temperature: 'Temperature', fixed: 'Fixed' };
+
+/** One-line description of a predictor, shown while its card is collapsed. */
+function predictorSummary(p) {
+  if (p.type === 'fixed') return `${Number(p.load_W) || 0} W`;
+  const parts = [
+    p.sensor || 'no sensor',
+    `${Number(p.lookbackWeeks) || 0} wk`,
+    dayGroupingLabel(p.dayFilter),
+  ];
+  parts.push(p.type === 'temperature' ? `${Number(p.bins) || 0} bins` : (p.aggregation ?? 'mean'));
+  return parts.join(' · ');
+}
+
 function buildPredictorCard(predictor, index) {
-  const card = document.createElement('div');
-  card.className = 'rounded-lg border border-slate-200 dark:border-white/10 p-3 space-y-3';
+  // A collapsed card is a one-line summary: with several predictors summed into one forecast,
+  // an expanded list of every parameter fills the whole sidebar.
+  const card = document.createElement('details');
+  card.className = 'rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden';
   card.dataset.predictorIndex = String(index);
+  card.open = expandedPredictors.has(predictor);
 
   const sensorField = `
       <label class="block text-sm">
@@ -273,27 +297,45 @@ function buildPredictorCard(predictor, index) {
           <span class="${FIELD_LABEL_CLASS}">Lookback (weeks)</span>
           <input data-field="lookbackWeeks" type="number" min="1"${max ? ` max="${max}"` : ''} class="form-input" />
         </label>`;
-  const dayFilterField = `
+  // "Day grouping" rather than "day filter": the choice is which past days share one profile,
+  // not which days are dropped — "All days together" pools every day into a single profile.
+  const dayGroupingField = `
       <label class="block text-sm">
-        <span class="${FIELD_LABEL_CLASS}">Day Filter</span>
+        <span class="${FIELD_LABEL_CLASS}">Day grouping</span>
         <select data-field="dayFilter" class="form-select">
-          <option value="same">Same day of week</option>
-          <option value="weekday-weekend">Weekday / Weekend</option>
-          <option value="weekday-sat-sun">Weekday / Sat / Sun</option>
-          <option value="all">All days</option>
+          <option value="same">A profile per weekday</option>
+          <option value="weekday-weekend">Weekdays / weekend</option>
+          <option value="weekday-sat-sun">Weekdays / Sat / Sun</option>
+          <option value="all">All days together</option>
+        </select>
+        <span class="mt-1 block text-xs text-slate-400 dark:text-slate-500">Which past days are averaged into the profile a forecast day uses.</span>
+      </label>`;
+  const typeField = `
+      <label class="block text-sm">
+        <span class="${FIELD_LABEL_CLASS}">Type</span>
+        <select data-field="type" class="form-select">
+          <option value="historical">Historical</option>
+          <option value="temperature">Temperature</option>
+          <option value="fixed">Fixed</option>
         </select>
       </label>`;
 
   let fields;
   if (predictor.type === 'fixed') {
     fields = `
-      <label class="block text-sm">
-        <span class="${FIELD_LABEL_CLASS}">Fixed Load (W)</span>
-        <input data-field="load_W" type="number" min="0" step="10" class="form-input" />
-      </label>`;
+      <div class="grid grid-cols-2 gap-3">
+        ${typeField}
+        <label class="block text-sm">
+          <span class="${FIELD_LABEL_CLASS}">Fixed Load (W)</span>
+          <input data-field="load_W" type="number" min="0" step="10" class="form-input" />
+        </label>
+      </div>`;
   } else if (predictor.type === 'temperature') {
     fields = `
-      ${sensorField}
+      <div class="grid grid-cols-2 gap-3">
+        ${typeField}
+        ${sensorField}
+      </div>
       <div class="grid grid-cols-2 gap-3">
         ${lookbackField(12)}
         <label class="block text-sm">
@@ -301,10 +343,13 @@ function buildPredictorCard(predictor, index) {
           <input data-field="bins" type="number" min="2" max="8" class="form-input" />
         </label>
       </div>
-      ${dayFilterField}`;
+      ${dayGroupingField}`;
   } else {
     fields = `
-      ${sensorField}
+      <div class="grid grid-cols-2 gap-3">
+        ${typeField}
+        ${sensorField}
+      </div>
       <div class="grid grid-cols-2 gap-3">
         ${lookbackField()}
         <label class="block text-sm">
@@ -315,21 +360,41 @@ function buildPredictorCard(predictor, index) {
           </select>
         </label>
       </div>
-      ${dayFilterField}`;
+      ${dayGroupingField}`;
   }
 
   card.innerHTML = `
-    <div class="flex items-center gap-2">
-      <select data-field="type" class="form-select flex-1">
-        <option value="historical">Historical</option>
-        <option value="temperature">Temperature</option>
-        <option value="fixed">Fixed</option>
-      </select>
+    <summary class="flex cursor-pointer list-none flex-wrap items-center gap-x-2 p-3 text-sm">
+      <svg class="h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform" data-chevron viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
+      </svg>
+      <span class="shrink-0 font-medium text-ink dark:text-slate-100" data-summary-type></span>
       <button type="button" data-remove title="Remove predictor"
-        class="shrink-0 rounded p-1.5 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">✕</button>
+        class="ml-auto shrink-0 rounded p-1 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">✕</button>
+      <!-- Full width: the parameters take the line below the type, since the sidebar is too
+           narrow to hold both without cutting the last ones off. -->
+      <span class="w-full pl-5 text-xs text-slate-400 dark:text-slate-500" data-summary-detail></span>
+    </summary>
+    <div class="space-y-3 border-t border-slate-200 p-3 dark:border-white/10">
+      ${fields}
     </div>
-    ${fields}
   `;
+
+  const summaryType = card.querySelector('[data-summary-type]');
+  const summaryDetail = card.querySelector('[data-summary-detail]');
+  const refreshSummary = () => {
+    summaryType.textContent = TYPE_LABEL[predictor.type] ?? predictor.type;
+    summaryDetail.textContent = predictorSummary(predictor);
+  };
+  refreshSummary();
+
+  const chevron = card.querySelector('[data-chevron]');
+  chevron.classList.toggle('rotate-90', card.open);
+  card.addEventListener('toggle', () => {
+    chevron.classList.toggle('rotate-90', card.open);
+    if (card.open) expandedPredictors.add(predictor);
+    else expandedPredictors.delete(predictor);
+  });
 
   // Sensor options are user data; populate via the DOM instead of markup.
   // A stored sensor that no longer resolves stays selectable so it isn't
@@ -354,13 +419,16 @@ function buildPredictorCard(predictor, index) {
     const handler = () => {
       if (field === 'type') {
         if (el.value !== predictor.type) {
+          // A type change swaps in a fresh predictor object, so carry the open state over to it.
           predictors[index] = defaultPredictor(el.value);
+          expandedPredictors.add(predictors[index]);
           renderPredictorList();
           debouncedSave();
         }
         return;
       }
       predictor[field] = el.value;
+      refreshSummary();
       debouncedSave();
     };
     el.addEventListener('input', handler);
@@ -374,7 +442,8 @@ function buildPredictorCard(predictor, index) {
     removeBtn.disabled = true;
     removeBtn.title = 'At least one predictor is required';
   }
-  removeBtn.addEventListener('click', () => {
+  removeBtn.addEventListener('click', (event) => {
+    event.preventDefault(); // a click inside the summary would otherwise toggle the card
     predictors.splice(index, 1);
     renderPredictorList();
     debouncedSave();

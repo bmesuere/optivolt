@@ -1,6 +1,7 @@
 /* global Chart */
 import { runValidation, savePredictionConfig } from './api/api.js';
 import { createTooltipHandler, fmtKwh, getChartAnimations, ttHeader, ttRow, ttDivider } from './chart-tooltip.js';
+import { dayGroupingLabel } from './predictions/day-grouping.js';
 
 let validationResults = null;
 let _activeSensor = null;
@@ -126,7 +127,7 @@ function renderMetricsTable(results, sensorName, deps) {
     tr.innerHTML = `
       <td class="px-3 py-2 text-xs">${row.type === 'temperature' ? 'temperature' : 'historical'}</td>
       <td class="px-3 py-2 font-mono text-xs">${row.lookbackWeeks}w</td>
-      <td class="px-3 py-2 text-xs">${row.dayFilter}</td>
+      <td class="px-3 py-2 text-xs">${dayGroupingLabel(row.dayFilter)}</td>
       <td class="px-3 py-2 text-xs">${rowParams(row)}</td>
       <td class="px-3 py-2 font-mono text-xs text-right">${isNaN(row.mae) ? '—' : row.mae.toFixed(1)}</td>
       <td class="px-3 py-2 font-mono text-xs text-right">${isNaN(row.rmse) ? '—' : row.rmse.toFixed(1)}</td>
@@ -161,7 +162,7 @@ function rowPredictor(row) {
 async function onUseConfig(row, { applyValidatedPredictor, setComparisonStatus }) {
   try {
     await applyValidatedPredictor(rowPredictor(row));
-    setComparisonStatus(`Predictor updated: ${row.sensor} / ${rowPredictor(row).type} / ${row.lookbackWeeks}w / ${row.dayFilter} / ${rowParams(row)}`);
+    setComparisonStatus(`Predictor updated: ${row.sensor} / ${rowPredictor(row).type} / ${row.lookbackWeeks}w / ${dayGroupingLabel(row.dayFilter)} / ${rowParams(row)}`);
   } catch (err) {
     setComparisonStatus(`Failed to save predictor: ${err.message}`, true);
   }
@@ -295,6 +296,6 @@ function onShowChart(row) {
 
   const title = document.getElementById('pred-chart-title');
   if (title) {
-    title.textContent = `Accuracy: ${row.sensor} / ${row.type ?? 'historical'} / ${row.lookbackWeeks}w / ${row.dayFilter} / ${rowParams(row)}`;
+    title.textContent = `Accuracy: ${row.sensor} / ${row.type ?? 'historical'} / ${row.lookbackWeeks}w / ${dayGroupingLabel(row.dayFilter)} / ${rowParams(row)}`;
   }
 }
