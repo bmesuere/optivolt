@@ -129,6 +129,34 @@ describe('prediction config form', () => {
     expect(added[0].open).toBe(false);
   });
 
+  it('keeps every open card open across a rerender, and lets a removal shift the rest', async () => {
+    applyPredictionConfigToForm({
+      ...baseConfig,
+      predictors: [
+        { type: 'historical', sensor: 'Grid Import', lookbackWeeks: 3, dayFilter: 'same', aggregation: 'mean' },
+        { type: 'fixed', load_W: 100 },
+        { type: 'fixed', load_W: 200 },
+      ],
+    });
+    savePredictionConfig.mockResolvedValue({});
+    wirePredictionForm({ onForecastAll: vi.fn(), onPvForecast: vi.fn() });
+
+    const open = (i) => {
+      const card = document.querySelector(`[data-predictor-index="${i}"]`);
+      card.open = true;
+      card.dispatchEvent(new Event('toggle'));
+    };
+    open(1);
+    open(2);
+
+    // Removing the first predictor shifts the other two down a slot; both stay open, because
+    // the open set is keyed on the predictors themselves rather than on their positions.
+    document.querySelector('[data-predictor-index="0"] [data-remove]').click();
+    const cards = document.querySelectorAll('#pred-predictor-list [data-predictor-index]');
+    expect(cards).toHaveLength(2);
+    expect([cards[0].open, cards[1].open]).toEqual([true, true]);
+  });
+
   it('reads sanitized sensors, derived, predictors, and PV values', async () => {
     applyPredictionConfigToForm({
       ...baseConfig,

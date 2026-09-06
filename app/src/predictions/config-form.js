@@ -5,8 +5,10 @@ import { dayGroupingLabel } from './day-grouping.js';
 
 // Predictor list state; the forecast is the per-slot sum of these.
 let predictors = [];
-// Which predictor card is expanded (cards render collapsed to a summary line); null = all closed.
-let expandedPredictorIndex = null;
+// Which predictor cards are expanded (they render collapsed to a summary line). Keyed by the
+// predictor object rather than its index, so the set survives a rerender that shifts indices
+// (a removal) and several cards can stay open at once without the state drifting from the DOM.
+const expandedPredictors = new WeakSet();
 let sensorOptions = [];
 // Sensor config state: HA sensors ({ id, name, unit }) and derived sensors
 // ({ name, formula: ['+Ref', '-Ref', …] }).
@@ -111,8 +113,9 @@ export function wirePredictionForm({ onForecastAll, onPvForecast }) {
 
   document.getElementById('pred-add-predictor')
     ?.addEventListener('click', () => {
-      predictors.push(defaultPredictor('historical'));
-      expandedPredictorIndex = predictors.length - 1; // a just-added predictor opens for editing
+      const added = defaultPredictor('historical');
+      predictors.push(added);
+      expandedPredictors.add(added); // a just-added predictor opens for editing
       renderPredictorList();
       debouncedSave();
     });
@@ -282,7 +285,7 @@ function buildPredictorCard(predictor, index) {
   const card = document.createElement('details');
   card.className = 'rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden';
   card.dataset.predictorIndex = String(index);
-  card.open = index === expandedPredictorIndex;
+  card.open = expandedPredictors.has(predictor);
 
   const sensorField = `
       <label class="block text-sm">
@@ -389,8 +392,8 @@ function buildPredictorCard(predictor, index) {
   chevron.classList.toggle('rotate-90', card.open);
   card.addEventListener('toggle', () => {
     chevron.classList.toggle('rotate-90', card.open);
-    if (card.open) expandedPredictorIndex = index;
-    else if (expandedPredictorIndex === index) expandedPredictorIndex = null;
+    if (card.open) expandedPredictors.add(predictor);
+    else expandedPredictors.delete(predictor);
   });
 
   // Sensor options are user data; populate via the DOM instead of markup.
@@ -416,8 +419,9 @@ function buildPredictorCard(predictor, index) {
     const handler = () => {
       if (field === 'type') {
         if (el.value !== predictor.type) {
+          // A type change swaps in a fresh predictor object, so carry the open state over to it.
           predictors[index] = defaultPredictor(el.value);
-          expandedPredictorIndex = index; // a retyped predictor keeps its card open to be filled in
+          expandedPredictors.add(predictors[index]);
           renderPredictorList();
           debouncedSave();
         }
@@ -441,7 +445,6 @@ function buildPredictorCard(predictor, index) {
   removeBtn.addEventListener('click', (event) => {
     event.preventDefault(); // a click inside the summary would otherwise toggle the card
     predictors.splice(index, 1);
-    if (expandedPredictorIndex === index) expandedPredictorIndex = null;
     renderPredictorList();
     debouncedSave();
   });
