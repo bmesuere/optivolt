@@ -39,6 +39,9 @@ const optimizer = createOptimizerController({
   // The server regenerates the stored load/PV series when the horizon changes;
   // the Predictions tab caches them, so it has to re-read.
   onForecastsRefreshed: () => reloadStoredForecasts(),
+  // A solve prunes EV schedule entries whose event has happened, so the page
+  // re-reads them before painting the plan they belong to.
+  refreshEvEntries: () => evSchedule?.loadEntries(),
 });
 evSchedule = createEvScheduleController({
   els,

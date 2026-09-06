@@ -42,6 +42,7 @@ export function createOptimizerController({
   getEvEntries = () => [],
   onPlanRows = () => {},
   onForecastsRefreshed = () => {},
+  refreshEvEntries = async () => {},
 }) {
   const deps = {
     debounce,
@@ -155,6 +156,18 @@ export function createOptimizerController({
       const updateData = !!els.updateDataBeforeRun?.checked;
       const writeToVictron = !!els.pushToVictron?.checked;
       const result = await deps.requestRemoteSolve({ updateData, writeToVictron });
+      if (!isCurrentPlanRequest(seq)) return;
+
+      // The solve prunes EV schedule entries that have played out (an arrival the car has
+      // made, a departed trip). The entries this page holds are the ones it fetched on load,
+      // so without a re-read the charts keep drawing annotations for events the server has
+      // already dropped. Refresh before painting, so the plan and its annotations agree.
+      // A failed refresh must not turn a solved plan into an error: keep the entries we have.
+      try {
+        await refreshEvEntries();
+      } catch (evError) {
+        console.error("Failed to refresh EV schedule entries", evError);
+      }
       if (!isCurrentPlanRequest(seq)) return;
 
       const solverStatus =

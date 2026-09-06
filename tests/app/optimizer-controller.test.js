@@ -361,4 +361,34 @@ describe('optimizer controller', () => {
 
     expect(onForecastsRefreshed).not.toHaveBeenCalled();
   });
+
+  it('paints the plan with the EV entries refreshed by the solve', async () => {
+    // The solve prunes an entry whose event has happened; the annotations must follow.
+    let evEntries = [{ type: 'arrival', time: '2026-05-01T15:00' }];
+    const refreshEvEntries = vi.fn(async () => { evEntries = []; });
+    const { controller, services } = setupController({
+      getEvEntries: () => evEntries,
+      refreshEvEntries,
+    });
+
+    await controller.onRun();
+
+    expect(refreshEvEntries).toHaveBeenCalledTimes(1);
+    expect(services.drawSocChart.mock.calls.at(-1)[3]).toEqual({
+      arrivals: [],
+      departures: [],
+      trips: [],
+    });
+  });
+
+  it('still paints a solved plan when the EV entry refresh fails', async () => {
+    const refreshEvEntries = vi.fn().mockRejectedValue(new Error('offline'));
+    const { controller, els, services } = setupController({ refreshEvEntries });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await controller.onRun();
+
+    expect(services.updateSummaryUI).toHaveBeenCalledWith(els, expect.objectContaining({ netGridCost_cents: 12.5 }));
+    expect(els.status.textContent).toBe('Plan updated');
+  });
 });
