@@ -103,6 +103,32 @@ describe('prediction config form', () => {
     expect(document.getElementById('pred-pv-mode').value).toBe('hybrid');
   });
 
+  it('collapses predictor cards to a summary line and opens a newly added one', async () => {
+    applyPredictionConfigToForm(baseConfig);
+    savePredictionConfig.mockResolvedValue({});
+    wirePredictionForm({ onForecastAll: vi.fn(), onPvForecast: vi.fn() });
+
+    const cards = document.querySelectorAll('#pred-predictor-list [data-predictor-index]');
+    expect(cards[0].open).toBe(false);
+    expect(cards[0].querySelector('[data-summary-type]').textContent).toBe('Historical');
+    expect(cards[0].querySelector('[data-summary-detail]').textContent)
+      .toBe('Grid Import \u00b7 3 wk \u00b7 per weekday \u00b7 median');
+    expect(cards[1].querySelector('[data-summary-detail]').textContent).toBe('420 W');
+
+    // Editing a field refreshes the summary without collapsing the open card.
+    const lookback = cards[0].querySelector('[data-field="lookbackWeeks"]');
+    lookback.value = '6';
+    lookback.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(cards[0].querySelector('[data-summary-detail]').textContent)
+      .toContain('6 wk');
+
+    document.getElementById('pred-add-predictor').click();
+    const added = document.querySelectorAll('#pred-predictor-list [data-predictor-index]');
+    expect(added).toHaveLength(3);
+    expect(added[2].open).toBe(true);
+    expect(added[0].open).toBe(false);
+  });
+
   it('reads sanitized sensors, derived, predictors, and PV values', async () => {
     applyPredictionConfigToForm({
       ...baseConfig,
