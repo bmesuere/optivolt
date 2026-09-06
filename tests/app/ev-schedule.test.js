@@ -189,6 +189,57 @@ describe('ev schedule — times snap to the planning grid', () => {
     expect(els.evEntryError.textContent).toContain('Arrival must be after departure');
   });
 
+  it('floors a hand-typed departure as soon as the field is left', () => {
+    const { controller, els } = setup();
+    controller.openEditor(null);
+    els.evEntryTime.value = '2099-05-01T08:07';
+    els.evEntryTime.dispatchEvent(new Event('input'));
+    els.evEntryTime.dispatchEvent(new Event('blur'));
+
+    expect(els.evEntryTime.value).toBe('2099-05-01T08:00');
+    // The arrival was still mirroring the departure, so it follows the snap.
+    expect(els.evEntryEndTime.value).toBe('2099-05-01T08:00');
+  });
+
+  it('shows the one-slot stretch a sub-slot arrival gets on save', () => {
+    const { controller, els } = setup();
+    controller.openEditor(null);
+    els.evEntryTime.value = '2099-05-01T08:07';
+    els.evEntryTime.dispatchEvent(new Event('blur'));
+    els.evEntryEndTime.value = '2099-05-01T08:14';
+    els.evEntryEndTime.dispatchEvent(new Event('input'));
+    els.evEntryEndTime.dispatchEvent(new Event('blur'));
+
+    expect(els.evEntryEndTime.value).toBe('2099-05-01T08:15');
+  });
+
+  it('leaves an arrival typed before the departure where it is', () => {
+    const { controller, els } = setup();
+    controller.openEditor(null);
+    els.evEntryTime.value = '2099-05-01T09:00';
+    els.evEntryTime.dispatchEvent(new Event('blur'));
+    els.evEntryEndTime.value = '2099-05-01T08:07';
+    els.evEntryEndTime.dispatchEvent(new Event('input'));
+    els.evEntryEndTime.dispatchEvent(new Event('blur'));
+
+    // Floored, but not pushed past the departure — saving must still report the ordering.
+    expect(els.evEntryEndTime.value).toBe('2099-05-01T08:00');
+    createEvScheduleEntry.mockClear();
+    els.evEntrySave.dispatchEvent(new Event('click'));
+    expect(createEvScheduleEntry).not.toHaveBeenCalled();
+    expect(els.evEntryError.textContent).toContain('Arrival must be after departure');
+  });
+
+  it('floors on blur onto the configured step size too', () => {
+    const { controller, els } = setup();
+    els.step.value = '60';
+    controller.openEditor(null);
+    els.evEntryTime.value = '2099-05-01T08:17';
+    els.evEntryTime.dispatchEvent(new Event('blur'));
+
+    expect(els.evEntryTime.value).toBe('2099-05-01T08:00');
+  });
+
   it('snaps onto the configured step size, not a hard-coded 15 minutes', async () => {
     const { controller, els } = setup();
     els.step.value = '60';
