@@ -202,11 +202,16 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     if (!isTrip) return;
 
     if (namingPreset) {
+      // Deliberately not a Save/Cancel pair: the entry editor's own buttons sit right below,
+      // and two identical pairs read as one. The placeholder names the value being stored.
       row.innerHTML = `
-        <input data-preset-name type="text" maxlength="40" placeholder="Name this trip…"
+        <input data-preset-name type="text" maxlength="40" placeholder="Name this ${currentUsagePercent()}% estimate…"
           class="form-input !mt-0 h-7 flex-1 min-w-0 text-xs" />
-        <button type="button" data-preset-confirm class="rounded-md bg-sky-600 px-2 py-1 text-xs font-medium text-white hover:bg-sky-700">Save</button>
-        <button type="button" data-preset-cancel class="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700">Cancel</button>`;
+        <button type="button" data-preset-confirm class="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-sky-600 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-900/30">Save preset</button>
+        <button type="button" data-preset-cancel title="Cancel" aria-label="Cancel naming the preset"
+          class="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+        </button>`;
       row.querySelector("[data-preset-name]")?.focus();
       return;
     }
