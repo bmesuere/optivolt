@@ -205,7 +205,7 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
       // Deliberately not a Save/Cancel pair: the entry editor's own buttons sit right below,
       // and two identical pairs read as one. The placeholder names the value being stored.
       row.innerHTML = `
-        <input data-preset-name type="text" maxlength="40" placeholder="Name this ${currentUsagePercent()}% estimate…"
+        <input data-preset-name type="text" maxlength="40" aria-label="Name for this ${currentUsagePercent()}% usage estimate" placeholder="Name this ${currentUsagePercent()}% estimate…"
           class="form-input !mt-0 h-7 flex-1 min-w-0 text-xs" />
         <button type="button" data-preset-confirm class="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-sky-600 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-900/30">Save preset</button>
         <button type="button" data-preset-cancel title="Cancel" aria-label="Cancel naming the preset"

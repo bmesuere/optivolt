@@ -245,10 +245,12 @@ describe('/ev/trip-presets CRUD', () => {
     expect(res.body.presets[0]).toMatchObject({ id: 'p1', name: 'knokke', usage_percent: 40 });
   });
 
-  it('rejects a nameless or out-of-range preset', async () => {
+  it('rejects a nameless, non-string or out-of-range preset', async () => {
     loadData.mockResolvedValue({});
     expect((await request(app).put('/ev/trip-presets').send({ name: '  ', usage_percent: 20 })).status).toBe(400);
     expect((await request(app).put('/ev/trip-presets').send({ name: 'Knokke', usage_percent: 140 })).status).toBe(400);
+    // A coerced name would have been stored as the string "[object Object]".
+    expect((await request(app).put('/ev/trip-presets').send({ name: {}, usage_percent: 20 })).status).toBe(400);
     expect(saveData).not.toHaveBeenCalled();
   });
 

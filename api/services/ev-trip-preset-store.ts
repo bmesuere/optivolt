@@ -14,7 +14,10 @@ const MAX_NAME_LENGTH = 40;
 const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 function parsePreset(input: EvTripPresetInput): { name: string; usage_percent: number } {
-  const name = String(input.name ?? '').trim();
+  // Typed rather than coerced: String({}) would persist a preset literally named
+  // "[object Object]" instead of rejecting the payload.
+  if (typeof input.name !== 'string') throw new HttpError(400, 'name must be a string');
+  const name = input.name.trim();
   if (!name) throw new HttpError(400, 'name is required');
   if (name.length > MAX_NAME_LENGTH) throw new HttpError(400, `name must be at most ${MAX_NAME_LENGTH} characters`);
 
