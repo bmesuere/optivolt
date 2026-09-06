@@ -63,6 +63,23 @@ describe('renderTable', () => {
     expect(totalCells[15].textContent).toBe('3.00');
   });
 
+  it('groups thousands with a non-breaking space so a number never wraps mid-value', () => {
+    const table = document.createElement('table');
+    renderTable({
+      rows: [makeRow({ load: 5310, pv: 12345 })],
+      cfg: { stepSize_m: 60 },
+      targets: { table },
+      showKwh: false,
+    });
+
+    const cells = table.querySelector('tbody tr').children;
+    // U+202F (narrow no-break space), not U+2009 (thin space): in a narrow column the latter
+    // is a break opportunity, and "5 310" wrapped onto two lines.
+    expect(cells[1].textContent).toBe('5\u202f310');
+    expect(cells[2].textContent).toBe('12\u202f345');
+    expect(table.innerHTML).not.toContain('\u2009');
+  });
+
   it('hides DESS detail columns by default', () => {
     const table = document.createElement('table');
 

@@ -353,7 +353,9 @@ export function renderTable({ rows, cfg, targets, showKwh, showDess = false, reb
     const neg = s.startsWith("-") ? "-" : "";
     const body = neg ? s.slice(1) : s;
     const parts = body.split(".");
-    const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, "\u2009");
+    // U+202F (narrow no-break space), not U+2009 (thin space): the thin space is a break
+    // opportunity, so in a narrow column "5 310" wrapped onto two lines mid-number.
+    const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, "\u202f");
     return parts.length > 1 ? `${neg}${intPart}.${parts[1]}` : `${neg}${intPart}`;
   }
 
