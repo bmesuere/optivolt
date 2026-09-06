@@ -206,3 +206,58 @@ describe('/ev/schedule-entries CRUD', () => {
     expect((await request(app).delete('/ev/schedule-entries/nope')).status).toBe(404);
   });
 });
+
+describe('/ev/trip-presets CRUD', () => {
+  const knokke = { id: 'p1', name: 'Knokke', usage_percent: 35, updatedAt: '2000-01-01T00:00:00.000Z' };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    saveData.mockResolvedValue();
+  });
+
+  it('lists the stored presets', async () => {
+    loadData.mockResolvedValue({ evTripPresets: [knokke] });
+    const res = await request(app).get('/ev/trip-presets');
+
+    expect(res.status).toBe(200);
+    expect(res.body.presets).toEqual([knokke]);
+  });
+
+  it('creates a preset and persists it', async () => {
+    loadData.mockResolvedValue({});
+    const res = await request(app).put('/ev/trip-presets').send({ name: '  Parents ', usage_percent: 22.4 });
+
+    expect(res.status).toBe(200);
+    // The name is trimmed and the percentage rounded to whole points.
+    expect(res.body.preset).toMatchObject({ name: 'Parents', usage_percent: 22 });
+    expect(res.body.presets).toHaveLength(1);
+    expect(saveData).toHaveBeenCalledWith(expect.objectContaining({
+      evTripPresets: [expect.objectContaining({ name: 'Parents' })],
+    }));
+  });
+
+  it('overwrites the percentage of an existing name instead of adding a second chip', async () => {
+    loadData.mockResolvedValue({ evTripPresets: [knokke] });
+    const res = await request(app).put('/ev/trip-presets').send({ name: 'knokke', usage_percent: 40 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.presets).toHaveLength(1);
+    expect(res.body.presets[0]).toMatchObject({ id: 'p1', name: 'knokke', usage_percent: 40 });
+  });
+
+  it('rejects a nameless or out-of-range preset', async () => {
+    loadData.mockResolvedValue({});
+    expect((await request(app).put('/ev/trip-presets').send({ name: '  ', usage_percent: 20 })).status).toBe(400);
+    expect((await request(app).put('/ev/trip-presets').send({ name: 'Knokke', usage_percent: 140 })).status).toBe(400);
+    expect(saveData).not.toHaveBeenCalled();
+  });
+
+  it('deletes a preset, and 404s on an unknown id', async () => {
+    loadData.mockResolvedValue({ evTripPresets: [knokke] });
+    const res = await request(app).delete('/ev/trip-presets/p1');
+    expect(res.status).toBe(200);
+    expect(res.body.presets).toEqual([]);
+
+    expect((await request(app).delete('/ev/trip-presets/nope')).status).toBe(404);
+  });
+});

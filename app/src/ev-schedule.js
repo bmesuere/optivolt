@@ -4,6 +4,9 @@ import {
   createEvScheduleEntry,
   updateEvScheduleEntry,
   deleteEvScheduleEntry,
+  fetchEvTripPresets,
+  saveEvTripPreset,
+  deleteEvTripPreset,
 } from "./api/api.js";
 
 const TYPE_BADGE = {
@@ -37,6 +40,9 @@ const fmtEntryTimeShort = new Intl.DateTimeFormat([], { hour: "2-digit", minute:
  */
 export function createEvScheduleController({ els, getPlanRows = () => [], onChange = () => {} }) {
   let entries = [];
+  // Named trip usage estimates ("Knokke" → 35%), server-owned like the entries themselves.
+  let tripPresets = [];
+  let namingPreset = false; // the preset row is showing its "save this value as…" name input
   let draft = null; // { id?, type, } — current editor state
   let horizonMs = null;
   // A trip almost always returns on the day it starts, so the arrival field mirrors the departure
@@ -170,6 +176,134 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     }).join("");
   }
 
+  // --------------------------- Trip usage presets ---------------------------
+  // A trip's usage estimate depends on the destination, not just its distance, so the presets
+  // are named ones the user builds up ("Brussels commute", "Knokke") rather than anything
+  // derived. They live in the trip editor: a chip fills the field in, and saving the field's
+  // current value under a name is how one is created or corrected.
+
+  async function loadTripPresets() {
+    try {
+      const result = await fetchEvTripPresets();
+      if (Array.isArray(result?.presets)) tripPresets = result.presets;
+    } catch (error) {
+      // Keep whatever we have; the field still works without its shortcuts.
+      console.error("Failed to load EV trip presets", error);
+    }
+    renderTripPresets();
+  }
+
+  function renderTripPresets() {
+    const row = els.evEntryPresets;
+    if (!row) return;
+    const isTrip = draft?.type === "trip";
+    row.classList.toggle("hidden", !isTrip);
+    row.classList.toggle("flex", isTrip);
+    if (!isTrip) return;
+
+    if (namingPreset) {
+      row.innerHTML = `
+        <input data-preset-name type="text" maxlength="40" placeholder="Name this trip…"
+          class="form-input !mt-0 h-7 flex-1 min-w-0 text-xs" />
+        <button type="button" data-preset-confirm class="rounded-md bg-sky-600 px-2 py-1 text-xs font-medium text-white hover:bg-sky-700">Save</button>
+        <button type="button" data-preset-cancel class="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700">Cancel</button>`;
+      row.querySelector("[data-preset-name]")?.focus();
+      return;
+    }
+
+    const chips = [...tripPresets]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((p) => `
+        <span class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white pl-2 pr-1 py-0.5 dark:border-white/10 dark:bg-slate-800/60">
+          <button type="button" data-preset-apply="${escapeHtml(p.id)}" class="text-xs text-slate-600 hover:text-sky-600 dark:text-slate-300 dark:hover:text-sky-400">
+            ${escapeHtml(p.name)} <span class="font-mono text-slate-400 dark:text-slate-500">${p.usage_percent}%</span>
+          </button>
+          <button type="button" data-preset-remove="${escapeHtml(p.id)}" title="Remove preset" aria-label="Remove preset ${escapeHtml(p.name)}"
+            class="text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+          </button>
+        </span>`)
+      .join("");
+
+    row.innerHTML = `${chips}
+      <button type="button" data-preset-add class="rounded-full border border-dashed border-slate-300 px-2 py-0.5 text-xs text-slate-500 hover:border-sky-400 hover:text-sky-600 dark:border-white/15 dark:text-slate-400 dark:hover:text-sky-400">
+        + Save as…
+      </button>`;
+  }
+
+  /** The usage estimate currently typed in, or null when it is empty or out of range. */
+  function currentUsagePercent() {
+    const raw = els.evEntrySoc?.value ?? "";
+    if (raw === "") return null;
+    const value = Number(raw);
+    return Number.isFinite(value) && value >= 0 && value <= 100 ? Math.round(value) : null;
+  }
+
+  function applyTripPreset(id) {
+    const preset = tripPresets.find((p) => p.id === id);
+    if (!preset || !els.evEntrySoc) return;
+    els.evEntrySoc.value = String(preset.usage_percent);
+    clearError();
+    updateTripHint();
+  }
+
+  async function confirmTripPreset(name) {
+    const usage_percent = currentUsagePercent();
+    if (usage_percent == null) { showError("Fill in a usage estimate before saving it as a preset."); return; }
+    if (!name.trim()) { showError("Give the preset a name."); return; }
+    try {
+      const result = await saveEvTripPreset({ name: name.trim(), usage_percent });
+      if (Array.isArray(result?.presets)) tripPresets = result.presets;
+      namingPreset = false;
+      clearError();
+      renderTripPresets();
+    } catch (err) {
+      showError(err?.message || "Could not save the preset.");
+    }
+  }
+
+  async function removeTripPreset(id) {
+    try {
+      const result = await deleteEvTripPreset(id);
+      if (Array.isArray(result?.presets)) tripPresets = result.presets;
+    } catch (err) {
+      showError(err?.message || "Could not remove the preset.");
+    }
+    renderTripPresets();
+  }
+
+  function wireTripPresets() {
+    els.evEntryPresets?.addEventListener("click", (event) => {
+      const apply = event.target.closest("[data-preset-apply]");
+      if (apply) { applyTripPreset(apply.dataset.presetApply); return; }
+      const remove = event.target.closest("[data-preset-remove]");
+      if (remove) { void removeTripPreset(remove.dataset.presetRemove); return; }
+      if (event.target.closest("[data-preset-add]")) {
+        // Saving a preset saves the value in the field, so refuse early rather than after naming.
+        if (currentUsagePercent() == null) { showError("Fill in a usage estimate before saving it as a preset."); return; }
+        namingPreset = true;
+        clearError();
+        renderTripPresets();
+        return;
+      }
+      if (event.target.closest("[data-preset-confirm]")) {
+        void confirmTripPreset(els.evEntryPresets.querySelector("[data-preset-name]")?.value ?? "");
+        return;
+      }
+      if (event.target.closest("[data-preset-cancel]")) {
+        namingPreset = false;
+        renderTripPresets();
+      }
+    });
+
+    // Enter confirms the name, Escape backs out without closing the whole entry editor.
+    els.evEntryPresets?.addEventListener("keydown", (event) => {
+      if (!event.target.closest("[data-preset-name]")) return;
+      if (event.key === "Enter") { event.preventDefault(); void confirmTripPreset(event.target.value); }
+      if (event.key === "Escape") { event.stopPropagation(); namingPreset = false; renderTripPresets(); }
+    });
+  }
+
   function updateTripHint() {
     const hint = els.evEntryTripHint;
     if (!hint) return;
@@ -193,6 +327,7 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     if (els.evEntryEndRow) els.evEntryEndRow.classList.toggle("hidden", !isTrip);
     if (els.evEntrySocLabel) els.evEntrySocLabel.textContent = SOC_LABEL[draft?.type] ?? "SoC (%)";
     if (els.evEntrySoc) els.evEntrySoc.placeholder = draft?.type === "target" ? "required" : (isTrip ? "optional" : "none");
+    renderTripPresets();
     updateTripHint();
   }
 
@@ -227,6 +362,7 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
       const value = entry?.type === "trip" ? entry?.usage_percent : entry?.soc_percent;
       els.evEntrySoc.value = Number.isFinite(value) ? String(value) : "";
     }
+    namingPreset = false;
     if (els.evEntryDelete) els.evEntryDelete.classList.toggle("hidden", !entry);
     for (const input of [els.evEntryTime, els.evEntryEndTime]) {
       if (input) input.step = String(slotMs() / 1000);
@@ -310,6 +446,8 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
   }
 
   function wireEditor() {
+    wireTripPresets();
+    void loadTripPresets();
     els.evEntryAdd?.addEventListener("click", () => openEditor(null));
     els.evEntryCancel?.addEventListener("click", hideEditor);
     els.evEntrySave?.addEventListener("click", saveEntry);
@@ -369,5 +507,8 @@ export function createEvScheduleController({ els, getPlanRows = () => [], onChan
     });
   }
 
-  return { loadEntries, getEntries, setEntries, renderList, openEditor, hideEditor, wireEditor, refreshHorizonQuickSet };
+  return {
+    loadEntries, getEntries, setEntries, renderList, openEditor, hideEditor, wireEditor,
+    refreshHorizonQuickSet, loadTripPresets,
+  };
 }

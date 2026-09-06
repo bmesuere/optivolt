@@ -130,7 +130,16 @@ export interface Data {
   rebalanceState?: RebalanceState;
   predictionAdjustments?: PredictionAdjustment[];
   evScheduleEntries?: EvScheduleEntry[];
+  evTripPresets?: EvTripPreset[];
   evLastState?: EvLastState;
+}
+
+/** A named, reusable trip usage estimate ("Brussels commute" → 18%). */
+export interface EvTripPreset {
+  id: string;
+  name: string;
+  usage_percent: number;
+  updatedAt: string;
 }
 
 // ----------------------------- Plan rows with DESS ----------------------
