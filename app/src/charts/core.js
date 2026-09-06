@@ -230,13 +230,20 @@ export function refreshAllChartThemes() {
   const fontFamily = getComputedStyle(document.documentElement).fontFamily;
 
   for (const chart of getRenderedCharts()) {
-    const options = chart.options || {};
+    // Write into the config we handed Chart.js, not into `chart.options`: the latter is a
+    // resolved copy in which a scriptable option reads back as the value it last returned. Seen
+    // through it, the x grid's colour callback looks like a plain string, so updateScaleTheme
+    // would replace it with a flat colour — painting a gridline at every tick instead of only
+    // at labelled hours, in whichever theme was current when the chart was built.
+    const options = chart.config?.options ?? chart.options ?? {};
     updateLegendTheme(options, theme, fontFamily);
 
     for (const [scaleId, scaleOptions] of Object.entries(options.scales || {})) {
       updateScaleTheme(scaleOptions, theme, scaleId);
     }
 
+    // Re-resolves the options above and repaints; the surviving grid callback reads the new
+    // theme itself.
     chart.update("none");
   }
 }
