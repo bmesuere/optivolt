@@ -120,14 +120,14 @@
       </div>
     </section>
 
-    <!-- Settings (now scrolls with the page) -->
+    <!-- Settings: same grid row as the charts column, stretched to its full height -->
     <aside class="lg:col-span-1 min-w-0">
-      <div id="sidebar-stack" class="space-y-6">
+      <div id="sidebar-stack" class="h-full space-y-6">
 
 
 
         <!-- Settings (Algorithm) -->
-        <section id="card-algo" class="card">
+        <section id="card-algo" class="card h-full">
           <div class="mb-4">
             <h2 class="sidebar-label">Settings</h2>
           </div>
@@ -297,25 +297,26 @@
       </div>
     </aside>
 
-    <!-- Results (charts) -->
-    <section class="lg:col-span-2 space-y-6 min-w-0">
-      <div class="card">
+    <!-- Results (charts): fills the row height it shares with the settings card, the three
+         charts taking up any extra height equally so both columns end level -->
+    <section class="lg:col-span-2 space-y-6 min-w-0 flex flex-col">
+      <div class="card flex-1 flex flex-col">
         <h3 class="mb-3 sidebar-label">Battery SoC</h3>
-        <div class="h-52 w-full chart-wrap" data-chart-empty="Run the optimizer to see results">
+        <div class="h-52 w-full chart-wrap chart-wrap-fill" data-chart-empty="Run the optimizer to see results">
           <canvas id="soc" class="h-full w-full"></canvas>
         </div>
       </div>
 
-      <div class="card">
+      <div class="card flex-1 flex flex-col">
         <h3 class="mb-3 sidebar-label">Energy prices</h3>
-        <div class="h-56 w-full chart-wrap" data-chart-empty="Run the optimizer to see results">
+        <div class="h-56 w-full chart-wrap chart-wrap-fill" data-chart-empty="Run the optimizer to see results">
           <canvas id="prices" class="h-full w-full"></canvas>
         </div>
       </div>
 
-      <div class="card">
+      <div class="card flex-1 flex flex-col">
         <h3 class="mb-3 sidebar-label">Predicted load and solar</h3>
-        <div class="h-56 w-full chart-wrap" data-chart-empty="Run the optimizer to see results">
+        <div class="h-56 w-full chart-wrap chart-wrap-fill" data-chart-empty="Run the optimizer to see results">
           <canvas id="loadpv" class="h-full w-full"></canvas>
         </div>
       </div>

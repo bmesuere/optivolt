@@ -468,6 +468,13 @@ body {
   position: relative;
 }
 
+/* A chart that takes up spare height in a flex column; its height class is the minimum. */
+.chart-wrap-fill {
+  flex: 1 0 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .chart-empty {
   position: absolute;
   inset: 0;
