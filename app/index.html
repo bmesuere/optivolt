@@ -307,7 +307,13 @@
       </div>
 
       <div class="card">
-        <h3 class="mb-3 sidebar-label">Energy prices</h3>
+        <div class="mb-3 flex items-baseline justify-between gap-4">
+          <h3 class="sidebar-label">Energy prices</h3>
+          <span class="text-[11px] text-slate-500 dark:text-slate-400"
+            title="Average purchase price of the energy now in the battery, per stored kWh. Grid charging counts at the buy price (charge losses included), solar at zero. After a restart it starts from the cheap end of the day's buy prices and corrects itself as the battery cycles.">
+            Battery energy: <span id="battery-energy-price" class="font-mono">—</span>
+          </span>
+        </div>
         <div class="h-56 w-full chart-wrap" data-chart-empty="Run the optimizer to see results">
           <canvas id="prices" class="h-full w-full"></canvas>
         </div>
@@ -870,6 +876,14 @@
                 </span>
               </label>
             </div>
+            <label class="block text-sm">Home battery floor for EV (%)
+              <input id="ev-ess-soc-floor" type="number" min="0" max="100" step="1"
+                class="form-input" data-settings-input />
+              <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                Below this home battery SoC the EV only charges from solar (no battery, and no grid
+                unless the grid is cheaper than the energy in the battery plus battery wear). 0 = off.
+              </span>
+            </label>
             <label class="block text-sm">SoC sensor entity ID
               <input id="ev-soc-sensor" type="text" placeholder="sensor.ev_battery_level"
                 class="form-input font-mono text-xs" data-no-autosolve data-settings-input />
@@ -1015,6 +1029,36 @@
             </div>
           </div>
 
+          <!-- Weekly charging: recurring plans, stored as JSON in a hidden settings input -->
+          <div class="rounded-lg border border-slate-200/70 dark:border-white/10 p-3">
+            <div class="mb-2 flex items-center justify-between">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Weekly charging</span>
+              <button id="ev-weekly-add" type="button"
+                class="text-xs font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300">+ Add plan</button>
+            </div>
+            <input id="ev-weekly-schedule" type="hidden" data-settings-input />
+            <ul id="ev-weekly-list" class="space-y-2"></ul>
+            <p id="ev-weekly-empty" class="text-xs text-slate-500 dark:text-slate-400">
+              No weekly plans: the EV may charge whenever it is plugged in.
+            </p>
+            <label class="toggle mt-3">
+              <input id="ev-weekly-cheapest-source" type="checkbox" data-settings-input>
+              <span class="toggle-knob"></span>
+              <span class="text-sm">Charge from the cheapest source (no deadline)</span>
+            </label>
+            <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              Each plan is a time window repeated on the ticked days (an end before the start is the
+              next day). The EV only charges inside the windows. Normally the plan's EV SoC is a
+              deadline at the window end. With the cheapest source on, there is no deadline: the EV
+              charges from the home battery, down to the home battery floor and up to the EV limit,
+              with the house served first, and takes grid power only when that is cheaper than the
+              energy in the battery plus wear; beforehand the home battery is filled to the plan's
+              level at the cheapest moments. This suits a home battery that is large compared to the
+              household use until the next cheap period. Use an extra horizon of a few days so the
+              plan can look ahead.
+            </p>
+          </div>
+
           <label class="block text-sm">
             <span class="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1 tracking-wide">SoC value</span>
             <div class="relative mt-1">
@@ -1079,6 +1123,14 @@
                   <div id="ev-tab-free-solar" class="stat-value">—</div>
                 </div>
               </div>
+            </div>
+            <div class="summary-block border-t border-slate-100 dark:border-white/5">
+              <div class="flex items-baseline justify-between mb-2">
+                <span class="stat-label">Charging sessions</span>
+                <span class="text-[11px] text-slate-400 dark:text-slate-600"
+                  title="Grid energy at the buy price, battery energy at the average price it was bought for, solar free.">cost</span>
+              </div>
+              <ul id="ev-tab-sessions" class="space-y-1.5 text-[11px]"></ul>
             </div>
             <div class="summary-block border-t border-slate-100 dark:border-white/5">
               <div class="stat-label mb-2">Charge mode slots</div>

@@ -46,6 +46,7 @@ export function buildWarmStartColumns({ columns, prevStartMs, nextStartMs, stepM
   const warm: Record<string, number> = {};
   for (const [name, col] of Object.entries(columns)) {
     const family = lpVar.evOn.parse(name) != null ? lpVar.evOn
+      : lpVar.evGridOk.parse(name) != null ? lpVar.evGridOk
       : lpVar.startBalance.parse(name) != null ? lpVar.startBalance
       : null;
     if (family == null) continue;

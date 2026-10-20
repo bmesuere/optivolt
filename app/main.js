@@ -6,6 +6,7 @@ import {
   wireEvSensorInputs,
 } from "./src/ev-settings.js";
 import { createEvScheduleController } from "./src/ev-schedule.js";
+import { wireWeeklySchedule } from "./src/ev-weekly.js";
 import { mountChartPlaceholders } from "./src/chart-empty.js";
 import { initOptimizerQuickSettings } from "./src/optimizer-quick-settings.js";
 import { createOptimizerController } from "./src/optimizer-controller.js";
@@ -150,6 +151,7 @@ async function boot() {
     persistConfigDebounced: optimizer.persistConfigDebounced,
     debounceRun: optimizer.debounceRun,
   });
+  wireWeeklySchedule(els);
   evSchedule.wireEditor();
   await evSchedule.loadEntries();
 

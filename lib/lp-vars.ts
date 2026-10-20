@@ -37,11 +37,17 @@ export const lpVar = {
   batteryToGrid: makeFamily('battery_to_grid'),
   soc:           makeFamily('soc'),
   socShortfall:  makeFamily('soc_shortfall'),
+  /** Wh by which the home battery misses a SoC target at slot t (see SolverConfig.socTargets). */
+  socTargetShortfall: makeFamily('soc_target_shortfall'),
   gridToEv:      makeFamily('grid_to_ev'),
   pvToEv:        makeFamily('pv_to_ev'),
   batteryToEv:   makeFamily('battery_to_ev'),
   evOn:          makeFamily('ev_on'),
+  /** Binary: 1 when the EV may draw from grid/battery in slot t (home battery above the floor). */
+  evGridOk:      makeFamily('ev_grid_ok'),
   evSoc:         makeFamily('ev_soc'),
+  /** Wh by which the EV misses the SoC target at slot t (only with the home-battery floor active). */
+  evTargetShortfall: makeFamily('ev_target_shortfall'),
   startBalance:  makeFamily('start_balance'),
 } as const;
 

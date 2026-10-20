@@ -4,6 +4,7 @@ import { resolveDataDir, readJson, writeJson } from './json-store.ts';
 import { bumpSolverInputsVersion } from './solver-inputs-version.ts';
 import type { Settings, DataSources } from '../types.ts';
 import type { TerminalSocValuation } from '../../lib/types.ts';
+import { normalizeWeeklySchedule } from './ev-weekly-schedule.ts';
 
 const DATA_DIR = resolveDataDir();
 const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
@@ -17,7 +18,7 @@ const NUMERIC_FIELDS: (keyof Settings)[] = [
   'terminalSocCustomPrice_cents_per_kWh', 'rebalanceHoldHours',
   'evMinChargeCurrent_A', 'evMaxChargeCurrent_A', 'evBatteryCapacity_kWh',
   'evChargeEfficiency_percent', 'evMaxSoc_percent', 'evSocValue_cents_per_kWh',
-  'evTripSocBuffer_percent',
+  'evTripSocBuffer_percent', 'evEssSocFloor_percent',
   'extendedHorizonDays',
 ];
 
@@ -39,7 +40,7 @@ const EFFICIENCY_FIELDS: (keyof Settings)[] = [
 ];
 
 const BOOLEAN_FIELDS: (keyof Settings)[] = [
-  'blockFeedInOnNegativePrices', 'rebalanceEnabled', 'evEnabled',
+  'blockFeedInOnNegativePrices', 'rebalanceEnabled', 'evEnabled', 'evWeeklyCheapestSource',
 ];
 
 const STRING_FIELDS: (keyof Settings)[] = ['haUrl', 'haToken', 'evSocSensor', 'evPlugSensor'];
@@ -130,6 +131,15 @@ function validateSettings(s: Settings): Settings {
 
   // Trip buffer is a SoC share on top of the trip usage; clamp to a sane [0, 100].
   s.evTripSocBuffer_percent = Math.max(0, Math.min(100, s.evTripSocBuffer_percent));
+
+  // Home-battery floor for non-PV EV charging; clamp to [0, 100] (0 = disabled).
+  s.evEssSocFloor_percent = Math.max(0, Math.min(100, s.evEssSocFloor_percent));
+
+  try {
+    s.evWeeklySchedule = normalizeWeeklySchedule(s.evWeeklySchedule);
+  } catch (err) {
+    throw new SettingsValidationError(`Invalid setting: ${(err as Error).message}`);
+  }
 
   // EV charge ceiling is a share of the EV battery; clamp to [0, 100] (100 = no cap).
   s.evMaxSoc_percent = Math.max(0, Math.min(100, s.evMaxSoc_percent));

@@ -1,5 +1,6 @@
 import { SOLUTION_COLORS } from "./charts.js";
 import { parseQuickSettingSelection, writeQuickSettingSelection } from "./optimizer-quick-settings.js";
+import { readWeeklySchedule, renderWeeklySchedule } from "./ev-weekly.js";
 
 // ---------- UI <-> settings snapshot ----------
 export function snapshotUI(els) {
@@ -52,6 +53,9 @@ export function snapshotUI(els) {
     evMaxSoc_percent: num(els.evMaxSoc?.value),
     evSocValue_cents_per_kWh: num(els.evSocValuation?.value),
     evTripSocBuffer_percent: num(els.evTripSocBuffer?.value),
+    evEssSocFloor_percent: num(els.evEssSocFloor?.value),
+    evWeeklyCheapestSource: !!els.evWeeklyCheapestSource?.checked,
+    evWeeklySchedule: readWeeklySchedule(els.evWeeklySchedule),
     evSocSensor: els.evSocSensor?.value ?? '',
     evPlugSensor: els.evPlugSensor?.value ?? '',
 
@@ -125,6 +129,11 @@ export function hydrateUI(els, obj = {}) {
   setIfDef(els.evMaxSoc, obj.evMaxSoc_percent);
   setIfDef(els.evSocValuation, obj.evSocValue_cents_per_kWh);
   setIfDef(els.evTripSocBuffer, obj.evTripSocBuffer_percent);
+  setIfDef(els.evEssSocFloor, obj.evEssSocFloor_percent);
+  if (els.evWeeklyCheapestSource && obj.evWeeklyCheapestSource != null) {
+    els.evWeeklyCheapestSource.checked = !!obj.evWeeklyCheapestSource;
+  }
+  if (Array.isArray(obj.evWeeklySchedule)) renderWeeklySchedule(els, obj.evWeeklySchedule);
   setIfDef(els.evSocSensor, obj.evSocSensor);
   setIfDef(els.evPlugSensor, obj.evPlugSensor);
 
@@ -174,6 +183,7 @@ export function updateSummaryUI(els, summary) {
     setText(els.sumLoadBatt, "—");
     setText(els.sumLoadPv, "—");
     setText(els.avgImport, "—");
+    setText(els.batteryEnergyPrice, "—");
     setText(els.netCost, "—");
     setText(els.gridBatteryTp, "—");
     setText(els.gridChargeTp, "—");
@@ -207,6 +217,7 @@ export function updateSummaryUI(els, summary) {
   setText(els.sumLoadBatt, formatKWh(loadFromBattery_kWh));
   setText(els.sumLoadPv, formatKWh(loadFromPv_kWh));
   setText(els.avgImport, formatCentsPerKWh(avgImportPrice_cents_per_kWh));
+  setText(els.batteryEnergyPrice, formatCentsPerKWh(summary.batteryEnergyPrice_cents_per_kWh));
   setText(els.netCost, formatCostCents(netGridCost_cents));
   setText(els.gridBatteryTp, formatTippingPoint(gridBatteryTippingPoint_cents_per_kWh, "↓"));
   setText(els.gridChargeTp, formatTippingPoint(gridChargeTippingPoint_cents_per_kWh, "↓"));

@@ -35,6 +35,9 @@
   "evMaxSoc_percent": 100,
   "evSocValue_cents_per_kWh": 0,
   "evTripSocBuffer_percent": 20,
+  "evWeeklySchedule": [],
+  "evEssSocFloor_percent": 0,
+  "evWeeklyCheapestSource": false,
   "extendedHorizonDays": 0,
   "priceForecastUrl": ""
 }

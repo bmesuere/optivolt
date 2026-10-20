@@ -128,3 +128,50 @@ describe('buildPlanSummary — grid cost totals', () => {
     expect(s.netGridCost_cents).toBeCloseTo(8);
   });
 });
+
+describe('buildPlanSummary — EV sessions', () => {
+  const HOUR = 3_600_000;
+  // cfg.stepSize_m is 60 here, so 1000 W for one slot is 1 kWh.
+  const hourCfg = { ...cfg, stepSize_m: 60 };
+
+  it('splits charging into runs of consecutive charging slots without an EV config', () => {
+    const rows = [
+      makeRow({ timestampMs: 0, ic: 20, g2ev: 2000, ev_charge: 2000 }),
+      makeRow({ timestampMs: HOUR }),
+      makeRow({ timestampMs: 2 * HOUR, ic: 10, g2ev: 1000, pv2ev: 1000, ev_charge: 2000 }),
+    ];
+    const s = buildPlanSummary(rows, hourCfg);
+    expect(s.evSessions).toHaveLength(2);
+    expect(s.evSessions[0]).toEqual({
+      startMs: 0, endMs: HOUR, energy_kWh: 2, fromGrid_kWh: 2, fromPv_kWh: 0, fromBattery_kWh: 0,
+      gridCost_cents: 40, batteryCost_cents: 0, cost_cents: 40, rate_cents_per_kWh: 20,
+    });
+    expect(s.evSessions[1].cost_cents).toBeCloseTo(10);
+    expect(s.evSessions[1].rate_cents_per_kWh).toBeCloseTo(5);
+  });
+
+  it('keeps a pause inside one charging window in the same session', () => {
+    const rows = [
+      makeRow({ timestampMs: 0, ic: 20, g2ev: 1000, ev_charge: 1000 }),
+      makeRow({ timestampMs: HOUR }),
+      makeRow({ timestampMs: 2 * HOUR, ic: 10, g2ev: 1000, ev_charge: 1000 }),
+    ];
+    const ev = { availabilityWindows: [{ startSlot: 0, endSlot: 3 }] };
+    const s = buildPlanSummary(rows, { ...hourCfg, ev });
+    expect(s.evSessions).toHaveLength(1);
+    expect(s.evSessions[0].endMs).toBe(3 * HOUR);
+    expect(s.evSessions[0].cost_cents).toBeCloseTo(30);
+  });
+
+  it('costs battery energy at the battery energy price, discharge losses included', () => {
+    const rows = [
+      makeRow({ timestampMs: 0, b2ev: 900, ev_charge: 900, batteryEnergyPrice_cents_per_kWh: 12 }),
+      makeRow({ timestampMs: HOUR, b2ev: 900, ev_charge: 900, batteryEnergyPrice_cents_per_kWh: 12 }),
+    ];
+    // Slot 0 uses the price at the start of the plan (18), slot 1 the price after slot 0 (12).
+    const s = buildPlanSummary(rows, { ...hourCfg, dischargeEfficiency_percent: 90 }, {}, undefined, 18);
+    expect(s.batteryEnergyPrice_cents_per_kWh).toBe(18);
+    expect(s.evSessions[0].batteryCost_cents).toBeCloseTo(0.9 * 18 / 0.9 + 0.9 * 12 / 0.9);
+    expect(s.evSessions[0].gridCost_cents).toBe(0);
+  });
+});

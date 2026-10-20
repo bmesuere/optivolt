@@ -147,7 +147,9 @@ export function buildSolverConfigFromSettings(
     // callers that want to cap the start range.
   }
 
-  const ev = buildEvConfig(settings, data.evScheduleEntries ?? [], evState, nowMs, base.load_W.length);
+  const ev = buildEvConfig(settings, data.evScheduleEntries ?? [], evState, nowMs, base.load_W.length, {
+    essSoc_percent: data.soc?.value,
+  });
   if (ev) base.ev = ev;
 
   // Only meaningful when forecast slots actually made it into the window.

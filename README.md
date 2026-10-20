@@ -186,6 +186,54 @@ rest:
 
 Use `sensor.optivolt_ev_charge_mode` and `sensor.optivolt_ev_charge_current_a` in automations to control your charger. The mode values are `off`, `fixed`, `solar_only`, `solar_grid`, and `max`; the current is the target charge rate in amps.
 
+### 7. Weekly EV Charging & Home Battery Floor (Optional)
+
+Two EV options cover a car that charges on fixed days.
+
+- **Weekly charging** (EV tab, `evWeeklySchedule`): a list of recurring plans,
+  each with a start and end time, a target SoC and the weekdays it applies on
+  (Mon–Sun checkboxes), e.g. *18:00 → 07:00, 80%* on Wednesday and Sunday. An
+  end time at or before the start time falls on the next day. Times use the
+  server's local time zone. A plan with no day ticked is inactive. With plans
+  set the EV only charges inside the windows, even when it is plugged in at
+  other times, and a car that is away is assumed to arrive at the window start,
+  using the last SoC sensor reading. By default:
+  - each window's target becomes a SoC deadline at the window end, so the
+    solver can fill the home battery during cheap hours beforehand and feed the
+    car from it.
+
+  **Charge from the cheapest source** (toggle in the weekly charging card,
+  `evWeeklyCheapestSource`, off by default) drops the deadline, for a home
+  battery that is large compared to the household use until the next cheap
+  period. Each plan then also has a home battery level to reach by the start
+  of the window, and, unless a manually entered deadline, trip or target is in
+  the horizon (which keeps the plan deadline-driven):
+  - the EV charges up to the plan's SoC: it takes home battery energy down to
+    the home battery floor (the house is served first) and grid power only when
+    the buy price is below the average purchase price of the energy in the
+    battery plus wear; a target it cannot reach that way is simply missed;
+  - ahead of each window the home battery is filled towards the plan's level
+    at the cheapest moments (the cheapest 15% of prices in the plan, and solar);
+  - the EV charging is derived step by step from plans without the EV rather
+    than optimised, so these plans solve in well under a second.
+
+  With a home battery that the household itself largely empties overnight,
+  this costs more than charging the car from the grid at night: the house then
+  buys at the evening and morning peaks what the battery gave to the car.
+
+  The plan only sees windows inside its horizon. Set **Extra horizon (days)**
+  to 2–3 so a Monday plan already prepares for Wednesday.
+- **Home battery floor for EV** (EV settings card, `evEssSocFloor_percent`,
+  0 = off): while the home battery SoC is below this value, the EV only charges
+  from solar, with no grid and no battery. One exception: in slots where the buy
+  price is below the average purchase price of the energy in the home battery
+  plus the battery wear cost, the EV may still charge from the grid. The solver
+  enforces this at both ends of every slot. The floor wins over SoC targets: when a target cannot be
+  reached without breaking it (e.g. a tight grid import limit), the EV charges
+  as far as the floor allows and misses the target. `/ev/current` also checks
+  the latest measured SoC: if it is below the floor, a planned grid or battery
+  charge is downgraded to `solar_only`, and the response carries `ess_floor_active: true`.
+
 ## Architecture & HTTP API
 
 ```text
@@ -235,7 +283,7 @@ The **API** exposes:
 - `POST /predictions/pv/forecast` — Runs the PV forecast when PV configuration is complete.
 - `POST /predictions/forecast` — Runs load and PV forecasts together, persists raw forecasts according to data-source settings, and returns adjusted forecasts.
 - `GET /predictions/forecast/now` — Same combined forecast path with recent comparison disabled.
-- `GET /ev/current` — Current time slot's EV charging decision (`ev_charge_mode`, `ev_charge_A`, source flows, EV SoC). Outside the current plan horizon it returns a fail-safe `off` decision with `plan_valid: false`.
+- `GET /ev/current` — Current time slot's EV charging decision (`ev_charge_mode`, `ev_charge_A`, source flows, EV SoC, `ess_floor_active`). Outside the current plan horizon it returns a fail-safe `off` decision with `plan_valid: false`.
 - `GET /ev/schedule` — Full per-slot EV charging schedule from the last computed plan.
 - `GET /ev/schedule-entries` — Lists active EV schedule entries (arrival, departure, target) and prunes expired ones.
 - `POST /ev/schedule-entries` — Creates an EV schedule entry.

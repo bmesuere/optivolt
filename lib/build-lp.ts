@@ -38,6 +38,9 @@ export function buildLP({
   // rebalancing (MILP)
   rebalance,
   ev,
+  socTargets = [],
+  socTargetPenalty_cents_per_kWh = 200,
+  socFloors = [],
 }: SolverConfig): string {
   const T = load_W.length;
   if (pv_W.length !== T || importPrice.length !== T || exportPrice.length !== T) {
@@ -58,6 +61,7 @@ export function buildLP({
     rebalanceStartPerSlot: 1e-6, // escalating per-window penalty on start_balance_k: breaks symmetry between equivalent rebalance windows
   }
   const softMinSocPenalty_cents_per_Wh = 0.05; // penalty to keep soc above minSoc when possible
+  const evTargetShortfallPenalty_cents_per_Wh = 1; // penalty for missing an EV target under the home-battery floor; far above any tariff
 
   // Unit helpers
   const stepHours = stepSize_m / 60; // hours per slot
@@ -99,6 +103,8 @@ export function buildLP({
   const pvToEv      = lpVar.pvToEv.name;
   const batteryToEv = lpVar.batteryToEv.name;
   const evOn        = lpVar.evOn.name;
+  const evTargetShortfall = lpVar.evTargetShortfall.name;
+  const evGridOk    = lpVar.evGridOk.name;
   const evSocVar    = lpVar.evSoc.name;
 
   // EV derived constants (only used when ev is defined)
@@ -123,6 +129,27 @@ export function buildLP({
     .sort((a, b) => a.startSlot - b.startSlot);
   const evAvailable: boolean[] = Array(T).fill(false);
   for (const w of evWindows) for (let t = w.startSlot; t < w.endSlot; t++) evAvailable[t] = true;
+  // A charging mask (e.g. a weekly schedule) further restricts which in-window slots may charge.
+  // It only gates ev_on_t, so the SoC chain of the window is untouched.
+  if (ev?.chargeAllowed) {
+    for (let t = 0; t < T; t++) if (ev.chargeAllowed[t] === false) evAvailable[t] = false;
+  }
+  // Home-battery floor: below it the EV may only charge from PV. Modelled with a binary per
+  // available slot (ev_grid_ok_t) that gates grid→EV and battery→EV and requires the battery SoC
+  // at both ends of the slot to be at/above the floor.
+  const essFloor_Wh = Math.max(0, ev?.essSocFloor_Wh ?? 0);
+  // EV flows fixed from outside (cheapest-source charging): nothing about the EV is left to
+  // decide, so the floor and the targets, already applied when those flows were derived, drop out.
+  const evFixed = ev?.fixedFlows;
+  const evFloorActive = ev != null && essFloor_Wh > 0 && !evFixed;
+  // Grid power cheaper than the battery's energy (purchase price plus wear) is exempt from the floor.
+  const floorGridLimit = ev?.essFloorGridPriceLimit_cents_per_kWh;
+  const gridExemptFromFloor = (t: number) => floorGridLimit != null && importPrice[t] < floorGridLimit;
+  // The floor removes grid and battery as EV sources whenever the home battery is low, so a
+  // target the builder judged reachable at full charger power may no longer be (e.g. a tight
+  // grid import limit). A hard target would then make the whole plan infeasible; with the floor
+  // active a target is therefore soft: the floor always holds and any miss is heavily penalised.
+  const evSoftTargets = evFloorActive;
   const evResetAt = new Map<number, number>();
   for (const w of evWindows) if (w.resetSoc_Wh != null) evResetAt.set(w.startSlot, w.resetSoc_Wh);
   // Trip drops: window starts that continue the previous SoC chain minus a fixed usage.
@@ -132,7 +159,7 @@ export function buildLP({
     if (w.resetSoc_Wh == null && w.drop_Wh != null && w.startSlot > 0) evDropAt.set(w.startSlot, w.drop_Wh);
   }
   // SoC deadlines, clamped to in-horizon slots and to battery capacity.
-  const evTargets = (ev?.targets ?? [])
+  const evTargets = (evFixed ? [] : ev?.targets ?? [])
     .filter((tg) => tg.slot >= 0 && tg.slot < T)
     .map((tg) => ({ slot: tg.slot, soc_Wh: Math.min(tg.soc_Wh, evCapacityWh) }));
 
@@ -147,7 +174,7 @@ export function buildLP({
   // there would just be infeasible. Chains run from slot 0, or a reset, to the next reset.
   const evMaxSocWh = evCapacityWh * ((ev?.evMaxSoc_percent ?? 100) / 100);
   const evSocUpper: number[] = Array(T).fill(evCapacityWh);
-  if (evActive) {
+  if (evActive && !evFixed) {
     const chainStarts = [0, ...[...evResetAt.keys()].filter((s) => s > 0).sort((a, b) => a - b)];
     for (let i = 0; i < chainStarts.length; i++) {
       const start = chainStarts[i];
@@ -172,6 +199,13 @@ export function buildLP({
   const batteryToGrid = lpVar.batteryToGrid.name;
   const soc = lpVar.soc.name;
   const socShortfall = lpVar.socShortfall.name;
+  const socTargetShortfall = lpVar.socTargetShortfall.name;
+  // De-duplicated per slot, keeping the higher level.
+  const socTargetBySlot = new Map<number, number>();
+  for (const tg of socTargets) {
+    if (tg.slot >= 0 && tg.slot < T) socTargetBySlot.set(tg.slot, Math.max(socTargetBySlot.get(tg.slot) ?? 0, tg.soc_Wh));
+  }
+  const socTargetsInRange = [...socTargetBySlot].map(([slot, soc_Wh]) => ({ slot, soc_Wh }));
 
   const lines: string[] = [];
 
@@ -230,6 +264,14 @@ export function buildLP({
       }
     }
   }
+  if (evSoftTargets) {
+    for (const tg of evTargets) {
+      objTerms.push(` + ${toNum(evTargetShortfallPenalty_cents_per_Wh)} ${evTargetShortfall(tg.slot)}`);
+    }
+  }
+  for (const tg of socTargetsInRange) {
+    objTerms.push(` + ${toNum(socTargetPenalty_cents_per_kWh / 1000)} ${socTargetShortfall(tg.slot)}`);
+  }
   // Rebalancing symmetry-breaking: escalating penalty prefers earlier windows when cost-equivalent.
   if (D > 0) {
     for (let k = 0; k <= KMAX; k++) {
@@ -278,6 +320,14 @@ export function buildLP({
 
     // Soft min SOC constraint
     lines.push(` c_min_soc_${t}: ${socShortfall(t)} + ${soc(t)} >= ${minSoc_Wh}`);
+  }
+
+  // Home battery SoC levels to aim for (soft) and to stay above (hard).
+  for (const tg of socTargetsInRange) {
+    lines.push(` c_soc_target_${tg.slot}: ${socTargetShortfall(tg.slot)} + ${soc(tg.slot)} >= ${toNum(Math.min(tg.soc_Wh, maxSoc_Wh))}`);
+  }
+  for (const fl of socFloors) {
+    if (fl.slot >= 0 && fl.slot < T) lines.push(` c_soc_floor_${fl.slot}: ${soc(fl.slot)} >= ${toNum(Math.min(fl.soc_Wh, maxSoc_Wh))}`);
   }
 
   // MILP rebalancing: force a contiguous window of D slots to hold the battery at target SoC
@@ -334,9 +384,25 @@ export function buildLP({
       }
     }
 
+    // Home-battery floor for non-PV EV charging (see evFloorActive above).
+    if (evFloorActive) {
+      for (let t = 0; t < T; t++) {
+        if (!evAvailable[t]) continue;
+        const gridTerm = gridExemptFromFloor(t) ? '' : `${gridToEv(t)} + `;
+        lines.push(` c_ev_floor_flow_${t}: ${gridTerm}${batteryToEv(t)} - ${toNum(evMaxPow_W)} ${evGridOk(t)} <= 0`);
+        lines.push(` c_ev_floor_end_${t}: ${soc(t)} - ${toNum(essFloor_Wh)} ${evGridOk(t)} >= 0`);
+        if (t > 0) {
+          lines.push(` c_ev_floor_start_${t}: ${soc(t - 1)} - ${toNum(essFloor_Wh)} ${evGridOk(t)} >= 0`);
+        } else if (initialSoc_Wh < essFloor_Wh) {
+          lines.push(` c_ev_floor_start_0: ${evGridOk(0)} = 0`);
+        }
+      }
+    }
+
     // SoC deadlines layered onto the plan.
     for (const tg of evTargets) {
-      lines.push(` c_ev_target_${tg.slot}: ${evSocVar(tg.slot)} >= ${toNum(tg.soc_Wh)}`);
+      const shortfall = evSoftTargets ? ` + ${evTargetShortfall(tg.slot)}` : '';
+      lines.push(` c_ev_target_${tg.slot}: ${evSocVar(tg.slot)}${shortfall} >= ${toNum(tg.soc_Wh)}`);
     }
 
     // Cardinality lower bounds: tighten the LP relaxation by telling the solver the minimum
@@ -346,8 +412,9 @@ export function buildLP({
     // the most recent reset at/before the deadline, and only available slots in that segment
     // count — charging before a reset is erased by it and cannot help meet the target. Trip
     // drops inside the segment consume charged energy, so they add to the deficit.
+    // Skipped for soft targets: the bound assumes the target is met.
     const evChargeWhPerSlot = evChargeWhPerW * evMaxPow_W;
-    if (evChargeWhPerSlot > 0) {
+    if (evChargeWhPerSlot > 0 && !evSoftTargets) {
       for (const tg of evTargets) {
         let anchorSlot = 0;
         let anchorWh = evInitialWh;
@@ -395,12 +462,22 @@ export function buildLP({
     lines.push(` ${soc(t)} <= ${toNum(maxSoc_Wh)}`);
     lines.push(` ${socShortfall(t)} >= 0`);
     if (evActive) {
-      lines.push(` 0 <= ${gridToEv(t)} <= ${toNum(evMaxPow_W)}`);
-      lines.push(` 0 <= ${pvToEv(t)} <= ${toNum(Math.min(pv_W[t], evMaxPow_W))}`);
-      lines.push(` 0 <= ${batteryToEv(t)} <= ${toNum(Math.min(maxDischargePower_W, evMaxPow_W))}`);
+      if (evFixed) {
+        lines.push(` ${gridToEv(t)} = ${toNum(evFixed.g2ev[t] ?? 0)}`);
+        lines.push(` ${pvToEv(t)} = ${toNum(evFixed.pv2ev[t] ?? 0)}`);
+        lines.push(` ${batteryToEv(t)} = ${toNum(evFixed.b2ev[t] ?? 0)}`);
+      } else {
+        lines.push(` 0 <= ${gridToEv(t)} <= ${toNum(evMaxPow_W)}`);
+        lines.push(` 0 <= ${pvToEv(t)} <= ${toNum(Math.min(pv_W[t], evMaxPow_W))}`);
+        lines.push(` 0 <= ${batteryToEv(t)} <= ${toNum(Math.min(maxDischargePower_W, evMaxPow_W))}`);
+      }
       lines.push(` 0 <= ${evSocVar(t)} <= ${toNum(evSocUpper[t])}`);
     }
   }
+  if (evSoftTargets) {
+    for (const tg of evTargets) lines.push(` ${evTargetShortfall(tg.slot)} >= 0`);
+  }
+  for (const tg of socTargetsInRange) lines.push(` ${socTargetShortfall(tg.slot)} >= 0`);
   lines.push("");
 
   if (D > 0 || evActive) {
@@ -413,6 +490,11 @@ export function buildLP({
     if (evActive) {
       for (let t = 0; t < T; t++) {
         lines.push(` ${evOn(t)}`);
+      }
+    }
+    if (evFloorActive) {
+      for (let t = 0; t < T; t++) {
+        if (evAvailable[t]) lines.push(` ${evGridOk(t)}`);
       }
     }
     lines.push("");

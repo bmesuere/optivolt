@@ -4,9 +4,11 @@ import app from '../../api/app.ts';
 
 vi.mock('../../api/services/planner-service.ts');
 vi.mock('../../api/services/data-store.ts');
+vi.mock('../../api/services/settings-store.ts');
 
 import { getLastPlan } from '../../api/services/planner-service.ts';
 import { loadData, saveData } from '../../api/services/data-store.ts';
+import { loadSettings } from '../../api/services/settings-store.ts';
 
 const START_MS = 1700000000000;
 
@@ -103,6 +105,37 @@ describe('GET /ev/current', () => {
 
     expect(res.body.timestampMs).toBe(START_MS + 1_800_000);
     expect(res.body.is_charging).toBe(false);
+  });
+
+  it('downgrades grid charging to solar_only when the home battery is below the floor', async () => {
+    getLastPlan.mockReturnValue(mockPlan);
+    loadSettings.mockResolvedValue({ evEssSocFloor_percent: 30 });
+    loadData.mockResolvedValue({ soc: { value: 20, timestamp: new Date(START_MS).toISOString() } });
+    vi.setSystemTime(START_MS + 500_000);
+
+    const res = await request(app).get('/ev/current');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      ev_charge_mode: 'solar_only',
+      ev_charge_W: 0,
+      g2ev_W: 0,
+      b2ev_W: 0,
+      ess_floor_active: true,
+      is_charging: false,
+      plan_valid: true,
+    });
+  });
+
+  it('keeps the planned decision when the home battery is above the floor', async () => {
+    getLastPlan.mockReturnValue(mockPlan);
+    loadSettings.mockResolvedValue({ evEssSocFloor_percent: 30 });
+    loadData.mockResolvedValue({ soc: { value: 60, timestamp: new Date(START_MS).toISOString() } });
+    vi.setSystemTime(START_MS + 500_000);
+
+    const res = await request(app).get('/ev/current');
+
+    expect(res.body).toMatchObject({ ev_charge_mode: 'fixed', g2ev_W: 1380, ess_floor_active: false });
   });
 
   it('returns a safe off command before the plan starts', async () => {

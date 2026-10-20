@@ -1,5 +1,11 @@
 import type { EvConfig, EvSocTarget } from '../../lib/types.ts';
 import type { EvScheduleEntry, Settings } from '../types.ts';
+import { expandWeeklySchedule, weeklyScheduleEntries } from './ev-weekly-schedule.ts';
+
+export interface BuildEvConfigOptions {
+  /** Current home battery SoC (%), used to estimate when the ESS floor stops blocking grid charging. */
+  essSoc_percent?: number;
+}
 
 /**
  * Convert an absolute datetime string to a half-open slot boundary relative to `startMs`:
@@ -43,6 +49,12 @@ export function departureTimeToSlot(
  * with the car still plugged in, an overdue arrival with the car still away) are treated as
  * happening at the next slot boundary, so an overdue departure keeps charging toward its target.
  *
+ * A recurring weekly schedule (`settings.evWeeklySchedule`) is expanded into transient
+ * arrival/departure entries for the windows inside the horizon (see ev-weekly-schedule.ts), and
+ * into a per-slot `chargeAllowed` mask: with a weekly schedule the EV only charges inside its
+ * windows. `settings.evEssSocFloor_percent` becomes `essSocFloor_Wh` (PV-only EV charging while
+ * the home battery is below it).
+ *
  * Returns the same `EvConfig` shape regardless of how many entries there are, so `build-lp.ts`
  * is unaffected. Returns `undefined` when the EV should not be modelled (disabled; away with no
  * future arrival; no usable SoC; or no windows).
@@ -53,6 +65,7 @@ export function buildEvConfig(
   evState: { pluggedIn: boolean; soc_percent: number } | undefined,
   nowMs: number,
   T: number,
+  opts: BuildEvConfigOptions = {},
 ): EvConfig | undefined {
   if (!settings.evEnabled) return undefined;
 
@@ -60,6 +73,33 @@ export function buildEvConfig(
   const toSlot = (time: string) => departureTimeToSlot(time, nowMs, settings.stepSize_m, T);
   // Past-due entries that survived normalization are "imminent": clamp to the next slot boundary.
   const toBoundary = (time: string) => Math.max(1, toSlot(time));
+
+  // --- Weekly schedule: transient entries + charging mask ---
+  // A plan with no weekday selected is inactive and must not restrict charging.
+  const weekly = (settings.evWeeklySchedule ?? []).filter((s) => s.weekdays.length > 0);
+  let chargeAllowed: boolean[] | undefined;
+  const essTargets: { slot: number; soc_Wh: number }[] = [];
+  let allEntries = entries ?? [];
+  if (weekly.length > 0) {
+    const horizonEndMs = nowMs + T * settings.stepSize_m * 60_000;
+    const occurrences = expandWeeklySchedule(weekly, nowMs, horizonEndMs);
+    allEntries = [...allEntries, ...weeklyScheduleEntries(occurrences, nowMs)];
+    chargeAllowed = Array(T).fill(false);
+    for (const o of occurrences) {
+      const from = toSlot(new Date(o.startMs).toISOString());
+      const to = Math.min(T, toSlot(new Date(o.endMs).toISOString()));
+      for (let t = from; t < to; t++) chargeAllowed[t] = true;
+      // The home battery should be stocked by the time the window opens.
+      if (from >= 1 && from < T) {
+        essTargets.push({ slot: from - 1, soc_Wh: (o.ess_soc_percent / 100) * settings.batteryCapacity_Wh });
+      }
+    }
+  }
+  // A deadline the user entered (target, trip, departure with a SoC) keeps the whole plan
+  // deadline-driven so that trip is not missed; weekly plans alone charge from the cheapest source.
+  const hasManualDeadline = (entries ?? []).some((e) =>
+    e.type === 'target' || e.type === 'trip' || (e.type === 'departure' && Number.isFinite(e.soc_percent)));
+  const cheapestSource = settings.evWeeklyCheapestSource === true && weekly.length > 0 && !hasManualDeadline;
 
   // --- Map entries to open/close events and deadline requests (skipping beyond-horizon ones) ---
   type SweepEvent = { slot: number; kind: 'open' | 'close'; soc_percent?: number; drop_percent?: number };
@@ -70,7 +110,7 @@ export function buildEvConfig(
   const targetRequests: TargetRequest[] = [];
   const tripBuffer_percent = settings.evTripSocBuffer_percent ?? 0;
 
-  for (const e of entries ?? []) {
+  for (const e of allEntries) {
     if (e.type === 'arrival') {
       const boundary = toBoundary(e.time);
       if (boundary <= T) events.push({ slot: boundary, kind: 'open', soc_percent: e.soc_percent });
@@ -180,6 +220,24 @@ export function buildEvConfig(
   // LP infeasible via ev_soc >= 0 when the trip cannot be charged for in time — and (b) clamp
   // targets in post-trip windows, whose floor is not a fixed reset.
   const chargeablePerSlot_Wh = maxPow_W * stepHours * efficiency;
+
+  // Slots that can realistically charge at full power: inside the weekly mask, and — when the home
+  // battery starts below the ESS floor — after the battery could have been grid-charged back up
+  // to it (until then only PV may charge the EV, which is conservatively not counted).
+  const essFloor_percent = settings.evEssSocFloor_percent ?? 0;
+  let floorDelaySlots = 0;
+  const essSoc = opts.essSoc_percent;
+  if (essFloor_percent > 0 && essSoc != null && Number.isFinite(essSoc) && essSoc < essFloor_percent) {
+    const deficit_Wh = ((essFloor_percent - essSoc) / 100) * settings.batteryCapacity_Wh;
+    const refill_W = Math.min(settings.maxChargePower_W, settings.maxGridImport_W);
+    const refillPerSlot_Wh = refill_W * stepHours * (settings.chargeEfficiency_percent / 100);
+    floorDelaySlots = refillPerSlot_Wh > 0 ? Math.ceil(deficit_Wh / refillPerSlot_Wh) : T;
+  }
+  const chargeableSlots = (from: number, to: number): number => {
+    let n = 0;
+    for (let t = Math.max(from, floorDelaySlots); t < to; t++) if (!chargeAllowed || chargeAllowed[t]) n++;
+    return n;
+  };
   const maxStartByWindow = new Map<Window, number>();
   let maxCarried_Wh = initialWh; // max achievable SoC carried into the next window (flat in gaps)
   for (const w of windows) {
@@ -194,7 +252,7 @@ export function buildEvConfig(
       maxStart = Math.max(0, maxCarried_Wh - (w.drop_Wh ?? 0));
     }
     maxStartByWindow.set(w, maxStart);
-    maxCarried_Wh = Math.min(capacityWh, maxStart + chargeablePerSlot_Wh * (w.endSlot - w.startSlot));
+    maxCarried_Wh = Math.min(capacityWh, maxStart + chargeablePerSlot_Wh * chargeableSlots(w.startSlot, w.endSlot));
   }
 
   // --- Targets ---
@@ -218,7 +276,7 @@ export function buildEvConfig(
     const targetSlot = clampedBoundary - 1;
     if (targetSlot < window.startSlot) return;
     const requestedWh = socToWh(requestedSoc_percent);
-    const chargingSlots = Math.max(0, clampedBoundary - window.startSlot);
+    const chargingSlots = chargeableSlots(window.startSlot, clampedBoundary);
     const maxStartSoc_Wh = maxStartByWindow.get(window) ?? window.resetSoc_Wh ?? 0;
     const achievableWh = Math.min(requestedWh, maxStartSoc_Wh + chargeablePerSlot_Wh * chargingSlots, capacityWh);
     // A fixed reset already at/above the target makes it redundant; a chained (post-trip) window
@@ -245,5 +303,8 @@ export function buildEvConfig(
     evMaxSoc_percent: settings.evMaxSoc_percent ?? 100,
     availabilityWindows: windows,
     targets: dedupedTargets,
+    ...(chargeAllowed ? { chargeAllowed } : {}),
+    ...(cheapestSource ? { cheapestSource, essTargets } : {}),
+    ...(essFloor_percent > 0 ? { essSocFloor_Wh: (essFloor_percent / 100) * settings.batteryCapacity_Wh } : {}),
   };
 }
