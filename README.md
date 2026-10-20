@@ -184,7 +184,7 @@ rest:
         unique_id: optivolt_ev_charge_current_a
 ```
 
-Use `sensor.optivolt_ev_charge_mode` and `sensor.optivolt_ev_charge_current_a` in automations to control your charger. The mode values are `off`, `fixed`, `solar_only`, `solar_grid`, and `max`; the current is the target charge rate in amps.
+Use `sensor.optivolt_ev_charge_mode` and `sensor.optivolt_ev_charge_current_a` in automations to control your charger. The mode values are `off`, `fixed`, `solar_only`, `solar_grid`, and `max`; the current is the target charge rate in amps per phase. Set **Charger connection** in the EV settings to match your charger — single phase 230 V, three phase 400 V (3N~), or three phase 230 V without neutral (3~, common in older Belgian homes) — so the min/max currents translate into the right charge power (e.g. 6–16 A is 4.1–11 kW on 3N~ 400 V).
 
 ## Architecture & HTTP API
 

@@ -18,8 +18,8 @@ export const QUICK_SETTING_DEFS = [
     label: "Block negative feed-in",
     kind: "checkbox",
   },
-  { id: "evMinChargeCurrent_A", selector: "#ev-min-charge-current", label: "EV min current (A)", kind: "number" },
-  { id: "evMaxChargeCurrent_A", selector: "#ev-max-charge-current", label: "EV max current (A)", kind: "number" },
+  { id: "evMinChargeCurrent_A", selector: "#ev-min-charge-current", label: "EV min current per phase (A)", kind: "number" },
+  { id: "evMaxChargeCurrent_A", selector: "#ev-max-charge-current", label: "EV max current per phase (A)", kind: "number" },
   { id: "evBatteryCapacity_kWh", selector: "#ev-battery-capacity", label: "EV capacity (kWh)", kind: "number" },
   { id: "evChargeEfficiency_percent", selector: "#ev-charge-efficiency", label: "EV efficiency (%)", kind: "number" },
   // mirrorClass drops the input's button/unit-group adjacency classes so the standalone clone renders cleanly.

@@ -95,3 +95,18 @@ describe('settings-store schema versioning', () => {
     expect(written.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION + 1);
   });
 });
+
+describe('settings-store evConnection', () => {
+  it('defaults to single phase and accepts the three-phase connections', async () => {
+    const { loadSettings, saveSettings } = await importStore();
+    expect((await loadSettings()).evConnection).toBe('1x230');
+    await saveSettings({ ...defaultSettings, evConnection: '3x400' });
+    expect((await loadSettings()).evConnection).toBe('3x400');
+  });
+
+  it('rejects an unknown connection', async () => {
+    const { saveSettings } = await importStore();
+    await expect(saveSettings({ ...defaultSettings, evConnection: '3x415' }))
+      .rejects.toThrow('evConnection must be one of 1x230, 3x230, 3x400');
+  });
+});

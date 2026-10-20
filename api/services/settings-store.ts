@@ -4,6 +4,7 @@ import { resolveDataDir, readJson, writeJson } from './json-store.ts';
 import { bumpSolverInputsVersion } from './solver-inputs-version.ts';
 import type { Settings, DataSources } from '../types.ts';
 import type { TerminalSocValuation } from '../../lib/types.ts';
+import { EV_CONNECTIONS, isEvConnection } from '../../lib/ev-connection.ts';
 
 const DATA_DIR = resolveDataDir();
 const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
@@ -97,6 +98,12 @@ function validateSettings(s: Settings): Settings {
   if (!TERMINAL_SOC_VALUATIONS.includes(s.terminalSocValuation)) {
     throw new SettingsValidationError(
       `Invalid setting: terminalSocValuation must be one of ${TERMINAL_SOC_VALUATIONS.join(', ')}`,
+    );
+  }
+
+  if (!isEvConnection(s.evConnection)) {
+    throw new SettingsValidationError(
+      `Invalid setting: evConnection must be one of ${EV_CONNECTIONS.join(', ')}`,
     );
   }
 

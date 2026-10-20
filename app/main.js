@@ -16,6 +16,7 @@ import {
 } from "./src/ui-binding.js";
 import {
   hydrateUI,
+  updateEvPowerRange,
   updateTerminalCustomUI,
 } from "./src/state.js";
 
@@ -150,6 +151,9 @@ async function boot() {
     persistConfigDebounced: optimizer.persistConfigDebounced,
     debounceRun: optimizer.debounceRun,
   });
+  for (const el of [els.evConnection, els.evMinChargeCurrent, els.evMaxChargeCurrent]) {
+    el?.addEventListener("input", () => updateEvPowerRange(els));
+  }
   evSchedule.wireEditor();
   await evSchedule.loadEntries();
 

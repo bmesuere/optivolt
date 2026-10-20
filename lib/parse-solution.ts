@@ -1,7 +1,7 @@
 import type { PlanRow, SolverConfig, EvChargeMode } from './types.ts';
 import { lpVar } from './lp-vars.ts';
 
-const EV_CHARGE_VOLTAGE_V = 230; // single-phase AC voltage assumed for A conversion
+import { evWattsPerAmp } from './ev-connection.ts';
 
 // Minimal type for the HiGHS solver result columns (keyed by variable name).
 interface HighsColumn {
@@ -123,6 +123,8 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
   }
 
   const slotHours = opts.stepMin / 60;
+  // Per-phase current the charger should be set to; single phase when no EV is configured.
+  const evWPerA = cfg.ev?.evWattsPerAmp ?? evWattsPerAmp(undefined);
   const rows: PlanRow[] = [];
   for (let t = 0; t < T; t++) {
     const imp = g2l[t] + g2b[t] + g2ev[t];
@@ -160,7 +162,7 @@ export function parseSolution(result: HighsSolution, cfg: SolverConfig, opts: Pa
       pv2ev:         round(pv2ev[t]),
       b2ev:          round(b2ev[t]),
       ev_charge:     round(evW),
-      ev_charge_A:   round(evW / EV_CHARGE_VOLTAGE_V),
+      ev_charge_A:   round(evW / evWPerA),
       ev_charge_mode: evChargeMode(
         g2ev[t],
         pv2ev[t],

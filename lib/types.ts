@@ -52,6 +52,12 @@ export interface EvConfig {
   evMaxChargePower_W: number;
   evBatteryCapacity_Wh: number;
   evInitialSoc_percent: number;
+  /**
+   * Charge power per ampere of per-phase current (W/A), from the charger connection:
+   * 230 single phase, ≈398 three phase 230 V, 690 three phase 400 V. Only used to report
+   * the planned current; defaults to single phase when absent.
+   */
+  evWattsPerAmp?: number;
   /** AC-to-DC efficiency of the EV's onboard charger, as a percentage (e.g. 90 = 90%). */
   evChargeEfficiency_percent: number;
   /** Ceiling for opportunistic charging, as a percentage of capacity (100 = no cap). */
@@ -159,7 +165,7 @@ export interface PlanRow {
   pv2ev: number;        // PV → EV W
   b2ev: number;         // battery → EV W
   ev_charge: number;    // total EV charge power W
-  ev_charge_A: number;  // charge current A (ev_charge / 230, single-phase)
+  ev_charge_A: number;  // charge current per phase, A (ev_charge / W-per-A of the charger connection)
   ev_charge_mode: EvChargeMode;
   ev_soc_percent: number;  // EV SoC %
   /** Resolved EV SoC deadline pinned at this slot, in % of the EV battery. Absent when no target lands here. */

@@ -236,6 +236,17 @@ describe('parseSolution — ev_charge_mode derivation', () => {
     expect(row.ev_charge_mode).toBe('fixed');
   });
 
+  it('reports per-phase current for a three-phase charger', () => {
+    const cfg = {
+      ...evCfg,
+      ev: { ...evCfg.ev, evMinChargePower_W: 4140, evMaxChargePower_W: 11040, evWattsPerAmp: 690 },
+    };
+    // 6900 W over three 230 V phases = 10 A per phase (not 30 A).
+    const [row] = parseSolution(makeResult(6900, 0, 0), cfg, opts);
+    expect(row.ev_charge).toBeCloseTo(6900, 3);
+    expect(row.ev_charge_A).toBeCloseTo(10, 3);
+  });
+
   it('fixed — battery tops up to reach minimum charge rate (not max)', () => {
     // PV delivers 1150W, battery chips in 230W to reach 1380W minimum; not "max" speed
     const [row] = parseSolution(makeResult(0, 1150, 230), evCfg, opts);

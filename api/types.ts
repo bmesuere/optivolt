@@ -1,6 +1,7 @@
 import type { TimeSeries, PlanRow, DessSlot, TerminalSocValuation } from '../lib/types.ts';
 import type { DayFilter, Aggregation } from '../lib/load-predictor-historical.ts';
 import type { HaSensor, HaDerivedSensor } from '../lib/ha-postprocess.ts';
+import type { EvConnection } from '../lib/ev-connection.ts';
 
 export type { TimeSeries };
 
@@ -46,6 +47,9 @@ export interface Settings {
   haUrl: string;
   haToken: string;
   evEnabled: boolean;
+  /** Charger connection: 1x230 (single phase), 3x230 (three phase, delta) or 3x400 (three phase, star). */
+  evConnection: EvConnection;
+  /** Per-phase current; power = current × the connection's W/A. */
   evMinChargeCurrent_A: number;
   evMaxChargeCurrent_A: number;
   evBatteryCapacity_kWh: number;

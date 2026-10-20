@@ -1,5 +1,6 @@
 import type { EvConfig, EvSocTarget } from '../../lib/types.ts';
 import type { EvScheduleEntry, Settings } from '../types.ts';
+import { evWattsPerAmp } from '../../lib/ev-connection.ts';
 
 /**
  * Convert an absolute datetime string to a half-open slot boundary relative to `startMs`:
@@ -135,8 +136,10 @@ export function buildEvConfig(
     return undefined;
   }
 
-  const minPow_W = settings.evMinChargeCurrent_A * 230;
-  const maxPow_W = settings.evMaxChargeCurrent_A * 230;
+  // Currents are per phase; the connection turns them into charge power.
+  const wattsPerAmp = evWattsPerAmp(settings.evConnection);
+  const minPow_W = settings.evMinChargeCurrent_A * wattsPerAmp;
+  const maxPow_W = settings.evMaxChargeCurrent_A * wattsPerAmp;
   const capacityWh = settings.evBatteryCapacity_kWh * 1000;
   const stepHours = settings.stepSize_m / 60;
   const efficiency = settings.evChargeEfficiency_percent / 100;
@@ -239,6 +242,7 @@ export function buildEvConfig(
   return {
     evMinChargePower_W: Math.min(minPow_W, maxPow_W),
     evMaxChargePower_W: maxPow_W,
+    evWattsPerAmp:      wattsPerAmp,
     evBatteryCapacity_Wh: capacityWh,
     evInitialSoc_percent: initialSoc_percent,
     evChargeEfficiency_percent: settings.evChargeEfficiency_percent,

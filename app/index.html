@@ -833,12 +833,20 @@
             <h2 class="sidebar-label">EV Charging</h2>
           </div>
           <div class="space-y-3">
+            <label class="block text-sm">Charger connection
+              <select id="ev-connection" class="form-select" data-settings-input>
+                <option value="1x230">Single phase, 230 V</option>
+                <option value="3x400">Three phase, 400 V (3N~, with neutral)</option>
+                <option value="3x230">Three phase, 230 V (3~, no neutral)</option>
+              </select>
+              <span id="ev-power-range" class="mt-1 block text-xs text-slate-500 dark:text-slate-400"></span>
+            </label>
             <div class="grid grid-cols-2 gap-3">
-              <label class="block text-sm">Min charge current (A)
+              <label class="block text-sm">Min current per phase (A)
                 <input id="ev-min-charge-current" type="number" min="6" max="32" step="1"
                   class="form-input" data-settings-input />
               </label>
-              <label class="block text-sm">Max charge current (A)
+              <label class="block text-sm">Max current per phase (A)
                 <input id="ev-max-charge-current" type="number" min="6" max="32" step="1"
                   class="form-input" data-settings-input />
               </label>

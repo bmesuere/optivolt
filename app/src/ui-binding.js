@@ -90,6 +90,8 @@ export function getElements() {
 
     // EV Charging (Settings tab)
     evEnabled: $("#ev-enabled"),
+    evConnection: $("#ev-connection"),
+    evPowerRange: $("#ev-power-range"),
     evMinChargeCurrent: $("#ev-min-charge-current"),
     evMaxChargeCurrent: $("#ev-max-charge-current"),
     evBatteryCapacity: $("#ev-battery-capacity"),

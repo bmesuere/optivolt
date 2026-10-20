@@ -45,6 +45,7 @@ export function snapshotUI(els) {
 
     // EV CHARGING
     evEnabled: !!els.evEnabled?.checked,
+    evConnection: els.evConnection?.value || "1x230",
     evMinChargeCurrent_A: num(els.evMinChargeCurrent?.value),
     evMaxChargeCurrent_A: num(els.evMaxChargeCurrent?.value),
     evBatteryCapacity_kWh: num(els.evBatteryCapacity?.value),
@@ -118,6 +119,7 @@ export function hydrateUI(els, obj = {}) {
   if (els.evEnabled && obj.evEnabled != null) {
     els.evEnabled.checked = !!obj.evEnabled;
   }
+  if (els.evConnection && obj.evConnection) els.evConnection.value = obj.evConnection;
   setIfDef(els.evMinChargeCurrent, obj.evMinChargeCurrent_A);
   setIfDef(els.evMaxChargeCurrent, obj.evMaxChargeCurrent_A);
   setIfDef(els.evBatteryCapacity, obj.evBatteryCapacity_kWh);
@@ -133,6 +135,7 @@ export function hydrateUI(els, obj = {}) {
     els.tableKwh.checked = !!obj.tableShowKwh;
   }
 
+  updateEvPowerRange(els);
   updateTerminalCustomUI(els);
   updateRebalanceNudgeUI(els, obj.rebalanceNudge);
 }
@@ -431,4 +434,21 @@ function formatCostCents(v) {
 function formatTippingPoint(v, symbol) {
   const n = toFinite(v);
   return n === null ? "—" : `${symbol} ${n.toFixed(2)} c€`;
+}
+
+// W per ampere of per-phase current; mirrors lib/ev-connection.ts.
+const EV_WATTS_PER_AMP = { "1x230": 230, "3x230": Math.sqrt(3) * 230, "3x400": 3 * 230 };
+
+/** Show the charge-power range the configured currents give on the selected connection. */
+export function updateEvPowerRange(els) {
+  if (!els.evPowerRange) return;
+  const wPerA = EV_WATTS_PER_AMP[els.evConnection?.value] ?? 230;
+  const min = num(els.evMinChargeCurrent?.value);
+  const max = num(els.evMaxChargeCurrent?.value);
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    els.evPowerRange.textContent = "";
+    return;
+  }
+  const kW = (a) => (a * wPerA / 1000).toFixed(1);
+  els.evPowerRange.textContent = `Charge power ${kW(min)}–${kW(max)} kW`;
 }

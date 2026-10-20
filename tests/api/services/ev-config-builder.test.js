@@ -276,3 +276,25 @@ describe('buildEvConfig — max SoC', () => {
     expect(ev.evMaxSoc_percent).toBe(100);
   });
 });
+
+describe('buildEvConfig — charger connection', () => {
+  it('defaults to single phase when no connection is set', () => {
+    const ev = buildEvConfig(base, [], pluggedIn, NOW_MS, T);
+    expect(ev.evMinChargePower_W).toBe(6 * 230);
+    expect(ev.evMaxChargePower_W).toBe(16 * 230);
+    expect(ev.evWattsPerAmp).toBe(230);
+  });
+
+  it('multiplies per-phase current by three phases on a 400 V connection', () => {
+    const ev = buildEvConfig({ ...base, evConnection: '3x400' }, [], pluggedIn, NOW_MS, T);
+    expect(ev.evMinChargePower_W).toBe(4140);
+    expect(ev.evMaxChargePower_W).toBe(11040);
+    expect(ev.evWattsPerAmp).toBe(690);
+  });
+
+  it('uses √3 × 230 V on a three-phase 230 V (delta) connection', () => {
+    const ev = buildEvConfig({ ...base, evConnection: '3x230' }, [], pluggedIn, NOW_MS, T);
+    expect(ev.evMinChargePower_W).toBeCloseTo(2390.2, 1);
+    expect(ev.evMaxChargePower_W).toBeCloseTo(6373.9, 1);
+  });
+});
