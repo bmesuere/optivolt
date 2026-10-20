@@ -15,6 +15,7 @@
 
 const VIEW_RANGE_KEY = "optivolt:viewRange";
 const FLOWS_RES_KEY = "optivolt:flowsResolution";
+const SHARED_CROSSHAIR_KEY = "optivolt:sharedCrosshair";
 
 /**
  * Fallback end of the "standard" view for a plan starting at the given
@@ -241,6 +242,20 @@ export function storeViewRange(range) {
   try {
     localStorage.setItem(VIEW_RANGE_KEY, range === "full" ? "full" : "standard");
   } catch { /* private mode etc. — the toggle just won't persist */ }
+}
+
+export function getStoredSharedCrosshair() {
+  try {
+    return localStorage.getItem(SHARED_CROSSHAIR_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+export function storeSharedCrosshair(enabled) {
+  try {
+    localStorage.setItem(SHARED_CROSSHAIR_KEY, enabled ? "on" : "off");
+  } catch { /* ignore */ }
 }
 
 /** Explicit user choice ('15' | '60'), or null meaning "auto". */

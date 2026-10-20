@@ -12,10 +12,13 @@
 
 import {
   getStoredFlowsResolution,
+  getStoredSharedCrosshair,
   getStoredViewRange,
   storeFlowsResolution,
+  storeSharedCrosshair,
   storeViewRange,
 } from "./plan-view.js";
+import { setSharedCrosshairEnabled } from "./charts/core.js";
 
 const SEG_ACTIVE = "rounded-full px-2.5 py-1 text-xs font-medium bg-white text-ink shadow-sm dark:bg-slate-700 dark:text-slate-100 transition-all";
 const SEG_INACTIVE = "rounded-full px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-all";
@@ -23,6 +26,9 @@ const SEG_INACTIVE = "rounded-full px-2.5 py-1 text-xs font-medium text-slate-50
 const GROUP_CLASS = "inline-flex rounded-full bg-slate-100 p-0.5 dark:bg-slate-800";
 
 const MARKUP = `
+  <div class="${GROUP_CLASS}">
+    <button data-crosshair type="button" title="Mark the hovered moment on every chart">Crosshair</button>
+  </div>
   <div data-res-toggle class="${GROUP_CLASS}" role="group" aria-label="Bar resolution">
     <button data-res="15" type="button">15 min</button>
     <button data-res="60" type="button">1 h</button>
@@ -71,6 +77,7 @@ export function mountViewToggles(host) {
   const rangeToggle = host.querySelector("[data-range-toggle]");
   const resButtons = [...host.querySelectorAll("[data-res]")];
   const rangeButtons = [...host.querySelectorAll("[data-range]")];
+  const crosshairButton = host.querySelector("[data-crosshair]");
 
   // Style the segments immediately from the stored choice — the first render
   // pass only calls update() once a plan is in, which otherwise leaves the
@@ -79,6 +86,15 @@ export function mountViewToggles(host) {
   const initialRange = getStoredViewRange();
   for (const btn of resButtons) setSegState(btn, btn.dataset.res === initialResolution);
   for (const btn of rangeButtons) setSegState(btn, btn.dataset.range === initialRange);
+  setSegState(crosshairButton, getStoredSharedCrosshair());
+  setSharedCrosshairEnabled(getStoredSharedCrosshair());
+  crosshairButton.addEventListener("click", () => {
+    const enabled = !getStoredSharedCrosshair();
+    storeSharedCrosshair(enabled);
+    setSharedCrosshairEnabled(enabled);
+    setSegState(crosshairButton, enabled);
+    broadcast();
+  });
 
   for (const btn of resButtons) {
     btn.addEventListener("click", () => {
@@ -98,6 +114,7 @@ export function mountViewToggles(host) {
       rangeToggle?.classList.toggle("hidden", !hasExtended);
       for (const btn of resButtons) setSegState(btn, btn.dataset.res === resolution);
       for (const btn of rangeButtons) setSegState(btn, btn.dataset.range === view);
+      setSegState(crosshairButton, getStoredSharedCrosshair());
     },
   };
 }

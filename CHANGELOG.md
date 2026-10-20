@@ -25,6 +25,8 @@ Still the current version; everything below has shipped under it.
   prices beyond the published day-ahead window.
 - Periodic battery rebalancing: a scheduled window that charges the pack to
   full, with a nudge when a full-SoC observation is missed.
+- Optional crosshair shared by all plan charts, and chart tooltips that close
+  on a tap outside the chart or a scroll, so they no longer stick on a phone.
 - Manual forecast adjustments, drawn directly on the prediction chart and
   applied on top of the raw persisted forecasts.
 - Reworked UI: pinnable optimizer quick settings, consolidated settings tab,
