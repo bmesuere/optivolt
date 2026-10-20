@@ -177,6 +177,7 @@ describe('Integration: API', () => {
       daysSinceLastFullSoc: null,
       rebalanceRecommended: false,
       thresholdDays: 10,
+      nextRebalanceDueAt: null, // automatic rebalancing is off
     });
     expect(loadSettings).toHaveBeenCalled();
     expect(loadData).toHaveBeenCalled();

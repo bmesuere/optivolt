@@ -25,6 +25,9 @@ Still the current version; everything below has shipped under it.
   prices beyond the published day-ahead window.
 - Periodic battery rebalancing: a scheduled window that charges the pack to
   full, with a nudge when a full-SoC observation is missed.
+- Automatic battery rebalancing every N weeks (System settings); the solver
+  picks the cheapest moment from three days before to three days after the
+  due date.
 - Manual forecast adjustments, drawn directly on the prediction chart and
   applied on top of the raw persisted forecasts.
 - Reworked UI: pinnable optimizer quick settings, consolidated settings tab,

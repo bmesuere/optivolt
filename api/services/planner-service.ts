@@ -15,6 +15,7 @@ import { refreshSeriesFromVrmAndPersist } from './vrm-refresh.ts';
 import { refreshPriceForecastAndPersist } from './price-forecast-service.ts';
 import { setDynamicEssSchedule } from './mqtt-service.ts';
 import { getRebalanceNudge, recordFullSocObservation, type RebalanceNudge } from './rebalance-nudge.ts';
+import { getRebalanceSchedule } from './rebalance-schedule.ts';
 import { getSolverInputsVersion } from './solver-inputs-version.ts';
 import { solveLp } from './solve-runner.ts';
 import { buildWarmStartColumns } from '../../lib/warm-start.ts';
@@ -178,14 +179,18 @@ export async function getSolverInputs(): Promise<{ cfg: SolverConfig; pricesKnow
 }
 
 /**
- * Post-solve: a completed hold cycle switches rebalancing off and clears its
- * start marker. Deliberately not pre-solve — a failed solve must never mutate
- * user settings.
+ * Post-solve: a completed hold cycle switches rebalancing off, clears its start
+ * marker and records when it finished (the automatic schedule counts from
+ * there). Deliberately not pre-solve — a failed solve must never mutate user
+ * settings.
  */
-async function finishCompletedRebalanceCycle(settings: Settings, data: Data): Promise<{ settings: Settings; data: Data }> {
-  const nextData = { ...data, rebalanceState: { startMs: null } };
+async function finishCompletedRebalanceCycle(settings: Settings, data: Data, nowMs: number): Promise<{ settings: Settings; data: Data }> {
+  const nextData = { ...data, rebalanceState: { startMs: null }, lastRebalanceAt: new Date(nowMs).toISOString() };
   const nextSettings = { ...settings, rebalanceEnabled: false };
-  await Promise.all([saveSettings(nextSettings), saveData(nextData)]);
+  await Promise.all([
+    ...(settings.rebalanceEnabled ? [saveSettings(nextSettings)] : []),
+    saveData(nextData),
+  ]);
   return { settings: nextSettings, data: nextData };
 }
 
@@ -234,7 +239,10 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   // A just-completed hold cycle solves like any rebalance-free plan
   // (remainingSlots = 0 builds no rebalance constraints); the actual
   // switch-off happens in post-solve bookkeeping.
-  const rebalanceCycleComplete = settings.rebalanceEnabled && cfg.rebalance?.remainingSlots === 0;
+  // Rebalancing is planned when switched on by hand or by the automatic schedule (see
+  // config-builder.ts); either way cfg.rebalance is then present.
+  const rebalancePlanned = cfg.rebalance != null;
+  const rebalanceCycleComplete = rebalancePlanned && cfg.rebalance?.remainingSlots === 0;
 
   // Captured after all pre-solve persistence so a plan built from inputs that
   // are mutated later (even by our own post-solve bookkeeping) reads as stale.
@@ -300,16 +308,18 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   // Post-solve bookkeeping — reached only when solve + parse succeeded (so a
   // failed solve never flips settings or persisted rebalance state), and only
   // when the snapshots it would persist are still the current state.
+  let rebalanceOn = rebalancePlanned;
   if (!inputsChangedDuringSolve) {
     if (rebalanceCycleComplete) {
-      ({ settings, data } = await finishCompletedRebalanceCycle(settings, data));
+      ({ settings, data } = await finishCompletedRebalanceCycle(settings, data, timing.startMs));
+      rebalanceOn = false;
     }
-    if (settings.rebalanceEnabled) {
+    if (rebalanceOn) {
       data = await recordRebalanceStartIfAtTarget(settings, data, timing.startMs);
     }
   }
 
-  const rebalanceCtx = settings.rebalanceEnabled ? {
+  const rebalanceCtx = rebalanceOn ? {
     enabled: true,
     startMs: data.rebalanceState?.startMs ?? null,
     remainingSlots: cfg.rebalance?.remainingSlots ?? 0,
@@ -317,7 +327,11 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
 
   const summary = buildPlanSummary(rowsWithDess, cfg, diagnostics, rebalanceCtx);
 
-  const rebalanceNudge = getRebalanceNudge(data);
+  const nextRebalanceDueMs = getRebalanceSchedule(settings, data, timing.startMs).dueMs;
+  const rebalanceNudge: RebalanceNudge = {
+    ...getRebalanceNudge(data),
+    nextRebalanceDueAt: nextRebalanceDueMs != null ? new Date(nextRebalanceDueMs).toISOString() : null,
+  };
 
   lastPlan = { cfg, data, computedAtMs: Date.now(), inputsVersion, inputsChangedDuringSolve, pricesKnownUntilMs: pricesKnownUntilMs ?? null, timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
   return lastPlan;

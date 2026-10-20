@@ -19,6 +19,8 @@ export function getElements() {
     rebalanceEnabled: $("#rebalance-enabled"),
     rebalanceNudge: $("#rebalance-nudge"),
     rebalanceHoldHours: $("#rebalance-hold-hours"),
+    rebalanceEveryWeeks: $("#rebalance-every-weeks"),
+    rebalanceNext: $("#rebalance-next"),
     blockFeedInOnNegativePrices: $("#block-feedin-negative-prices"),
 
     // numeric inputs

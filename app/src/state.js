@@ -38,6 +38,7 @@ export function snapshotUI(els) {
     // ALGORITHM
     rebalanceEnabled: !!els.rebalanceEnabled?.checked,
     rebalanceHoldHours: num(els.rebalanceHoldHours?.value),
+    rebalanceEveryWeeks: num(els.rebalanceEveryWeeks?.value) ?? 0,
 
     // HOME ASSISTANT
     haUrl: els.haUrl?.value ?? '',
@@ -102,6 +103,7 @@ export function hydrateUI(els, obj = {}) {
     els.rebalanceEnabled.checked = !!obj.rebalanceEnabled;
   }
   setIfDef(els.rebalanceHoldHours, obj.rebalanceHoldHours);
+  setIfDef(els.rebalanceEveryWeeks, obj.rebalanceEveryWeeks);
 
   // Data / extended horizon
   setIfDef(els.extendedHorizonDays, obj.extendedHorizonDays);
@@ -304,16 +306,29 @@ function updateRebalanceStatus(els, status) {
   }
 }
 
+const REBALANCE_DUE_FMT = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" });
+
 export function updateRebalanceNudgeUI(els, nudge) {
   const lastFullText = formatLastFullSoc(nudge?.lastFullSocAt);
   const title = `Schedule battery rebalancing. Last 100% SoC: ${lastFullText}.`;
   if (els.rebalanceToggleLabel) els.rebalanceToggleLabel.title = title;
 
+  if (els.rebalanceNext) {
+    const dueMs = nudge?.nextRebalanceDueAt ? new Date(nudge.nextRebalanceDueAt).getTime() : NaN;
+    els.rebalanceNext.classList.toggle("hidden", !Number.isFinite(dueMs));
+    if (Number.isFinite(dueMs)) {
+      const due = dueMs <= Date.now() ? "now" : `around ${REBALANCE_DUE_FMT.format(new Date(dueMs))}`;
+      els.rebalanceNext.textContent = `Next rebalance due ${due}; it runs at the cheapest moment from 3 days before to 3 days after.`;
+    }
+  }
+
   if (!els.rebalanceNudge) return;
 
   const recommended = !!nudge?.rebalanceRecommended;
   const alreadyEnabled = !!els.rebalanceEnabled?.checked;
-  const shouldShow = recommended && !alreadyEnabled;
+  // An automatic schedule already takes care of it.
+  const autoScheduled = !!nudge?.nextRebalanceDueAt;
+  const shouldShow = recommended && !alreadyEnabled && !autoScheduled;
   els.rebalanceNudge.classList.toggle("hidden", !shouldShow);
 
   if (shouldShow) {

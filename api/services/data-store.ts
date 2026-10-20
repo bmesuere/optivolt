@@ -44,6 +44,11 @@ export function validateData(d: Data): Data {
       throw new Error(`Invalid lastFullSocAt: must be null or a valid timestamp (${d.lastFullSocAt})`);
     }
   }
+  if (d.lastRebalanceAt !== undefined && d.lastRebalanceAt !== null) {
+    if (typeof d.lastRebalanceAt !== 'string' || Number.isNaN(new Date(d.lastRebalanceAt).getTime())) {
+      throw new Error(`Invalid lastRebalanceAt: must be null or a valid timestamp (${d.lastRebalanceAt})`);
+    }
+  }
   if (d.predictionAdjustments !== undefined) {
     if (!Array.isArray(d.predictionAdjustments)) {
       throw new Error("Invalid predictionAdjustments: must be an array");

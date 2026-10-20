@@ -10,6 +10,8 @@ export interface RebalanceNudge {
   daysSinceLastFullSoc: number | null;
   rebalanceRecommended: boolean;
   thresholdDays: number;
+  /** When the next automatic rebalance is due (rebalanceEveryWeeks); absent/null when that is off. */
+  nextRebalanceDueAt?: string | null;
 }
 
 function parseTimestampMs(value: unknown): number | null {

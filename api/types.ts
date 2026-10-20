@@ -43,6 +43,8 @@ export interface Settings {
   dataSources: DataSources;
   rebalanceEnabled: boolean;
   rebalanceHoldHours: number;
+  /** Rebalance automatically every this many weeks, the moment picked by the solver. 0 = off (manual toggle only). */
+  rebalanceEveryWeeks: number;
   haUrl: string;
   haToken: string;
   evEnabled: boolean;
@@ -127,6 +129,8 @@ export interface Data {
   exportPriceForecast?: TimeSeries;
   soc: SocData;
   lastFullSocAt?: string | null;
+  /** When the last rebalance hold completed; the automatic schedule counts from it. */
+  lastRebalanceAt?: string | null;
   rebalanceState?: RebalanceState;
   predictionAdjustments?: PredictionAdjustment[];
   evScheduleEntries?: EvScheduleEntry[];
