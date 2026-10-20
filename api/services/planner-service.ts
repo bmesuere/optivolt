@@ -18,6 +18,7 @@ import { getRebalanceNudge, recordFullSocObservation, type RebalanceNudge } from
 import { getSolverInputsVersion } from './solver-inputs-version.ts';
 import { solveLp } from './solve-runner.ts';
 import { buildWarmStartColumns } from '../../lib/warm-start.ts';
+import { estimateBatteryEnergyPrice, seedBatteryEnergyPrice, trackBatteryEnergyPrice } from '../../lib/battery-energy-price.ts';
 import type { PlanRowWithDess, Data, Settings } from '../types.ts';
 
 // How many slots we push into Dynamic ESS
@@ -42,6 +43,8 @@ export interface ComputePlanResult {
   data: Data;
   /** Wall-clock time the solve finished; lets clients judge cache freshness. */
   computedAtMs: number;
+  /** Battery energy price at the start of this plan, c€ per stored kWh; null while unknown. */
+  batteryEnergyPriceSeed: number | null;
   /** Solver-inputs version this plan was built from; see solver-inputs-version.ts. */
   inputsVersion: number;
   /**
@@ -240,6 +243,15 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   // are mutated later (even by our own post-solve bookkeeping) reads as stale.
   const inputsVersion = getSolverInputsVersion();
 
+  // Average purchase price of the energy in the battery, carried over from the previous plan.
+  // Kept in memory only: the first plan after a restart starts from an estimate.
+  const batteryEnergyPriceSeed = seedBatteryEnergyPrice(lastPlan && {
+    startMs: lastPlan.timing.startMs,
+    stepMin: lastPlan.timing.stepMin,
+    seed_cents_per_kWh: lastPlan.batteryEnergyPriceSeed,
+    prices: lastPlan.rows.map((r) => r.batteryEnergyPrice_cents_per_kWh),
+  }, timing.startMs) ?? estimateBatteryEnergyPrice(cfg.importPrice.map((ic) => ({ ic })), timing.stepMin);
+
   const lpText = buildLP(cfg);
   const hasRebalance = (cfg.rebalance?.remainingSlots ?? 0) > 0;
   const solveOptions = selectSolveOptions(cfg);
@@ -284,6 +296,8 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   });
 
   const rows = attachOriginalPredictionValues(parseSolution(result, cfg, timing), data);
+  const batteryEnergyPrices = trackBatteryEnergyPrice(rows, cfg, batteryEnergyPriceSeed);
+  rows.forEach((row, i) => { row.batteryEnergyPrice_cents_per_kWh = batteryEnergyPrices[i]; });
 
   const rebalanceWindow = extractRebalanceWindow(
     result.Columns ?? {},
@@ -315,11 +329,11 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
     remainingSlots: cfg.rebalance?.remainingSlots ?? 0,
   } : undefined;
 
-  const summary = buildPlanSummary(rowsWithDess, cfg, diagnostics, rebalanceCtx);
+  const summary = buildPlanSummary(rowsWithDess, cfg, diagnostics, rebalanceCtx, batteryEnergyPriceSeed);
 
   const rebalanceNudge = getRebalanceNudge(data);
 
-  lastPlan = { cfg, data, computedAtMs: Date.now(), inputsVersion, inputsChangedDuringSolve, pricesKnownUntilMs: pricesKnownUntilMs ?? null, timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
+  lastPlan = { cfg, data, batteryEnergyPriceSeed, computedAtMs: Date.now(), inputsVersion, inputsChangedDuringSolve, pricesKnownUntilMs: pricesKnownUntilMs ?? null, timing, result, rows: rowsWithDess, summary, rebalanceWindow, rebalanceNudge };
   return lastPlan;
 }
 

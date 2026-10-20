@@ -25,6 +25,9 @@ Still the current version; everything below has shipped under it.
   prices beyond the published day-ahead window.
 - Periodic battery rebalancing: a scheduled window that charges the pack to
   full, with a nudge when a full-SoC observation is missed.
+- Average purchase price of the energy in the home battery, shown with the
+  energy prices chart, and a cost per planned EV charging session on the EV tab
+  (battery energy counted at that price).
 - Manual forecast adjustments, drawn directly on the prediction chart and
   applied on top of the raw persisted forecasts.
 - Reworked UI: pinnable optimizer quick settings, consolidated settings tab,

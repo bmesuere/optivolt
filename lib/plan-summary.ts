@@ -6,13 +6,16 @@
  *  - tipping point from DESS diagnostics
  */
 
-import type { PlanRow, SolverConfig, DessDiagnostics, PlanSummary } from './types.ts';
+import type { PlanRow, SolverConfig, DessDiagnostics, PlanSummary, EvSessionSummary } from './types.ts';
+
+type SummaryCfg = Pick<SolverConfig, 'stepSize_m'> & Partial<Pick<SolverConfig, 'ev' | 'dischargeEfficiency_percent'>>;
 
 export function buildPlanSummary(
   rows: PlanRow[],
-  cfg: Pick<SolverConfig, 'stepSize_m'>,
+  cfg: SummaryCfg,
   dessDiagnostics: Partial<DessDiagnostics> = {},
   rebalance?: { enabled: boolean; startMs: number | null; remainingSlots: number },
+  batteryEnergyPrice_cents_per_kWh: number | null = null,
 ): PlanSummary {
   const rebalanceStatus = rebalance?.enabled
     ? (rebalance.startMs != null ? 'active' : 'scheduled')
@@ -47,6 +50,8 @@ export function buildPlanSummary(
       evChargeFromBattery_kWh: 0,
       evChargeGridCost_cents:  0,
       evChargeEffectiveRate_cents_per_kWh: null,
+      batteryEnergyPrice_cents_per_kWh,
+      evSessions: [],
     };
   }
 
@@ -144,7 +149,82 @@ export function buildPlanSummary(
     evChargeGridCost_cents:  evGridCost,
     // Grid cost per kWh of *all* EV energy — PV and battery kWh dilute the rate.
     evChargeEffectiveRate_cents_per_kWh: evTotal > 0 ? evGridCost / evTotal : null,
+    batteryEnergyPrice_cents_per_kWh,
+    evSessions: buildEvSessions(rows, cfg, stepHours, batteryEnergyPrice_cents_per_kWh),
   };
+}
+
+/**
+ * Split the planned EV charging into sessions and cost each one. A session is a stretch of
+ * consecutive slots in which the EV may charge (inside an availability window), so a night
+ * with a pause during expensive hours is still one session. Without an EV config a session is
+ * a run of consecutive charging slots.
+ *
+ * Battery energy is costed at the battery energy price going into the slot, divided by the
+ * discharge efficiency (the battery gives up more than the EV receives).
+ */
+function buildEvSessions(
+  rows: PlanRow[],
+  cfg: SummaryCfg,
+  stepHours: number,
+  initialBatteryPrice: number | null,
+): EvSessionSummary[] {
+  const T = rows.length;
+  const ev = cfg.ev;
+  let mayCharge: boolean[];
+  if (ev) {
+    mayCharge = Array(T).fill(false);
+    for (const w of ev.availabilityWindows) {
+      for (let t = Math.max(0, w.startSlot); t < Math.min(T, w.endSlot); t++) mayCharge[t] = true;
+    }
+  } else {
+    mayCharge = rows.map((r) => (r.ev_charge ?? 0) > 0);
+  }
+  const dischargeEfficiency = (cfg.dischargeEfficiency_percent ?? 100) / 100;
+  const stepMs = stepHours * 3_600_000;
+  const W2kWh = (x: number) => x * stepHours / 1000;
+
+  const sessions: EvSessionSummary[] = [];
+  let current: EvSessionSummary | null = null;
+  const close = () => {
+    if (current && current.energy_kWh > 0) {
+      current.cost_cents = current.gridCost_cents + current.batteryCost_cents;
+      current.rate_cents_per_kWh = current.cost_cents / current.energy_kWh;
+      sessions.push(current);
+    }
+    current = null;
+  };
+  for (let t = 0; t < T; t++) {
+    const row = rows[t];
+    const charging = (row.ev_charge ?? 0) > 0;
+    if (charging) {
+      current ??= {
+        startMs: row.timestampMs, endMs: row.timestampMs, energy_kWh: 0, fromGrid_kWh: 0, fromPv_kWh: 0,
+        fromBattery_kWh: 0, gridCost_cents: 0, batteryCost_cents: 0, cost_cents: 0, rate_cents_per_kWh: 0,
+      };
+      const grid = W2kWh(row.g2ev ?? 0);
+      const pv = W2kWh(row.pv2ev ?? 0);
+      const battery = W2kWh(row.b2ev ?? 0);
+      const batteryPrice = (t > 0 ? rows[t - 1].batteryEnergyPrice_cents_per_kWh : initialBatteryPrice) ?? 0;
+      current.endMs = row.timestampMs + stepMs;
+      current.energy_kWh += grid + pv + battery;
+      current.fromGrid_kWh += grid;
+      current.fromPv_kWh += pv;
+      current.fromBattery_kWh += battery;
+      current.gridCost_cents += grid * row.ic;
+      current.batteryCost_cents += dischargeEfficiency > 0 ? (battery * batteryPrice) / dischargeEfficiency : 0;
+    }
+    // The stretch ends at a slot that may not charge; a new availability window is a new
+    // session even when it follows the previous one directly.
+    if (!mayCharge[t] && !charging) close();
+    else if (ev && isWindowStart(ev.availabilityWindows, t + 1)) close();
+  }
+  close();
+  return sessions;
+}
+
+function isWindowStart(windows: { startSlot: number }[], slot: number): boolean {
+  return windows.some((w) => w.startSlot === slot);
 }
 
 function finiteOr(value: unknown, fallback: number): number {

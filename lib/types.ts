@@ -140,6 +140,8 @@ export interface PlanRow {
   originalPv?: number;   // unadjusted prediction W when a manual adjustment changed the slot
   ic: number;  // import price c€/kWh
   ec: number;  // export price c€/kWh
+  /** Average purchase price of the energy in the battery at the end of the slot, c€ per stored kWh; null while unknown. */
+  batteryEnergyPrice_cents_per_kWh?: number | null;
   g2l: number;   // grid → load W
   g2b: number;   // grid → battery W
   pv2l: number;  // PV → load W
@@ -225,4 +227,27 @@ export interface PlanSummary {
   evChargeGridCost_cents: number;
   /** Grid cost spread over all EV energy (PV/battery share included), c€/kWh; null when nothing charged. */
   evChargeEffectiveRate_cents_per_kWh: number | null;
+  /** Average purchase price of the energy in the battery at the start of the plan, c€ per stored kWh; null while unknown. */
+  batteryEnergyPrice_cents_per_kWh: number | null;
+  /** Planned EV charging sessions with their cost. */
+  evSessions: EvSessionSummary[];
+}
+
+/** One planned EV charging session: a stretch of slots in which the EV may charge. */
+export interface EvSessionSummary {
+  /** Start of the first and end of the last slot that actually charges. */
+  startMs: number;
+  endMs: number;
+  energy_kWh: number;
+  fromGrid_kWh: number;
+  fromPv_kWh: number;
+  fromBattery_kWh: number;
+  /** Grid share at the import price. */
+  gridCost_cents: number;
+  /** Battery share at the battery energy price (discharge losses included); 0 while that price is unknown. */
+  batteryCost_cents: number;
+  /** gridCost + batteryCost; PV is free. */
+  cost_cents: number;
+  /** cost_cents spread over all energy of the session, c€/kWh. */
+  rate_cents_per_kWh: number;
 }

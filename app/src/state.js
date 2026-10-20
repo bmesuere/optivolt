@@ -174,6 +174,7 @@ export function updateSummaryUI(els, summary) {
     setText(els.sumLoadBatt, "—");
     setText(els.sumLoadPv, "—");
     setText(els.avgImport, "—");
+    setText(els.batteryEnergyPrice, "—");
     setText(els.netCost, "—");
     setText(els.gridBatteryTp, "—");
     setText(els.gridChargeTp, "—");
@@ -207,6 +208,7 @@ export function updateSummaryUI(els, summary) {
   setText(els.sumLoadBatt, formatKWh(loadFromBattery_kWh));
   setText(els.sumLoadPv, formatKWh(loadFromPv_kWh));
   setText(els.avgImport, formatCentsPerKWh(avgImportPrice_cents_per_kWh));
+  setText(els.batteryEnergyPrice, formatCentsPerKWh(summary.batteryEnergyPrice_cents_per_kWh));
   setText(els.netCost, formatCostCents(netGridCost_cents));
   setText(els.gridBatteryTp, formatTippingPoint(gridBatteryTippingPoint_cents_per_kWh, "↓"));
   setText(els.gridChargeTp, formatTippingPoint(gridChargeTippingPoint_cents_per_kWh, "↓"));

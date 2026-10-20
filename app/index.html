@@ -307,7 +307,13 @@
       </div>
 
       <div class="card">
-        <h3 class="mb-3 sidebar-label">Energy prices</h3>
+        <div class="mb-3 flex items-baseline justify-between gap-4">
+          <h3 class="sidebar-label">Energy prices</h3>
+          <span class="text-[11px] text-slate-500 dark:text-slate-400"
+            title="Average purchase price of the energy now in the battery, per stored kWh. Grid charging counts at the buy price (charge losses included), solar at zero. After a restart it starts from the cheap end of the day's buy prices and corrects itself as the battery cycles.">
+            Battery energy: <span id="battery-energy-price" class="font-mono">—</span>
+          </span>
+        </div>
         <div class="h-56 w-full chart-wrap" data-chart-empty="Run the optimizer to see results">
           <canvas id="prices" class="h-full w-full"></canvas>
         </div>
@@ -1079,6 +1085,14 @@
                   <div id="ev-tab-free-solar" class="stat-value">—</div>
                 </div>
               </div>
+            </div>
+            <div class="summary-block border-t border-slate-100 dark:border-white/5">
+              <div class="flex items-baseline justify-between mb-2">
+                <span class="stat-label">Charging sessions</span>
+                <span class="text-[11px] text-slate-400 dark:text-slate-600"
+                  title="Grid energy at the buy price, battery energy at the average price it was bought for, solar free.">cost</span>
+              </div>
+              <ul id="ev-tab-sessions" class="space-y-1.5 text-[11px]"></ul>
             </div>
             <div class="summary-block border-t border-slate-100 dark:border-white/5">
               <div class="stat-label mb-2">Charge mode slots</div>
