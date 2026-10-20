@@ -55,6 +55,13 @@ export function snapshotUI(els) {
     evSocSensor: els.evSocSensor?.value ?? '',
     evPlugSensor: els.evPlugSensor?.value ?? '',
 
+    // PEAK TARIFF
+    demandChargeEnabled: !!els.demandChargeEnabled?.checked,
+    demandChargeCost_eur_per_kW: num(els.demandChargeCost?.value),
+    demandChargeMinPeak_W: num(els.demandChargeMinPeak?.value),
+    demandChargeMargin_W: num(els.demandChargeMargin?.value),
+    demandChargePeakSensor: els.demandChargePeakSensor?.value ?? '',
+
     // UI-only
     tableShowKwh: !!els.tableKwh?.checked,
     // Note: updateDataBeforeRun / pushToVictron are not part of the persisted settings
@@ -127,6 +134,15 @@ export function hydrateUI(els, obj = {}) {
   setIfDef(els.evTripSocBuffer, obj.evTripSocBuffer_percent);
   setIfDef(els.evSocSensor, obj.evSocSensor);
   setIfDef(els.evPlugSensor, obj.evPlugSensor);
+
+  // PEAK TARIFF
+  if (els.demandChargeEnabled && obj.demandChargeEnabled != null) {
+    els.demandChargeEnabled.checked = !!obj.demandChargeEnabled;
+  }
+  setIfDef(els.demandChargeCost, obj.demandChargeCost_eur_per_kW);
+  setIfDef(els.demandChargeMinPeak, obj.demandChargeMinPeak_W);
+  setIfDef(els.demandChargeMargin, obj.demandChargeMargin_W);
+  setIfDef(els.demandChargePeakSensor, obj.demandChargePeakSensor);
 
   // UI-only
   if (els.tableKwh && obj.tableShowKwh != null) {
@@ -232,6 +248,7 @@ export function updateSummaryUI(els, summary) {
   );
 
   updateRebalanceStatus(els, summary.rebalanceStatus);
+  updateDemandChargeStatus(els, summary.demandCharge);
   updateEvSummary(els, summary);
 
   // --- Energy Flow Bar ---
@@ -286,6 +303,26 @@ function updateEvSummary(els, summary) {
       { value: fromPv,   color: SOLUTION_COLORS.pv2ev, title: `PV: ${formatKWh(fromPv)}` },
     ]
   );
+}
+
+// Peak-tariff outcome for the current billing period (the first one in the plan).
+export function updateDemandChargeStatus(els, periods) {
+  if (!els.demandChargeRow || !els.demandChargeStatus) return;
+  const current = Array.isArray(periods) ? periods[0] : undefined;
+  if (!current) {
+    els.demandChargeRow.classList.add('hidden');
+    return;
+  }
+  els.demandChargeRow.classList.remove('hidden');
+  const kW = (w) => `${(Number(w) / 1000).toFixed(2)} kW`;
+  if (current.excess_W > 0) {
+    els.demandChargeStatus.textContent = `${kW(current.plannedPeak_W)} (+${kW(current.excess_W)}, ${formatCostCents(current.cost_cents)})`;
+    els.demandChargeStatus.className = 'text-sm font-medium text-amber-600 dark:text-amber-400';
+  } else {
+    els.demandChargeStatus.textContent = `${kW(current.plannedPeak_W)} of ${kW(current.threshold_W)}`;
+    els.demandChargeStatus.className = 'text-sm font-medium text-emerald-600 dark:text-emerald-400';
+  }
+  els.demandChargeStatus.title = `Planned peak vs. the import that is free this month`;
 }
 
 function updateRebalanceStatus(els, status) {

@@ -205,3 +205,37 @@ describe('buildSolverConfigFromSettings — extended horizon clamping', () => {
     expect(cfg.load_W).toHaveLength(96);
   });
 });
+
+describe('buildSolverConfigFromSettings — demand charge', () => {
+  const demandSettings = {
+    ...mockSettings,
+    demandChargeEnabled: true,
+    demandChargeCost_eur_per_kW: 4,
+    demandChargeMinPeak_W: 2500,
+    demandChargeMargin_W: 200,
+    demandChargePeakSensor: '',
+  };
+
+  it('does not include a demand charge when disabled', () => {
+    const { cfg } = buildSolverConfigFromSettings({ ...demandSettings, demandChargeEnabled: false }, makeData(), NOW_MS);
+    expect(cfg.demandCharge).toBeUndefined();
+  });
+
+  it('does not include a demand charge when its cost is zero', () => {
+    const { cfg } = buildSolverConfigFromSettings({ ...demandSettings, demandChargeCost_eur_per_kW: 0 }, makeData(), NOW_MS);
+    expect(cfg.demandCharge).toBeUndefined();
+  });
+
+  it('builds periods over the solver horizon from the current peak, minimum and margin', () => {
+    const { cfg } = buildSolverConfigFromSettings(demandSettings, makeData(), NOW_MS, undefined, { currentPeak_W: 3600 });
+    expect(cfg.demandCharge).toEqual({
+      cost_cents_per_kW: 400,
+      periods: [{ startSlot: 0, endSlot: cfg.load_W.length, threshold_W: 3400 }],
+    });
+  });
+
+  it('falls back to the minimum billed peak when the current peak is unknown', () => {
+    const { cfg } = buildSolverConfigFromSettings(demandSettings, makeData(), NOW_MS);
+    expect(cfg.demandCharge.periods[0].threshold_W).toBe(2300);
+  });
+});

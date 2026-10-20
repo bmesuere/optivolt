@@ -124,6 +124,16 @@ export function getElements() {
     evSocValue: $("#ev-soc-value"),
     evPlugValue: $("#ev-plug-value"),
 
+    // Peak tariff
+    demandChargeEnabled: $("#demand-charge-enabled"),
+    demandChargeCost: $("#demand-charge-cost"),
+    demandChargeMinPeak: $("#demand-charge-min-peak"),
+    demandChargeMargin: $("#demand-charge-margin"),
+    demandChargePeakSensor: $("#demand-charge-peak-sensor"),
+    demandChargePeakValue: $("#demand-charge-peak-value"),
+    demandChargeRow: $("#demand-charge-row"),
+    demandChargeStatus: $("#demand-charge-status"),
+
     // EV tab
     evNoCharging: $("#ev-no-charging"),
     evChargingSummary: $("#ev-charging-summary"),

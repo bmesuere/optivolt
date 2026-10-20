@@ -1,6 +1,7 @@
 import { HttpError } from '../http-errors.ts';
 import { extractWindow, extendSeriesWithForecast, getForecastTimeRange, getQuarterStart } from '../../lib/time-series-utils.ts';
 import { buildEvConfig } from './ev-config-builder.ts';
+import { buildDemandChargeConfig } from '../../lib/demand-charge.ts';
 import type { SolverConfig, TimeSeries } from '../../lib/types.ts';
 import type { Settings, Data } from '../types.ts';
 
@@ -29,6 +30,7 @@ export function buildSolverConfigFromSettings(
   data: Data,
   nowMs = getQuarterStart(new Date(), settings.stepSize_m),
   evState?: { pluggedIn: boolean; soc_percent: number },
+  demandState?: { currentPeak_W?: number },
 ): { cfg: SolverConfig; pricesKnownUntilMs?: number } {
   // Extended horizon: append forecast prices past the end of the actual price
   // series. Actual values always win — the forecast never overrides them, and
@@ -149,6 +151,19 @@ export function buildSolverConfigFromSettings(
 
   const ev = buildEvConfig(settings, data.evScheduleEntries ?? [], evState, nowMs, base.load_W.length);
   if (ev) base.ev = ev;
+
+  if (settings.demandChargeEnabled) {
+    const demandCharge = buildDemandChargeConfig({
+      startMs:         nowMs,
+      stepMin:         settings.stepSize_m,
+      slotCount:       base.load_W.length,
+      cost_eur_per_kW: settings.demandChargeCost_eur_per_kW,
+      minPeak_W:       settings.demandChargeMinPeak_W,
+      currentPeak_W:   demandState?.currentPeak_W,
+      margin_W:        settings.demandChargeMargin_W,
+    });
+    if (demandCharge) base.demandCharge = demandCharge;
+  }
 
   // Only meaningful when forecast slots actually made it into the window.
   return {

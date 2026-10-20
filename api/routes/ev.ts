@@ -50,6 +50,18 @@ router.get('/schedule', (_req: Request, res: Response, next: NextFunction) => {
   }
 });
 
+/**
+ * With a demand charge, the grid import HA may allow while tracking (solar_grid) in
+ * this slot: the period's free threshold, or the peak the plan already accepts paying
+ * for, whichever is higher. Omitted when no demand charge is configured.
+ */
+function gridImportLimitFor(plan: NonNullable<ReturnType<typeof getLastPlan>>, slot: number): { grid_import_limit_W?: number } {
+  const period = plan.cfg?.demandCharge?.periods.find((p) => slot >= p.startSlot && slot < p.endSlot);
+  if (!period) return {};
+  const plannedPeak_W = Math.max(0, ...plan.rows.slice(period.startSlot, period.endSlot).map((r) => r.imp));
+  return { grid_import_limit_W: Math.round(Math.max(period.threshold_W, plannedPeak_W)) };
+}
+
 // GET /ev/current — current time slot's EV charging decision
 router.get('/current', (_req: Request, res: Response, next: NextFunction) => {
   try {
@@ -99,6 +111,7 @@ router.get('/current', (_req: Request, res: Response, next: NextFunction) => {
       ev_soc_percent: row.ev_soc_percent,
       is_charging: row.ev_charge > 0,
       plan_valid: true,
+      ...gridImportLimitFor(plan, row.tIdx),
     });
   } catch (error) {
     next(toHttpError(error, 500, 'Failed to read the current EV decision'));

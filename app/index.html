@@ -209,6 +209,10 @@
               <span class="stat-label">Rebalancing</span>
               <span id="rebalance-status" class="text-sm font-medium"></span>
             </div>
+            <div id="demand-charge-row" class="summary-row border-t border-slate-100 dark:border-white/5 hidden">
+              <span class="stat-label">Month peak</span>
+              <span id="demand-charge-status" class="text-sm font-medium"></span>
+            </div>
             <div class="summary-block border-t border-slate-100 dark:border-white/5">
               <div class="flex items-baseline justify-between gap-3 mb-1">
                 <span class="stat-label">Now</span>
@@ -879,6 +883,54 @@
               <input id="ev-plug-sensor" type="text" placeholder="binary_sensor.ev_charger_plug"
                 class="form-input font-mono text-xs" data-no-autosolve data-settings-input />
               <span id="ev-plug-value" class="mt-1 block text-xs text-slate-500 dark:text-slate-400"></span>
+            </label>
+          </div>
+        </section>
+
+        <!-- Peak Tariff Card -->
+        <section class="card">
+          <div class="mb-4">
+            <h2 class="sidebar-label">Peak Tariff</h2>
+          </div>
+          <div class="space-y-3">
+            <label class="toggle">
+              <input id="demand-charge-enabled" type="checkbox" data-settings-input>
+              <span class="toggle-knob"></span>
+              <span class="text-sm">Plan against a monthly peak tariff</span>
+            </label>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              Charges the highest quarter-hour grid import of each calendar month per kW
+              (e.g. the Flemish capaciteitstarief). The plan only raises the month's peak
+              when the energy savings are worth it.
+            </p>
+            <div class="grid grid-cols-2 items-start gap-3">
+              <label class="block text-sm">Cost per kW of peak (€)
+                <input id="demand-charge-cost" type="number" min="0" step="0.01"
+                  class="form-input" data-settings-input />
+                <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                  What raising one month's peak by 1 kW costs in total. Annual tariff ÷ 12 for a
+                  12-month rolling average.
+                </span>
+              </label>
+              <label class="block text-sm">Minimum billed peak (W)
+                <input id="demand-charge-min-peak" type="number" min="0" step="100"
+                  class="form-input" data-settings-input />
+                <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                  Import up to this level is always free (Flanders: 2500).
+                </span>
+              </label>
+            </div>
+            <label class="block text-sm">Safety margin (W)
+              <input id="demand-charge-margin" type="number" min="0" step="50"
+                class="form-input" data-settings-input />
+              <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                Headroom the plan keeps below the free peak for load the forecast misses.
+              </span>
+            </label>
+            <label class="block text-sm">Current month peak sensor entity ID
+              <input id="demand-charge-peak-sensor" type="text" placeholder="sensor.p1_meter_peak_demand_current_month"
+                class="form-input font-mono text-xs" data-no-autosolve data-settings-input />
+              <span id="demand-charge-peak-value" class="mt-1 block text-xs text-slate-500 dark:text-slate-400"></span>
             </label>
           </div>
         </section>

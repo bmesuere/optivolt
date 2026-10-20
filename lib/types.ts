@@ -63,6 +63,33 @@ export interface EvConfig {
 }
 
 /**
+ * One billing period of a demand charge (e.g. a calendar month for the
+ * Flemish capaciteitstarief), as the half-open slot range [startSlot, endSlot).
+ */
+export interface DemandChargePeriod {
+  /** Inclusive first slot of the period, clamped to [0, T]. */
+  startSlot: number;
+  /** Exclusive last slot of the period, clamped to [startSlot, T]. */
+  endSlot: number;
+  /**
+   * Grid import (W) that costs nothing extra in this period: the peak already
+   * billed so far, or the tariff's minimum billed peak, whichever is higher.
+   * Import above it raises the period's peak and is charged per kW.
+   */
+  threshold_W: number;
+}
+
+/**
+ * Demand charge (peak tariff): a cost per kW on the highest grid import of a
+ * billing period, on top of the per-kWh energy price.
+ */
+export interface DemandChargeConfig {
+  /** Cost of raising a period's billed peak by 1 kW, in c€/kW. */
+  cost_cents_per_kW: number;
+  periods: DemandChargePeriod[];
+}
+
+/**
  * Fully resolved solver configuration, as produced by config-builder.
  * All scalar fields are validated and present; arrays are aligned time series.
  */
@@ -102,6 +129,9 @@ export interface SolverConfig {
 
   // EV charging (optional — only present when evEnabled is true and EV is plugged in)
   ev?: EvConfig;
+
+  // Demand charge / peak tariff (optional — only present when demandChargeEnabled is true)
+  demandCharge?: DemandChargeConfig;
 }
 
 export interface RebalanceConfig {
@@ -225,4 +255,19 @@ export interface PlanSummary {
   evChargeGridCost_cents: number;
   /** Grid cost spread over all EV energy (PV/battery share included), c€/kWh; null when nothing charged. */
   evChargeEffectiveRate_cents_per_kWh: number | null;
+  /** Demand-charge outcome per billing period; absent when no demand charge is configured. */
+  demandCharge?: DemandChargePeriodSummary[];
+}
+
+export interface DemandChargePeriodSummary {
+  /** Timestamp of the period's first slot in the plan (not the start of the billing period). */
+  startMs: number;
+  /** Import level (W) that was free in this period. */
+  threshold_W: number;
+  /** Highest planned grid import in the period (W). */
+  plannedPeak_W: number;
+  /** Planned import above the threshold (W); this is what raises the bill. */
+  excess_W: number;
+  /** Demand-charge cost of that excess, in c€. */
+  cost_cents: number;
 }

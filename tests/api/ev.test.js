@@ -95,6 +95,28 @@ describe('GET /ev/current', () => {
     expect(res.body.plan_valid).toBe(true);
   });
 
+  it('reports the planned grid-import limit when a demand charge is configured', async () => {
+    const rows = mockPlan.rows.map((r, i) => ({ ...r, tIdx: i, imp: [1000, 3200, 500][i] }));
+    getLastPlan.mockReturnValue({
+      ...mockPlan,
+      rows,
+      cfg: { demandCharge: { cost_cents_per_kW: 400, periods: [{ startSlot: 0, endSlot: 3, threshold_W: 2500 }] } },
+    });
+    vi.setSystemTime(START_MS + 500_000);
+
+    const res = await request(app).get('/ev/current');
+
+    // The plan already accepts a 3.2 kW peak this month, so tracking may use up to that.
+    expect(res.body.grid_import_limit_W).toBe(3200);
+  });
+
+  it('omits the grid-import limit without a demand charge', async () => {
+    getLastPlan.mockReturnValue(mockPlan);
+    vi.setSystemTime(START_MS + 500_000);
+    const res = await request(app).get('/ev/current');
+    expect(res.body).not.toHaveProperty('grid_import_limit_W');
+  });
+
   it('selects the most recent past slot', async () => {
     getLastPlan.mockReturnValue(mockPlan);
     vi.setSystemTime(START_MS + 1_900_000); // past slot 2

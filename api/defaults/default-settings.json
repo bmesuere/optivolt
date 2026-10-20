@@ -36,5 +36,10 @@
   "evSocValue_cents_per_kWh": 0,
   "evTripSocBuffer_percent": 20,
   "extendedHorizonDays": 0,
-  "priceForecastUrl": ""
+  "priceForecastUrl": "",
+  "demandChargeEnabled": false,
+  "demandChargeCost_eur_per_kW": 0,
+  "demandChargeMinPeak_W": 0,
+  "demandChargeMargin_W": 0,
+  "demandChargePeakSensor": ""
 }

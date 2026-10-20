@@ -632,3 +632,68 @@ describe('buildLP — multi-day horizon (~384 slots)', () => {
     expect(lp).toContain('c_ev_target_300: ev_soc_300 >= 48000');
   });
 });
+
+describe('buildLP — demand charge', () => {
+  const T = 4;
+  const data = {
+    load_W: Array(T).fill(500),
+    pv_W: Array(T).fill(0),
+    importPrice: Array(T).fill(10),
+    exportPrice: Array(T).fill(5),
+    maxGridImport_W: 10000,
+  };
+  const demandCharge = {
+    cost_cents_per_kW: 400,
+    periods: [
+      { startSlot: 0, endSlot: 2, threshold_W: 2500 },
+      { startSlot: 2, endSlot: 4, threshold_W: 3000 },
+    ],
+  };
+
+  it('adds nothing when no demand charge is configured', () => {
+    expect(buildLP(data)).not.toContain('peak_excess');
+  });
+
+  it('adds one peak variable per period with its cost in the objective', () => {
+    const lp = buildLP({ ...data, demandCharge });
+    // 400 c€/kW → 0.4 c€/W
+    expect(lp).toMatch(/\+ 0\.4 peak_excess_0/);
+    expect(lp).toMatch(/\+ 0\.4 peak_excess_1/);
+    expect(lp).not.toContain('peak_excess_2');
+  });
+
+  it('caps each slot\'s grid import at its period threshold plus the paid excess', () => {
+    const lp = buildLP({ ...data, demandCharge });
+    expect(lp).toContain(' c_peak_0_0: grid_to_load_0 + grid_to_battery_0 - peak_excess_0 <= 2500');
+    expect(lp).toContain(' c_peak_0_1: grid_to_load_1 + grid_to_battery_1 - peak_excess_0 <= 2500');
+    expect(lp).toContain(' c_peak_1_2: grid_to_load_2 + grid_to_battery_2 - peak_excess_1 <= 3000');
+    expect(lp).not.toContain('c_peak_1_1');
+    expect(lp).toContain(' 0 <= peak_excess_0 <= 7500');
+  });
+
+  it('includes grid→EV import in the peak when an EV is configured', () => {
+    const lp = buildLP({
+      ...data,
+      demandCharge,
+      ev: {
+        evMinChargePower_W: 1380, evMaxChargePower_W: 3680, evBatteryCapacity_Wh: 60000,
+        evInitialSoc_percent: 50, evChargeEfficiency_percent: 100, evMaxSoc_percent: 100,
+        availabilityWindows: [{ startSlot: 0, endSlot: T }], targets: [],
+      },
+    });
+    expect(lp).toContain(' c_peak_0_0: grid_to_load_0 + grid_to_battery_0 + grid_to_ev_0 - peak_excess_0 <= 2500');
+  });
+
+  it('skips periods that can never incur a charge, and a zero cost entirely', () => {
+    const aboveCap = buildLP({ ...data, demandCharge: { ...demandCharge, periods: [{ startSlot: 0, endSlot: 4, threshold_W: 10000 }] } });
+    expect(aboveCap).not.toContain('peak_excess');
+    const free = buildLP({ ...data, demandCharge: { ...demandCharge, cost_cents_per_kW: 0 } });
+    expect(free).not.toContain('peak_excess');
+  });
+
+  it('clamps periods to the horizon', () => {
+    const lp = buildLP({ ...data, demandCharge: { cost_cents_per_kW: 400, periods: [{ startSlot: 2, endSlot: 99, threshold_W: 2500 }] } });
+    expect(lp).toContain('c_peak_0_3:');
+    expect(lp).not.toContain('c_peak_0_4:');
+  });
+});

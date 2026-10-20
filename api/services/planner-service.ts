@@ -2,6 +2,7 @@ import { mapRowsToDessV2 } from '../../lib/dess-mapper.ts';
 import { buildLP } from '../../lib/build-lp.ts';
 import { parseSolution, type HighsSolution } from '../../lib/parse-solution.ts';
 import { buildPlanSummary } from '../../lib/plan-summary.ts';
+import { peakSensorToWatts, summarizeDemandCharge } from '../../lib/demand-charge.ts';
 import { extractRebalanceWindow, type RebalanceWindow } from '../../lib/lp-vars.ts';
 import type { SolverConfig, PlanSummary, PlanRow, TimeSeries } from '../../lib/types.ts';
 import { buildSolverConfigFromSettings } from './config-builder.ts';
@@ -142,6 +143,28 @@ async function readEvStateFromHa(settings: Settings): Promise<EvLiveState | unde
 }
 
 /**
+ * Read this billing period's peak so far from Home Assistant, if configured.
+ * Any failure (HA unreachable, sensor unavailable, unknown unit) falls back to
+ * "unknown", which plans against the minimum billed peak: stricter than
+ * necessary mid-month, but never cheaper than reality.
+ */
+async function readCurrentPeakFromHa(settings: Settings): Promise<{ currentPeak_W?: number } | undefined> {
+  if (!settings.demandChargeEnabled || !settings.demandChargePeakSensor) return undefined;
+  try {
+    const entity = await fetchHaEntityState({ haUrl: settings.haUrl, haToken: settings.haToken, entityId: settings.demandChargePeakSensor });
+    const currentPeak_W = peakSensorToWatts(entity.state, entity.attributes.unit_of_measurement);
+    if (currentPeak_W == null) {
+      console.warn(`Peak sensor ${settings.demandChargePeakSensor} has no usable W/kW value (state "${entity.state}"); using the minimum billed peak`);
+      return undefined;
+    }
+    return { currentPeak_W };
+  } catch (err) {
+    console.warn('Could not read current peak from HA:', err instanceof Error ? err.message : String(err));
+    return undefined;
+  }
+}
+
+/**
  * Pre-solve normalization of persisted state: record the live EV state, prune
  * expired prediction adjustments, normalize EV schedule entries, and backfill
  * the full-SoC observation (saveData also applies it, but the in-memory data
@@ -167,13 +190,16 @@ export async function getSolverInputs(): Promise<{ cfg: SolverConfig; pricesKnow
 
   // Read the live EV state before normalizing schedule entries: pruning overdue departures and
   // converting departed trips both depend on an up-to-date plug state (persisted as evLastState).
-  const evState = await readEvStateFromHa(settings);
+  const [evState, demandState] = await Promise.all([
+    readEvStateFromHa(settings),
+    readCurrentPeakFromHa(settings),
+  ]);
 
   const { data, changed } = normalizePersistedData(loadedData, evState, startMs);
   if (changed) await saveData(data);
 
   const adjustedData = applyPredictionAdjustmentsToData(data);
-  const { cfg, pricesKnownUntilMs } = buildSolverConfigFromSettings(settings, adjustedData, startMs, evState);
+  const { cfg, pricesKnownUntilMs } = buildSolverConfigFromSettings(settings, adjustedData, startMs, evState, demandState);
   return { cfg, pricesKnownUntilMs, timing: { startMs, stepMin: settings.stepSize_m }, data, settings };
 }
 
@@ -316,6 +342,7 @@ export async function computePlan({ updateData = false } = {}): Promise<ComputeP
   } : undefined;
 
   const summary = buildPlanSummary(rowsWithDess, cfg, diagnostics, rebalanceCtx);
+  if (cfg.demandCharge) summary.demandCharge = summarizeDemandCharge(rowsWithDess, cfg.demandCharge);
 
   const rebalanceNudge = getRebalanceNudge(data);
 

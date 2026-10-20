@@ -9,6 +9,8 @@ export async function refreshEvSensorStates(els) {
   const sensors = [
     { input: els.evSocSensor, indicator: els.evSocValue },
     { input: els.evPlugSensor, indicator: els.evPlugValue },
+    // Not EV-specific, but validated the same way.
+    { input: els.demandChargePeakSensor, indicator: els.demandChargePeakValue },
   ];
   await Promise.allSettled(sensors.map(async ({ input, indicator }) => {
     const entityId = input?.value?.trim();
@@ -28,6 +30,8 @@ export function wireEvSensorInputs(els, { persistConfig, persistConfigDebounced,
   const sensors = [
     { input: els.evSocSensor, indicator: els.evSocValue },
     { input: els.evPlugSensor, indicator: els.evPlugValue },
+    // Not EV-specific, but validated the same way.
+    { input: els.demandChargePeakSensor, indicator: els.demandChargePeakValue },
   ];
 
   for (const { input, indicator } of sensors) {

@@ -19,6 +19,7 @@ const NUMERIC_FIELDS: (keyof Settings)[] = [
   'evChargeEfficiency_percent', 'evMaxSoc_percent', 'evSocValue_cents_per_kWh',
   'evTripSocBuffer_percent',
   'extendedHorizonDays',
+  'demandChargeCost_eur_per_kW', 'demandChargeMinPeak_W', 'demandChargeMargin_W',
 ];
 
 // Strictly positive: zero step size, capacities, hold hours, or charge currents are unusable.
@@ -31,6 +32,7 @@ const POSITIVE_FIELDS: (keyof Settings)[] = [
 const NON_NEGATIVE_FIELDS: (keyof Settings)[] = [
   'maxChargePower_W', 'maxDischargePower_W', 'maxGridImport_W', 'maxGridExport_W',
   'batteryCost_cent_per_kWh', 'idleDrain_W',
+  'demandChargeCost_eur_per_kW', 'demandChargeMinPeak_W', 'demandChargeMargin_W',
 ];
 
 // Efficiencies divide LP cost coefficients: zero would produce infinite costs.
@@ -39,10 +41,12 @@ const EFFICIENCY_FIELDS: (keyof Settings)[] = [
 ];
 
 const BOOLEAN_FIELDS: (keyof Settings)[] = [
-  'blockFeedInOnNegativePrices', 'rebalanceEnabled', 'evEnabled',
+  'blockFeedInOnNegativePrices', 'rebalanceEnabled', 'evEnabled', 'demandChargeEnabled',
 ];
 
-const STRING_FIELDS: (keyof Settings)[] = ['haUrl', 'haToken', 'evSocSensor', 'evPlugSensor'];
+const STRING_FIELDS: (keyof Settings)[] = [
+  'haUrl', 'haToken', 'evSocSensor', 'evPlugSensor', 'demandChargePeakSensor',
+];
 
 const TERMINAL_SOC_VALUATIONS: readonly TerminalSocValuation[] = ['zero', 'min', 'avg', 'max', 'custom'];
 

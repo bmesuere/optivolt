@@ -38,6 +38,7 @@ export function buildLP({
   // rebalancing (MILP)
   rebalance,
   ev,
+  demandCharge,
 }: SolverConfig): string {
   const T = load_W.length;
   if (pv_W.length !== T || importPrice.length !== T || exportPrice.length !== T) {
@@ -162,6 +163,21 @@ export function buildLP({
     }
   }
 
+  // Demand charge: one billing-period peak variable per period. Periods are clamped to the
+  // horizon; a period whose free threshold is at or above the hard import cap can never
+  // incur a charge, so it gets no variable at all.
+  const peakExcess = lpVar.peakExcess.name;
+  const demandCost_cents_per_W = (demandCharge?.cost_cents_per_kW ?? 0) / 1000;
+  const demandPeriods = demandCost_cents_per_W > 0
+    ? (demandCharge?.periods ?? [])
+      .map((p) => ({
+        startSlot: Math.min(T, Math.max(0, Math.trunc(p.startSlot))),
+        endSlot: Math.min(T, Math.max(0, Math.trunc(p.endSlot))),
+        threshold_W: Math.max(0, p.threshold_W),
+      }))
+      .filter((p) => p.endSlot > p.startSlot && p.threshold_W < maxGridImport_W)
+    : [];
+
   // Variable name helpers
   const gridToLoad = lpVar.gridToLoad.name;
   const gridToBattery = lpVar.gridToBattery.name;
@@ -236,6 +252,12 @@ export function buildLP({
       objTerms.push(` + ${toNum(TIEBREAK.rebalanceStartPerSlot * (k + 1))} ${startBalance(k)}`);
     }
   }
+  // Demand charge: paying for each W the period's peak rises above its free threshold.
+  // Only one variable per period, so the cost is charged once however many slots touch the
+  // new peak — the LP equivalent of "max over the period".
+  for (let k = 0; k < demandPeriods.length; k++) {
+    objTerms.push(` + ${toNum(demandCost_cents_per_W)} ${peakExcess(k)}`);
+  }
   lines.push(objTerms.join(""));
   lines.push("");
 
@@ -278,6 +300,18 @@ export function buildLP({
 
     // Soft min SOC constraint
     lines.push(` c_min_soc_${t}: ${socShortfall(t)} + ${soc(t)} >= ${minSoc_Wh}`);
+  }
+
+  // Demand charge: grid import in every slot of a period stays at or below the period's
+  // threshold plus its (paid) peak excess. With 15-minute slots this is exactly the
+  // quarter-hour average that peak tariffs bill on; with shorter slots it is conservative
+  // (every slot below the limit implies the quarter-hour average is too).
+  for (let k = 0; k < demandPeriods.length; k++) {
+    const p = demandPeriods[k];
+    for (let t = p.startSlot; t < p.endSlot; t++) {
+      const gridEvTerm = evActive ? ` + ${gridToEv(t)}` : '';
+      lines.push(` c_peak_${k}_${t}: ${gridToLoad(t)} + ${gridToBattery(t)}${gridEvTerm} - ${peakExcess(k)} <= ${toNum(p.threshold_W)}`);
+    }
   }
 
   // MILP rebalancing: force a contiguous window of D slots to hold the battery at target SoC
@@ -400,6 +434,10 @@ export function buildLP({
       lines.push(` 0 <= ${batteryToEv(t)} <= ${toNum(Math.min(maxDischargePower_W, evMaxPow_W))}`);
       lines.push(` 0 <= ${evSocVar(t)} <= ${toNum(evSocUpper[t])}`);
     }
+  }
+  for (let k = 0; k < demandPeriods.length; k++) {
+    // Never useful above the hard import cap; the bound keeps the variable tidy.
+    lines.push(` 0 <= ${peakExcess(k)} <= ${toNum(maxGridImport_W - demandPeriods[k].threshold_W)}`);
   }
   lines.push("");
 

@@ -12,6 +12,7 @@ Plan and control a home energy system with forecasts, dynamic tariffs, and a day
 - Server-side VRM integration for forecasts/prices and system limits
 - Optional Dynamic ESS schedule pushes over MQTT (first 4 slots)
 - EV charging integration: LP-optimized schedule with departure deadline, target SoC, and per-slot charge mode classification
+- Optional monthly peak tariff (e.g. the Flemish capaciteitstarief): the solver only raises a month's peak when it pays off
 - Optional extended planning horizon (up to 6 extra days) with forecast prices, so multi-day EV targets ("80% in 3 days") become real constraints
 - Static, build-free web UI served by the same Express process
 - Persistent settings + time-series data under a configurable data directory
@@ -185,6 +186,31 @@ rest:
 ```
 
 Use `sensor.optivolt_ev_charge_mode` and `sensor.optivolt_ev_charge_current_a` in automations to control your charger. The mode values are `off`, `fixed`, `solar_only`, `solar_grid`, and `max`; the current is the target charge rate in amps.
+
+### 7. Peak Tariff / Capaciteitstarief (Optional)
+
+Some grid tariffs charge the highest quarter-hour grid import of each month per kW, on top of the energy price (in Flanders: the *capaciteitstarief*). Without that cost the solver sees no reason to avoid peaks: charging the battery at 5 kW or at 2.5 kW over a cheap hour costs the same energy, so it may well pick the spiky plan. The **Peak Tariff** card in the settings adds the peak as a cost:
+
+- **Cost per kW of peak (€)** (`demandChargeCost_eur_per_kW`): what raising one month's peak by 1 kW costs in total. When the bill uses a rolling average of the last 12 monthly peaks (as in Flanders), a 1 kW higher monthly peak raises that average by 1/12 kW for 12 months, so this is the annual €/kW tariff divided by 12. `0` disables the charge.
+- **Minimum billed peak (W)** (`demandChargeMinPeak_W`): import up to this level is always free (Flanders: 2500).
+- **Safety margin (W)** (`demandChargeMargin_W`): headroom the plan keeps below the free peak for load the forecast misses.
+- **Current month peak sensor** (`demandChargePeakSensor`): a Home Assistant entity with this month's peak so far, in W or kW (P1/DSMR and similar integrations expose one). Import up to that peak is already paid for. Without a (working) sensor the plan assumes the minimum billed peak, which is stricter than needed mid-month but never cheaper than reality.
+
+Billing periods are calendar months in the server's local time. On a horizon that crosses into a new month, the new month starts from the minimum billed peak. The solver only raises a month's peak when the energy savings outweigh its cost; the plan summary shows the planned peak against the free level, and `/ev/current` adds `grid_import_limit_W` so a tracking charger mode (`solar_grid`) can stay under the planned peak:
+
+```yaml
+rest:
+  - resource: http://localhost:3070/ev/current
+    scan_interval: 60
+    sensor:
+      - name: "OptiVolt Grid Import Limit"
+        value_template: "{{ value_json.grid_import_limit_W | default(none) }}"
+        unit_of_measurement: W
+        device_class: power
+        unique_id: optivolt_grid_import_limit_w
+```
+
+The peak is planned on the forecast load per slot; with a 15-minute step that is exactly the quarter-hour average the tariff bills on. Real-time spikes the forecast cannot see are not prevented by the plan — keep a margin, and let a fast local controller enforce the limit.
 
 ## Architecture & HTTP API
 

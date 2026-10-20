@@ -43,6 +43,7 @@ export const lpVar = {
   evOn:          makeFamily('ev_on'),
   evSoc:         makeFamily('ev_soc'),
   startBalance:  makeFamily('start_balance'),
+  peakExcess:    makeFamily('peak_excess'),
 } as const;
 
 export interface RebalanceWindow {

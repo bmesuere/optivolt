@@ -59,6 +59,16 @@ export interface Settings {
   extendedHorizonDays: number;
   /** URL of a price-forecast JSON feed (energieprijs forecast.json format). Empty = disabled. */
   priceForecastUrl: string;
+  /** Plan against a monthly peak tariff (e.g. the Flemish capaciteitstarief). */
+  demandChargeEnabled: boolean;
+  /** Cost of raising a month's billed peak by 1 kW, in €/kW. 0 disables the charge. */
+  demandChargeCost_eur_per_kW: number;
+  /** Lowest peak the tariff ever bills, in W (Flanders: 2500). Import up to it is always free. */
+  demandChargeMinPeak_W: number;
+  /** Headroom the plan keeps below the free peak to absorb forecast error, in W. */
+  demandChargeMargin_W: number;
+  /** HA entity reporting this month's peak so far (W or kW). Empty = assume the minimum billed peak. */
+  demandChargePeakSensor: string;
 }
 
 // ----------------------------- Persisted data ---------------------------
