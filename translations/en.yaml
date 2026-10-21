@@ -15,7 +15,8 @@ configuration:
   mqtt_port:
     name: Victron MQTT Port
     description: >
-      The port number of the Victron MQTT broker. Default is `1883`.
+      The port number of the Victron MQTT broker. `0` means auto: `8883` with
+      TLS, `1883` without. An explicit port always wins.
   mqtt_username:
     name: Victron MQTT Username
     description: >
@@ -24,3 +25,24 @@ configuration:
     name: Victron MQTT Password
     description: >
       The password to connect to the Victron MQTT broker. Not needed by default.
+  mqtt_tls:
+    name: Victron MQTT TLS
+    description: >
+      Connect to the Victron MQTT broker over TLS (`mqtts`). Required for a
+      Cerbo/Venus broker in secure mode.
+  mqtt_tls_verify:
+    name: Verify MQTT TLS Certificate
+    description: >
+      Verify the broker certificate. Keep this enabled. Setting it to `false`
+      disables certificate verification and cannot be combined with a
+      fingerprint.
+  mqtt_tls_ca:
+    name: Victron MQTT CA Certificate
+    description: >
+      CA certificate in PEM format used to verify the broker. If the form
+      rejects multiline input, paste a single line with literal `\n` escapes.
+  mqtt_tls_fingerprint:
+    name: Victron MQTT Certificate Fingerprint
+    description: >
+      Optional SHA-256 certificate fingerprint pin. Requires a CA certificate
+      and certificate verification. Colons, spaces, and case are ignored.

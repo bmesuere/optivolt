@@ -6,7 +6,17 @@ let victronClient: VictronMqttClient | null = null;
 
 function getVictronClient(): VictronMqttClient {
   if (!victronClient) {
-    victronClient = new VictronMqttClient(getMqttEnv());
+    const { host, port, username, password, tls, tlsVerify, tlsCa, tlsFingerprint } = getMqttEnv();
+    victronClient = new VictronMqttClient({
+      host,
+      port,
+      username,
+      password,
+      tls,
+      tlsVerify,
+      tlsCa,
+      tlsFingerprint,
+    });
   }
 
   return victronClient;

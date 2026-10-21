@@ -34,15 +34,92 @@ All options are set in the add-on's **Configuration** tab.
 | `site_id` | yes | – | Your Victron VRM installation ID (also called *idSite*), visible in the VRM URL: `…/installations/<idSite>/…`. |
 | `vrm_token` | yes | – | A VRM Personal Access Token, created under **Preferences → Integrations** in VRM. |
 | `mqtt_host` | no | `venus.local` | Hostname or IP address of the Victron MQTT broker (your Venus OS / Cerbo device). |
-| `mqtt_port` | no | `1883` | Port of the Victron MQTT broker. |
+| `mqtt_port` | no | `0` (auto) | Port of the Victron MQTT broker. `0` means auto: `8883` with TLS, `1883` without. An explicit port always wins. |
 | `mqtt_username` | no | empty | MQTT username, if your broker requires one. |
 | `mqtt_password` | no | empty | MQTT password, if your broker requires one. |
+| `mqtt_tls` | no | `false` | Connect to the broker over TLS (`mqtts`). Required for a Cerbo/Venus broker in secure mode. Accepts `true` or `false` (case-insensitive); any other value is rejected. |
+| `mqtt_tls_verify` | no | `true` | Verify the broker certificate. Set to `false` only for debugging; see the security warning below. |
+| `mqtt_tls_ca` | no | empty | CA certificate (PEM) used to verify the broker. Paste the PEM here. |
+| `mqtt_tls_fingerprint` | no | empty | Optional SHA-256 certificate fingerprint pin. Requires `mqtt_tls_ca` and `mqtt_tls_verify: true`. |
 
 MQTT is only needed to write schedules to the Victron system. Without it,
 Optivolt still fetches data and computes plans, but cannot control hardware.
 
 Make sure MQTT is enabled on the Venus OS device: open the remote console and
 go to **Settings → Services → MQTT**.
+
+### TLS / secure Cerbo
+
+If your Cerbo/Venus broker is in secure mode, enable `mqtt_tls` (accepted
+values are `true` or `false`, case-insensitive; anything else is rejected) and
+supply the CA certificate that signed the broker's certificate in
+`mqtt_tls_ca`.
+
+When enabling TLS on an existing install, set `mqtt_port` to `0` (or `8883`).
+A saved `1883` is treated as an explicit port and will still be used, so the
+connection will fail against a TLS-only broker.
+
+Optionally pin the broker certificate with `mqtt_tls_fingerprint`. Obtain the
+SHA-256 fingerprint out-of-band — from the Cerbo/Venus console or VRM — rather
+than with `openssl s_client` against the live host, which is
+trust-on-first-use and would accept whatever certificate the host presents.
+
+Copy only the hex value after `SHA256 Fingerprint=`; colons, spaces, and case
+are ignored. A fingerprint intentionally replaces Node's hostname check: the
+pin establishes possession of that exact leaf certificate, not that the
+certificate belongs to the hostname. It is only enforced together with a CA
+and `mqtt_tls_verify: true`; if the combination is unsafe, MQTT operations
+fail until the configuration is fixed.
+
+On a Cerbo/Venus in secure mode the broker presents a self-signed certificate,
+so one command saves exactly what `mqtt_tls_ca` needs:
+
+```bash
+openssl s_client -connect <cerbo-host>:8883 </dev/null 2>/dev/null \
+  | openssl x509 -outform PEM > cerbo-ca.pem
+```
+
+Check what you got before pasting it:
+
+```bash
+openssl x509 -in cerbo-ca.pem -noout -subject -issuer -dates -fingerprint -sha256
+```
+
+The subject and issuer are the same for a self-signed certificate. If your
+installation uses a private CA instead, the first command saves the broker's
+leaf and the root comes later in the chain. Save every certificate separately
+and use the last one as `cerbo-ca.pem`:
+
+```bash
+openssl s_client -connect <cerbo-host>:8883 -showcerts </dev/null 2>/dev/null \
+  | awk '/BEGIN CERTIFICATE/{n++; f="chain-" n ".pem"} f {print > f} /END CERTIFICATE/{f=""}'
+for f in chain-*.pem; do cp "$f" cerbo-ca.pem; done
+ls chain-*.pem
+```
+
+For a private CA the root has matching subject and issuer; if the last file is
+still an intermediate, get the root from your CA instead.
+
+The Cerbo certificate is self-signed and usually has no `subjectAltName`; its
+subject is a plain `CN=`, for example `CN=venus.local`. While `mqtt_tls_verify`
+is on, `mqtt_host` must therefore match that name: connecting by IP address
+fails with `ERR_TLS_CERT_ALTNAME_INVALID` because the name cannot be matched. A
+fingerprint pin lifts that requirement, so an IP address works when the pin
+matches.
+
+Paste the PEM into `mqtt_tls_ca`. If the configuration form rejects a multiline
+value, paste it as a single line with literal `\n` escapes:
+
+```bash
+perl -0pe 's/\n+\z//; s/\n/\\n/g' cerbo-ca.pem; echo
+```
+
+Fetching the certificate this way is trust-on-first-use; if you need certainty,
+compare the printed fingerprint with the one shown on the Cerbo console or VRM.
+
+> **Warning:** `mqtt_tls_verify: false` disables certificate verification, so
+> the connection is not authenticated and is vulnerable to interception. It is
+> intended only for debugging and cannot be combined with a fingerprint.
 
 Historical sensor data is read from Home Assistant automatically using the
 add-on's supervisor token; no URL or token has to be configured for that.

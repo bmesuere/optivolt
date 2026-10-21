@@ -32,14 +32,53 @@ export interface MqttEnv {
   port: number;
   username: string;
   password: string;
+  tls: boolean;
+  tlsVerify: boolean;
+  tlsCa: string | undefined;
+  tlsFingerprint: string | undefined;
+}
+
+function parseStrictBoolean(name: string, value: string | undefined): boolean {
+  if (value === undefined || value.trim() === '') return false;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  throw new Error(`${name} must be "true" or "false" (got "${value}")`);
+}
+
+function normalizeFingerprint(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim() === '') return undefined;
+  const normalized = value.replace(/[\s:]/g, '').toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(normalized)) {
+    throw new Error(
+      'MQTT_TLS_FINGERPRINT must be a 64-character SHA-256 hex string (colons and whitespace are ignored)',
+    );
+  }
+  return normalized;
 }
 
 export function getMqttEnv(): MqttEnv {
+  const tls = parseStrictBoolean('MQTT_TLS', process.env.MQTT_TLS);
+  const rawPort = process.env.MQTT_PORT ?? '';
+  const parsedPort = /^\d+$/.test(rawPort) ? Number(rawPort) : Number.NaN;
+  const port =
+    Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535
+      ? parsedPort
+      : tls
+        ? 8883
+        : 1883;
+  const tlsCa = (process.env.MQTT_TLS_CA ?? '').replace(/\\n/g, '\n').trim() || undefined;
+  const tlsFingerprint = normalizeFingerprint(process.env.MQTT_TLS_FINGERPRINT);
+
   return {
     host: process.env.MQTT_HOST ?? 'venus.local',
-    port: Number(process.env.MQTT_PORT ?? '1883'),
+    port,
     username: process.env.MQTT_USERNAME ?? '',
     password: process.env.MQTT_PASSWORD ?? '',
+    tls,
+    tlsVerify: process.env.MQTT_TLS_VERIFY !== 'false',
+    tlsCa,
+    tlsFingerprint,
   };
 }
 

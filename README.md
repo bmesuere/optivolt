@@ -51,7 +51,8 @@ By default the server listens on `http://localhost:3000`.
 - `HOST` (default `0.0.0.0`), `PORT` (default `3000`)
 - `DATA_DIR` (default `<repo>/data`); stores `settings.json`, `data.json`, and `prediction-config.json`
 - `VRM_INSTALLATION_ID`, `VRM_TOKEN` (enable VRM refresh routes)
-- `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD` (optional; required to push Dynamic ESS schedules)
+- `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD` (optional; required to push Dynamic ESS schedules). `MQTT_PORT` unset, empty, or `0` means auto: `8883` with TLS, `1883` without; an explicit port always wins.
+- `MQTT_TLS` (accepts `true` or `false`, case-insensitive; any other value is rejected), `MQTT_TLS_VERIFY`, `MQTT_TLS_CA`, `MQTT_TLS_FINGERPRINT` (optional; TLS and certificate pinning for a secure Cerbo/Venus broker)
 
 Create a `.env.local` file in the project root to set these variables for local development.
 

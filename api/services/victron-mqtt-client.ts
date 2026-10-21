@@ -5,7 +5,9 @@
  * Uses the pure topic construction and payload encoding from lib/victron-topics.ts.
  */
 
-import mqtt, { type MqttClient } from 'mqtt';
+import { createHash } from 'node:crypto';
+import type { ConnectionOptions } from 'node:tls';
+import mqtt, { type IClientOptions, type MqttClient } from 'mqtt';
 import {
   MAX_SOC_LIMIT_PATH,
   MIN_SOC_LIMIT_PATH,
@@ -31,6 +33,97 @@ export interface VictronMqttConfig {
   protocol?: string;
   reconnectPeriod?: number;
   serial?: string;
+  tls?: boolean;
+  tlsVerify?: boolean;
+  tlsCa?: string | Buffer;
+  tlsFingerprint?: string;
+}
+
+export type VictronMqttConnectOptions = IClientOptions &
+  Pick<ConnectionOptions, 'checkServerIdentity'>;
+
+function resolveProtocol(config: VictronMqttConfig): string {
+  return config.protocol ?? (config.tls ? 'mqtts' : 'mqtt');
+}
+
+function normalizeFingerprint(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim() === '') return undefined;
+  const normalized = value.replace(/[\s:]/g, '').toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(normalized)) {
+    throw new Error(
+      'MQTT TLS fingerprint must be a 64-character SHA-256 hex string (colons and whitespace are ignored)',
+    );
+  }
+  return normalized;
+}
+
+function hasTlsCa(ca: VictronMqttConfig['tlsCa']): ca is string | Buffer {
+  if (ca === undefined) return false;
+  return typeof ca === 'string' ? ca.trim().length > 0 : ca.length > 0;
+}
+
+export function validateTlsConfig(config: VictronMqttConfig): void {
+  if (config.tls === true && config.protocol !== undefined && config.protocol !== 'mqtts') {
+    throw new Error(
+      `MQTT TLS requires a TLS protocol; "tls: true" conflicts with protocol "${config.protocol}"`,
+    );
+  }
+
+  const effectiveTls = resolveProtocol(config) === 'mqtts';
+  const hasFingerprint = normalizeFingerprint(config.tlsFingerprint) !== undefined;
+  const caSupplied = hasTlsCa(config.tlsCa);
+
+  if (hasFingerprint) {
+    if (!effectiveTls) {
+      throw new Error('MQTT TLS fingerprint requires TLS (protocol mqtts or tls: true)');
+    }
+    if (!caSupplied) {
+      throw new Error('MQTT TLS fingerprint requires a CA certificate');
+    }
+    if (config.tlsVerify === false) {
+      throw new Error('MQTT TLS fingerprint cannot be used with tlsVerify: false');
+    }
+  }
+
+  if (caSupplied && !effectiveTls) {
+    throw new Error('MQTT TLS CA certificate supplied but TLS is disabled');
+  }
+}
+
+export function buildMqttConnectOptions(
+  config: VictronMqttConfig,
+): { url: string; options: VictronMqttConnectOptions } {
+  validateTlsConfig(config);
+
+  const protocol = resolveProtocol(config);
+  const effectiveTls = protocol === 'mqtts';
+  const host = config.host ?? 'venus.local';
+  const port = config.port ?? (effectiveTls ? 8883 : 1883);
+
+  const options: VictronMqttConnectOptions = {
+    username: config.username || undefined,
+    password: config.password || undefined,
+    reconnectPeriod: config.reconnectPeriod ?? 0,
+  };
+
+  if (effectiveTls) {
+    options.rejectUnauthorized = config.tlsVerify !== false;
+
+    if (hasTlsCa(config.tlsCa)) {
+      options.ca = [config.tlsCa] as string[] | Buffer[];
+    }
+
+    const fingerprint = normalizeFingerprint(config.tlsFingerprint);
+    if (fingerprint) {
+      options.checkServerIdentity = (_hostname, cert) => {
+        const actual = createHash('sha256').update(cert.raw).digest('hex');
+        if (actual === fingerprint) return undefined;
+        return new Error(`Certificate fingerprint mismatch: got ${actual}, expected ${fingerprint}`);
+      };
+    }
+  }
+
+  return { url: `${protocol}://${host}:${port}`, options };
 }
 
 interface WaitForMessageOptions {
@@ -48,27 +141,30 @@ export class VictronMqttClient {
   port: number;
   username: string | undefined;
   password: string | undefined;
-  protocol: string;
   reconnectPeriod: number;
   serial: string | null;
+  private _config: VictronMqttConfig;
   private _serialPromise: Promise<string> | null;
   private _clientPromise: Promise<MqttClient> | null;
 
-  constructor({
-    host = 'venus.local',
-    port = 1883,
-    username = '',
-    password = '',
-    protocol = 'mqtt',    // 'mqtt', 'ws', 'wss', ...
-    reconnectPeriod = 0,  // 0 = no auto reconnect by default
-    serial,               // optional: if you already know the portal id
-  }: VictronMqttConfig = {}) {
+  constructor(config: VictronMqttConfig = {}) {
+    validateTlsConfig(config);
+
+    const {
+      host = 'venus.local',
+      port,
+      username = '',
+      password = '',
+      reconnectPeriod = 0,  // 0 = no auto reconnect by default
+      serial,               // optional: if you already know the portal id
+    } = config;
+
     this.host = host;
-    this.port = port;
+    this.port = port ?? (resolveProtocol(config) === 'mqtts' ? 8883 : 1883);
     this.username = username || undefined;
     this.password = password || undefined;
-    this.protocol = protocol;
     this.reconnectPeriod = reconnectPeriod;
+    this._config = config;
 
     this.serial = serial ?? null;  // cached portal id once known
     this._serialPromise = null;   // in-flight detection, if any
@@ -78,13 +174,9 @@ export class VictronMqttClient {
   private async _getClient(): Promise<MqttClient> {
     if (this._clientPromise) return this._clientPromise;
 
-    const url = `${this.protocol}://${this.host}:${this.port}`;
+    const { url, options } = buildMqttConnectOptions(this._config);
 
-    const clientPromise = mqtt.connectAsync(url, {
-      username: this.username,
-      password: this.password,
-      reconnectPeriod: this.reconnectPeriod,
-    });
+    const clientPromise = mqtt.connectAsync(url, options);
     this._clientPromise = clientPromise;
 
     let client: MqttClient;

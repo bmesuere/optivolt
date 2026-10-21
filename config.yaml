@@ -28,14 +28,22 @@ options:
   site_id: ""
   vrm_token: ""
   mqtt_host: "venus.local"
-  mqtt_port: 1883
+  mqtt_port: 0            # 0 = auto: 8883 with TLS, 1883 without
   mqtt_username: ""
   mqtt_password: ""
+  mqtt_tls: false
+  mqtt_tls_verify: true
+  mqtt_tls_ca: ""
+  mqtt_tls_fingerprint: ""
 
 schema:
   site_id: str
   vrm_token: password
   mqtt_host: str
-  mqtt_port: int
+  mqtt_port: int(0,)
   mqtt_username: str
   mqtt_password: password
+  mqtt_tls: bool
+  mqtt_tls_verify: bool
+  mqtt_tls_ca: str
+  mqtt_tls_fingerprint: str
