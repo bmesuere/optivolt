@@ -129,9 +129,9 @@ function renderMetricsTable(results, sensorName, deps) {
       <td class="px-3 py-2 font-mono text-xs">${row.lookbackWeeks}w</td>
       <td class="px-3 py-2 text-xs">${dayGroupingLabel(row.dayFilter)}</td>
       <td class="px-3 py-2 text-xs">${rowParams(row)}</td>
-      <td class="px-3 py-2 font-mono text-xs text-right">${isNaN(row.mae) ? '—' : row.mae.toFixed(1)}</td>
-      <td class="px-3 py-2 font-mono text-xs text-right">${isNaN(row.rmse) ? '—' : row.rmse.toFixed(1)}</td>
-      <td class="px-3 py-2 font-mono text-xs text-right">${isNaN(row.mape) ? '—' : row.mape.toFixed(1)}</td>
+      <td class="px-3 py-2 font-mono text-xs text-right">${formatMetric(row.mae)}</td>
+      <td class="px-3 py-2 font-mono text-xs text-right">${formatMetric(row.rmse)}</td>
+      <td class="px-3 py-2 font-mono text-xs text-right">${formatMetric(row.mape)}</td>
       <td class="px-3 py-2 font-mono text-xs text-right">${row.n}</td>
       <td class="px-3 py-2">
         <div class="flex gap-1">
@@ -146,6 +146,12 @@ function renderMetricsTable(results, sensorName, deps) {
 
     tbody.appendChild(tr);
   }
+}
+
+// Metrics are NaN when undefined (e.g. MAPE when every actual is 0) and arrive
+// as null after JSON serialization; isNaN(null) is false, so check finiteness.
+export function formatMetric(value) {
+  return Number.isFinite(value) ? value.toFixed(1) : '—';
 }
 
 function rowParams(row) {
